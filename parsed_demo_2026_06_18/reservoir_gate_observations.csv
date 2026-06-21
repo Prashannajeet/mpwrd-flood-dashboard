@@ -1,0 +1,7 @@
+source_row_no,reservoir_name,district,total_no_of_gates,gate_opened_count,opening_m,gate_opening_date,gate_opening_time,discharge_cumecs,discharge_cusec
+1,Bansagar,Shahdol,18,,,,,,
+2,Gandhisagar,Mandsaure,19,,,,,,
+3,Kolar,Sehore,8,,,,,,
+4,Kotwal Feeder,Morena,15,1,0.25,2026-06-18,08:00:00,5.4,
+5,Kaketo,Gwalior,,,,,,,
+6,Tawa,Narmadapuram,13,,,,,,
