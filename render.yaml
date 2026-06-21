@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: mpwrd-flood-dashboard
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run flood_report_app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+
+  - type: web
+    name: mpwrd-flood-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn flood_report_api:app --host 0.0.0.0 --port $PORT
