@@ -1,6 +1,6 @@
 # MP WRD Flood Report Dashboard
 
-Streamlit dashboard for MP WRD Flood Season PDF capture and reservoir/river graph review.
+Streamlit dashboard and REST/GeoJSON API for MP WRD Flood Season PDF capture, reservoir/river time-series review, dam map alerts, and external GIS data sharing.
 
 ## Streamlit Community Cloud
 
@@ -22,6 +22,31 @@ flood_report_app.py
 pip install -r requirements.txt
 streamlit run flood_report_app.py
 ```
+
+API:
+
+```bash
+uvicorn flood_report_api:app --host 0.0.0.0 --port 8600
+```
+
+## Render Deployment
+
+This repo includes `render.yaml` with two web services:
+
+- `mpwrd-flood-dashboard`
+- `mpwrd-flood-api`
+
+Deploy from Render Blueprints using this GitHub repository.
+
+Important API endpoints:
+
+- `/api/reports`
+- `/api/reservoir-observations`
+- `/api/district-summary`
+- `/api/basin-summary`
+- `/api/geojson/dams`
+- `/api/geojson/reservoir-status`
+- `/api/geojson/alerts`
 
 ## Included Data
 
