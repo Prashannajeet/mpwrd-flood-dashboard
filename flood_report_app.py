@@ -3251,7 +3251,7 @@ if not map_status.empty:
 if "main_dashboard_page" not in st.session_state:
     st.session_state.main_dashboard_page = "Infographics"
 
-nav_pages = ["Infographics", "Dam DSS", "Data & Timeseries"]
+nav_pages = ["Infographics", "Dam DSS & Analytics", "Data & Timeseries"]
 st.markdown('<div class="dashboard-topnav-title">Dashboard Navigation</div>', unsafe_allow_html=True)
 nav_cols = st.columns(3)
 for nav_col, page in zip(nav_cols, nav_pages):
@@ -3261,7 +3261,7 @@ for nav_col, page in zip(nav_cols, nav_pages):
 main_page = st.session_state.main_dashboard_page
 st.markdown(f'<div class="dashboard-topnav-active">Active page: <b>{escape(main_page)}</b></div>', unsafe_allow_html=True)
 
-if main_page == "Dam DSS":
+if main_page == "Dam DSS & Analytics":
     st.subheader("Dam Locations and District Status")
     if map_status.empty:
         st.info("Dam location shapefile is not available or no dam points match the current filters.")
