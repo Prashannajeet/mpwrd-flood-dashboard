@@ -20,6 +20,8 @@ import streamlit.components.v1 as components
 APP_DIR = Path(__file__).resolve().parent
 DAM_LOCATIONS_CSV = APP_DIR / "dam_locations.csv"
 DAM_SHAPEFILE = APP_DIR / "dam_shapefile" / "Dams_EinC_54_R2.shp"
+GLOFAS_PROJECT_JSON = APP_DIR / "data" / "glofas_mp_project.json"
+GRRR_PROJECT_JSON = APP_DIR / "data" / "grrr_mp_project.json"
 ARCGIS_EMBED_ITEM_ID = "5f7c5ee24d104d31bc2f85ecba4bd17a"
 ARCGIS_PORTAL_URL = "https://prashannajeet.maps.arcgis.com"
 ARCGIS_EMBED_CENTER = "78.22922399768257,23.48361289099537"
@@ -790,6 +792,74 @@ def build_mp_grrr_nodes(map_frame: pd.DataFrame, reservoir_frame: pd.DataFrame, 
     return sorted(nodes, key=lambda item: (item["risk_band"] != "Danger", item["risk_band"] != "Flood", item["basin"]))
 
 
+def fetch_dynamic_nodes(endpoint: str, kind: str) -> tuple[list[dict], str | None]:
+    url = str(endpoint or "").strip()
+    if not url:
+        return [], "endpoint_not_configured"
+    try:
+        with urllib.request.urlopen(url, timeout=20) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception as exc:
+        return [], f"{kind} endpoint failed: {exc}"
+
+    if isinstance(payload, list):
+        raw_nodes = payload
+    elif isinstance(payload, dict):
+        raw_nodes = (
+            payload.get("nodes")
+            or payload.get("features")
+            or payload.get("data")
+            or payload.get(f"{kind.lower()}_nodes")
+            or []
+        )
+    else:
+        raw_nodes = []
+
+    nodes = []
+    for index, raw in enumerate(raw_nodes):
+        if not isinstance(raw, dict):
+            continue
+        props = raw.get("properties") if isinstance(raw.get("properties"), dict) else raw
+        geometry = raw.get("geometry") if isinstance(raw.get("geometry"), dict) else {}
+        coordinates = geometry.get("coordinates") if isinstance(geometry, dict) else None
+        lon = props.get("longitude") or props.get("lon")
+        lat = props.get("latitude") or props.get("lat")
+        if isinstance(coordinates, list):
+            if geometry.get("type") == "Point" and len(coordinates) >= 2:
+                lon = lon or coordinates[0]
+                lat = lat or coordinates[1]
+            elif coordinates and isinstance(coordinates[0], list):
+                first = coordinates[0][0] if coordinates[0] and isinstance(coordinates[0][0], list) else coordinates[0]
+                if isinstance(first, list) and len(first) >= 2:
+                    lon = lon or first[0]
+                    lat = lat or first[1]
+        series = props.get("series") or props.get("forecast") or props.get("timeseries") or props.get("rows") or []
+        thresholds = props.get("thresholds") or {
+            "watch_cms": props.get("watch_cms") or props.get("watch"),
+            "flood_cms": props.get("flood_cms") or props.get("flood"),
+            "danger_cms": props.get("danger_cms") or props.get("danger"),
+        }
+        nodes.append(
+            {
+                "name": props.get("name") or props.get("station_name") or props.get("basin") or f"{kind} node {index + 1}",
+                "basin": props.get("basin") or props.get("sub_basin") or props.get("river_name") or "Dynamic",
+                "latitude": float(lat) if lat not in (None, "") else None,
+                "longitude": float(lon) if lon not in (None, "") else None,
+                "dam_count": int(float(props.get("dam_count") or 0)),
+                "avg_filling": float(props.get("avg_filling") or props.get("filling_percent") or 0),
+                "avg_rainfall_mm": float(props.get("avg_rainfall_mm") or props.get("rainfall_mm") or 0),
+                "storage_mcm": float(props.get("storage_mcm") or props.get("storage") or 0),
+                "catchment_proxy_sq_km": float(props.get("catchment_proxy_sq_km") or props.get("catchment_sq_km") or 0),
+                "forecast_days": int(float(props.get("forecast_days") or 0)),
+                "risk_band": props.get("risk_band") or props.get("risk") or "Normal",
+                "source_status": props.get("source_status") or "dynamic_endpoint",
+                "thresholds": thresholds,
+                "series": series if isinstance(series, list) else [],
+            }
+        )
+    return nodes, None
+
+
 RESERVOIR_METRICS = {
     "Filling %": ("filling_percent", "%"),
     "Water Level": ("water_level_m", "m"),
@@ -885,14 +955,14 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
             .map-frame {{
                 position: relative;
                 width: 100%;
-                min-height: 560px;
+                min-height: 520px;
                 border: 1px solid #d9d4ef;
                 border-radius: 8px;
                 overflow: hidden;
                 background: #eef6ff;
             }}
             #damMap {{
-                height: 560px;
+                height: 520px;
                 width: 100%;
             }}
             .latest-badge {{
@@ -978,11 +1048,11 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                 margin-top: 4px;
             }}
             .geoglows-panel {{
-                margin-top: 10px;
+                margin-top: 8px;
                 border: 1px solid #d9d4ef;
                 border-radius: 8px;
                 background: linear-gradient(180deg, #ffffff, #f8fbff);
-                padding: 10px 12px 12px;
+                padding: 8px 10px 10px;
                 box-shadow: 0 14px 28px rgba(15, 23, 42, 0.07);
             }}
             .geoglows-head {{
@@ -1015,18 +1085,19 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
             }}
             .geoglows-grid {{
                 display: grid;
-                grid-template-columns: minmax(0, 1fr) minmax(230px, 0.55fr);
-                gap: 12px;
+                grid-template-columns: minmax(420px, 1.35fr) minmax(260px, 0.65fr);
+                gap: 10px;
                 align-items: stretch;
             }}
             .geoglows-chart {{
-                min-height: 190px;
+                min-height: 230px;
                 border-radius: 8px;
-                background: #f8fafc;
+                border: 1px solid #e5eaf3;
+                background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
                 overflow: hidden;
             }}
             .geoglows-table {{
-                max-height: 190px;
+                max-height: 230px;
                 overflow: auto;
                 border: 1px solid #e5eaf3;
                 border-radius: 8px;
@@ -1075,8 +1146,66 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                 background: #2563eb;
                 color: #ffffff;
             }}
+            .hand-panel {{
+                margin-top: 10px;
+                border: 1px solid #bfdbfe;
+                border-radius: 8px;
+                background:
+                    linear-gradient(180deg, rgba(255,255,255,0.99), rgba(239,246,255,0.98)),
+                    linear-gradient(135deg, rgba(14,165,233,0.12), rgba(37,99,235,0.10), rgba(20,184,166,0.08));
+                padding: 10px 12px 12px;
+                box-shadow: 0 14px 28px rgba(15, 23, 42, 0.07);
+            }}
+            .hand-controls {{
+                display: grid;
+                grid-template-columns: minmax(120px, 1fr) minmax(130px, 0.7fr) minmax(120px, 0.65fr) auto;
+                gap: 8px;
+                align-items: end;
+                margin-top: 8px;
+            }}
+            .hand-controls label {{
+                display: grid;
+                gap: 3px;
+                color: #64748b;
+                font-size: 10px;
+                font-weight: 700;
+                text-transform: uppercase;
+            }}
+            .hand-controls input,
+            .hand-controls select {{
+                width: 100%;
+                box-sizing: border-box;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                background: #ffffff;
+                color: #0f172a;
+                font: 600 12px/1.2 Roboto, Inter, Segoe UI, sans-serif;
+                padding: 8px 9px;
+            }}
+            .hand-controls button {{
+                border: 0;
+                border-radius: 6px;
+                background: #2563eb;
+                color: #ffffff;
+                cursor: pointer;
+                font: 700 12px/1 Roboto, Inter, Segoe UI, sans-serif;
+                padding: 10px 12px;
+                min-height: 35px;
+            }}
+            .hand-controls button:hover {{
+                background: #1d4ed8;
+            }}
+            .hand-status {{
+                color: #475569;
+                font-size: 11px;
+                margin-top: 7px;
+                line-height: 1.4;
+            }}
             @media (max-width: 760px) {{
                 .geoglows-grid {{
+                    grid-template-columns: 1fr;
+                }}
+                .hand-controls {{
                     grid-template-columns: 1fr;
                 }}
             }}
@@ -1103,6 +1232,41 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                     </table>
                 </div>
             </div>
+        </div>
+        <div class="hand-panel">
+            <div class="geoglows-head">
+                <div>
+                    <span>HAND Inundation Screening</span>
+                    <strong id="handTitle">Generate inundation layer for a GEOGLOWS stream ID</strong>
+                    <small id="handStatus">Select a dam/stream first or enter a GEOGLOWS COMID. This screening layer uses return-period stage until a true HAND raster is connected.</small>
+                </div>
+            </div>
+            <div class="hand-controls">
+                <label>GEOGLOWS COMID
+                    <input id="handComid" type="text" placeholder="Click stream/dam or enter COMID">
+                </label>
+                <label>Return period
+                    <select id="handReturnPeriod">
+                        <option value="2">2 year</option>
+                        <option value="5">5 year</option>
+                        <option value="10" selected>10 year</option>
+                        <option value="25">25 year</option>
+                        <option value="50">50 year</option>
+                        <option value="100">100 year</option>
+                    </select>
+                </label>
+                <label>HAND stage
+                    <select id="handStage">
+                        <option value="1.0">1.0 m</option>
+                        <option value="2.0">2.0 m</option>
+                        <option value="3.5" selected>3.5 m</option>
+                        <option value="5.0">5.0 m</option>
+                        <option value="7.0">7.0 m</option>
+                    </select>
+                </label>
+                <button id="handGenerate" type="button">Generate Layer</button>
+            </div>
+            <div id="handNote" class="hand-status">No HAND screening layer generated yet.</div>
         </div>
         <script src="https://js.arcgis.com/4.30/"></script>
         <script>
@@ -1233,38 +1397,121 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                 return (data?.features || []).map((feature) => feature.attributes || {{}});
             }}
 
+            async function queryGeoglowsFeatureByComid(comid) {{
+                const numericComid = Number(String(comid || "").trim());
+                if (!Number.isFinite(numericComid)) return null;
+                const timeExtent = await getGeoglowsTimeExtent().catch(() => null);
+                const latestTime = Number(timeExtent?.[1]);
+                const params = new URLSearchParams({{
+                    f: "geojson",
+                    where: `comid = ${{numericComid}}`,
+                    outFields: "comid,meanflow,returnperiod,timevalue,streamorder,rivercountry,outletcountry",
+                    returnGeometry: "true",
+                    outSR: "4326",
+                    resultRecordCount: "1"
+                }});
+                if (Number.isFinite(latestTime)) params.set("time", `${{latestTime}},${{latestTime}}`);
+                const data = await fetchJson(`${{geoglowsServiceUrl}}/0/query?${{params.toString()}}`);
+                return (data?.features || [])[0] || null;
+            }}
+
+            function handDistanceMeters(returnPeriod, handStage) {{
+                const rp = Number(returnPeriod) || 10;
+                const stage = Number(handStage) || 3.5;
+                const rpFactor = {{
+                    2: 70,
+                    5: 105,
+                    10: 145,
+                    25: 210,
+                    50: 280,
+                    100: 360
+                }}[rp] || 145;
+                return Math.max(60, Math.round(rpFactor + stage * 42));
+            }}
+
+            function updateHandNote(message, tone = "normal") {{
+                const note = document.getElementById("handNote");
+                if (!note) return;
+                note.textContent = message;
+                note.style.color = tone === "error" ? "#dc2626" : tone === "success" ? "#0f766e" : "#475569";
+            }}
+
             function geoglowsChartSvg(rows) {{
                 const cleanRows = rows.filter((row) => Number.isFinite(Number(row.meanflow)));
                 if (!cleanRows.length) {{
                     return `<div class="chart-label" style="padding:16px">No forecast graph available.</div>`;
                 }}
-                const width = 560;
-                const height = 190;
-                const pad = 32;
+                const width = 720;
+                const height = 230;
+                const padLeft = 58;
+                const padRight = 30;
+                const padTop = 38;
+                const padBottom = 42;
                 const values = cleanRows.map((row) => Number(row.meanflow));
                 const rps = cleanRows.map((row) => Number(row.returnperiod) || 0);
-                const min = Math.min(...values) - 0.5;
-                const max = Math.max(...values) + 0.5;
+                const rawMin = Math.min(...values);
+                const rawMax = Math.max(...values);
+                const spread = Math.max(1, rawMax - rawMin);
+                const min = Math.max(0, Math.floor(rawMin - spread * 0.18));
+                const max = Math.ceil(rawMax + spread * 0.22);
                 const rpMax = Math.max(2, ...rps);
-                const x = (index) => pad + (cleanRows.length === 1 ? 0 : index * (width - pad * 2) / (cleanRows.length - 1));
-                const y = (value) => height - pad - ((value - min) / Math.max(0.001, max - min)) * (height - pad * 2);
-                const yRp = (value) => height - pad - (value / Math.max(1, rpMax)) * (height - pad * 2);
+                const chartWidth = width - padLeft - padRight;
+                const chartHeight = height - padTop - padBottom;
+                const x = (index) => padLeft + (cleanRows.length === 1 ? 0 : index * chartWidth / (cleanRows.length - 1));
+                const y = (value) => padTop + (1 - ((value - min) / Math.max(0.001, max - min))) * chartHeight;
+                const yRp = (value) => padTop + (1 - (value / Math.max(1, rpMax))) * chartHeight;
                 const flowPoints = cleanRows.map((row, index) => `${{x(index).toFixed(1)}},${{y(Number(row.meanflow)).toFixed(1)}}`).join(" ");
                 const rpPoints = cleanRows.map((row, index) => `${{x(index).toFixed(1)}},${{yRp(Number(row.returnperiod) || 0).toFixed(1)}}`).join(" ");
-                const grid = [0.25, 0.5, 0.75].map((fraction) => {{
-                    const gy = pad + fraction * (height - pad * 2);
-                    return `<line x1="${{pad}}" x2="${{width - pad}}" y1="${{gy}}" y2="${{gy}}" stroke="#e2e8f0" stroke-width="1" />`;
+                const areaPath = `M ${{flowPoints.split(" ")[0]}} L ${{flowPoints}} L ${{x(cleanRows.length - 1).toFixed(1)}},${{(height - padBottom).toFixed(1)}} L ${{padLeft}},${{(height - padBottom).toFixed(1)}} Z`;
+                const yTicks = [0, 0.25, 0.5, 0.75, 1].map((fraction) => {{
+                    const value = min + (max - min) * fraction;
+                    const gy = y(value);
+                    return `
+                        <line x1="${{padLeft}}" x2="${{width - padRight}}" y1="${{gy.toFixed(1)}}" y2="${{gy.toFixed(1)}}" stroke="#e2e8f0" stroke-width="1" />
+                        <text x="${{padLeft - 10}}" y="${{(gy + 3).toFixed(1)}}" fill="#64748b" font-size="10" text-anchor="end">${{Math.round(value)}}</text>
+                    `;
                 }}).join("");
+                const markers = cleanRows.map((row, index) => {{
+                    const rp = Number(row.returnperiod) || 0;
+                    const color = returnPeriodColor(rp);
+                    const radius = rp >= 10 ? 4.4 : rp >= 2 ? 3.8 : 3.2;
+                    return `<circle cx="${{x(index).toFixed(1)}}" cy="${{y(Number(row.meanflow)).toFixed(1)}}" r="${{radius}}" fill="#ffffff" stroke="${{color}}" stroke-width="2"><title>${{geoglowsDate(row.timevalue)}} | ${{fmt(row.meanflow, " cumecs")}} | ${{returnPeriodLabel(rp)}}</title></circle>`;
+                }}).join("");
+                const latest = cleanRows[cleanRows.length - 1];
+                const peak = cleanRows.reduce((best, row) => Number(row.meanflow) > Number(best.meanflow) ? row : best, cleanRows[0]);
+                const latestText = `${{fmt(latest.meanflow, " cumecs")}} latest`;
+                const peakText = `${{fmt(peak.meanflow, " cumecs")}} peak`;
                 return `
                     <svg viewBox="0 0 ${{width}} ${{height}}" width="100%" height="${{height}}" role="img" aria-label="GEOGLOWS forecast graph">
-                        <rect x="0" y="0" width="${{width}}" height="${{height}}" rx="8" fill="#f8fafc" />
-                        ${{grid}}
-                        <polyline fill="none" stroke="#111827" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round" points="${{flowPoints}}" />
-                        <polyline fill="none" stroke="#fa4343" stroke-width="1.6" stroke-dasharray="6 5" stroke-linejoin="round" stroke-linecap="round" points="${{rpPoints}}" />
-                        <text x="${{pad}}" y="18" fill="#111827" font-size="11" font-weight="700">Mean flow</text>
-                        <text x="${{width - pad}}" y="18" fill="#fa4343" font-size="11" font-weight="700" text-anchor="end">Return period</text>
-                        <text x="${{pad}}" y="${{height - 8}}" fill="#64748b" font-size="10">${{geoglowsDate(cleanRows[0].timevalue)}}</text>
-                        <text x="${{width - pad}}" y="${{height - 8}}" fill="#64748b" font-size="10" text-anchor="end">${{geoglowsDate(cleanRows[cleanRows.length - 1].timevalue)}}</text>
+                        <defs>
+                            <linearGradient id="geoglowsFill" x1="0" x2="0" y1="0" y2="1">
+                                <stop offset="0%" stop-color="#2563eb" stop-opacity="0.26" />
+                                <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.03" />
+                            </linearGradient>
+                            <filter id="geoglowsShadow" x="-10%" y="-10%" width="120%" height="130%">
+                                <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#2563eb" flood-opacity="0.18"/>
+                            </filter>
+                        </defs>
+                        <rect x="0" y="0" width="${{width}}" height="${{height}}" rx="8" fill="#ffffff" />
+                        <rect x="${{padLeft}}" y="${{padTop}}" width="${{chartWidth}}" height="${{chartHeight}}" rx="6" fill="#f8fbff" />
+                        ${{yTicks}}
+                        <line x1="${{padLeft}}" x2="${{width - padRight}}" y1="${{height - padBottom}}" y2="${{height - padBottom}}" stroke="#94a3b8" stroke-width="1" />
+                        <line x1="${{padLeft}}" x2="${{padLeft}}" y1="${{padTop}}" y2="${{height - padBottom}}" stroke="#94a3b8" stroke-width="1" />
+                        <path d="${{areaPath}}" fill="url(#geoglowsFill)" />
+                        <polyline fill="none" stroke="#2563eb" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" points="${{flowPoints}}" filter="url(#geoglowsShadow)" />
+                        <polyline fill="none" stroke="#ef4444" stroke-width="1.7" stroke-dasharray="6 5" stroke-linejoin="round" stroke-linecap="round" points="${{rpPoints}}" opacity="0.82" />
+                        ${{markers}}
+                        <text x="${{padLeft}}" y="20" fill="#0f172a" font-size="12" font-weight="800">Mean flow forecast</text>
+                        <text x="${{padLeft}}" y="34" fill="#64748b" font-size="10">cumecs | dynamic GEOGLOWS reach series</text>
+                        <text x="${{width - padRight}}" y="20" fill="#ef4444" font-size="11" font-weight="800" text-anchor="end">Return period overlay</text>
+                        <text x="${{width - padRight}}" y="34" fill="#64748b" font-size="10" text-anchor="end">${{returnPeriodLabel(latest.returnperiod)}}</text>
+                        <rect x="${{padLeft + 8}}" y="${{padTop + 8}}" width="116" height="28" rx="14" fill="#eff6ff" stroke="#bfdbfe" />
+                        <text x="${{padLeft + 66}}" y="${{padTop + 26}}" fill="#1d4ed8" font-size="11" font-weight="800" text-anchor="middle">${{latestText}}</text>
+                        <rect x="${{padLeft + 132}}" y="${{padTop + 8}}" width="104" height="28" rx="14" fill="#fff7ed" stroke="#fed7aa" />
+                        <text x="${{padLeft + 184}}" y="${{padTop + 26}}" fill="#c2410c" font-size="11" font-weight="800" text-anchor="middle">${{peakText}}</text>
+                        <text x="${{padLeft}}" y="${{height - 12}}" fill="#64748b" font-size="10">${{geoglowsDate(cleanRows[0].timevalue)}}</text>
+                        <text x="${{width - padRight}}" y="${{height - 12}}" fill="#64748b" font-size="10" text-anchor="end">${{geoglowsDate(cleanRows[cleanRows.length - 1].timevalue)}}</text>
+                        <text transform="translate(14 ${{height / 2}}) rotate(-90)" fill="#64748b" font-size="10" text-anchor="middle">Mean flow (cumecs)</text>
                     </svg>
                 `;
             }}
@@ -1394,8 +1641,10 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                 "esri/widgets/Expand",
                 "esri/widgets/Home",
                 "esri/geometry/Extent",
+                "esri/geometry/Polyline",
+                "esri/geometry/geometryEngine",
                 "esri/Graphic"
-            ], function(esriConfig, WebMap, MapView, GraphicsLayer, MapImageLayer, TileLayer, LayerList, BasemapGallery, Expand, Home, Extent, Graphic) {{
+            ], function(esriConfig, WebMap, MapView, GraphicsLayer, MapImageLayer, TileLayer, LayerList, BasemapGallery, Expand, Home, Extent, Polyline, geometryEngine, Graphic) {{
                 esriConfig.portalUrl = "{ARCGIS_PORTAL_URL}";
                 const webmap = new WebMap({{
                     portalItem: {{ id: "{ARCGIS_EMBED_ITEM_ID}" }}
@@ -1422,9 +1671,11 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                 }});
                 const layer = new GraphicsLayer({{ title: "Latest dashboard dam status" }});
                 const selectedGeoglowsLayer = new GraphicsLayer({{ title: "Selected GEOGLOWS reach" }});
+                const handInundationLayer = new GraphicsLayer({{ title: "HAND inundation screening" }});
                 webmap.add(hillshadeLayer, 0);
                 webmap.add(layer);
                 webmap.add(selectedGeoglowsLayer);
+                webmap.add(handInundationLayer);
                 const geoglowsLayer = new MapImageLayer({{
                     url: geoglowsServiceUrl,
                     title: "GEOGLOWS medium flow forecast",
@@ -1540,9 +1791,122 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                     }}));
                 }}
 
+                function geoglowsFeatureToPolyline(feature) {{
+                    const geometry = feature?.geometry;
+                    if (!geometry) return null;
+                    if (geometry.type === "LineString") {{
+                        return new Polyline({{
+                            paths: [geometry.coordinates],
+                            spatialReference: {{ wkid: 4326 }}
+                        }});
+                    }}
+                    if (geometry.type === "MultiLineString") {{
+                        return new Polyline({{
+                            paths: geometry.coordinates,
+                            spatialReference: {{ wkid: 4326 }}
+                        }});
+                    }}
+                    return null;
+                }}
+
+                function handColor(returnPeriod) {{
+                    const rp = Number(returnPeriod) || 10;
+                    if (rp >= 100) return [124, 58, 237, 0.38];
+                    if (rp >= 50) return [220, 38, 38, 0.34];
+                    if (rp >= 25) return [249, 115, 22, 0.32];
+                    if (rp >= 10) return [245, 158, 11, 0.30];
+                    if (rp >= 5) return [14, 165, 233, 0.28];
+                    return [37, 99, 235, 0.24];
+                }}
+
+                function drawHandInundation(feature, returnPeriod, stageMeters) {{
+                    const attrs = feature?.properties || feature?.attributes || {{}};
+                    const line = geoglowsFeatureToPolyline(feature);
+                    if (!line) {{
+                        updateHandNote("Selected GEOGLOWS feature does not include a line geometry for HAND screening.", "error");
+                        return;
+                    }}
+                    const distance = handDistanceMeters(returnPeriod, stageMeters);
+                    const inundation = geometryEngine.geodesicBuffer(line, distance, "meters");
+                    handInundationLayer.removeAll();
+                    handInundationLayer.add(new Graphic({{
+                        geometry: inundation,
+                        attributes: {{
+                            comid: attrs.comid,
+                            streamorder: attrs.streamorder,
+                            return_period: returnPeriod,
+                            hand_stage_m: stageMeters,
+                            screening_width_m: distance,
+                            model_note: "HAND screening buffer; replace with HAND raster threshold for production inundation."
+                        }},
+                        symbol: {{
+                            type: "simple-fill",
+                            color: handColor(returnPeriod),
+                            outline: {{
+                                color: [30, 64, 175, 0.86],
+                                width: 1.2
+                            }}
+                        }},
+                        popupTemplate: {{
+                            title: "HAND screening inundation",
+                            content: `
+                                <b>GEOGLOWS COMID:</b> ${{escapeHtml(attrs.comid || "-")}}<br>
+                                <b>Stream order:</b> ${{escapeHtml(attrs.streamorder ?? "-")}}<br>
+                                <b>Return period:</b> ${{escapeHtml(returnPeriod)}} year<br>
+                                <b>HAND stage:</b> ${{fmt(stageMeters, " m")}}<br>
+                                <b>Screening width:</b> ${{fmt(distance, " m")}}<br>
+                                <span style="color:#64748b">Screening layer only until a HAND raster is connected.</span>
+                            `
+                        }}
+                    }}));
+                    view.goTo(inundation.extent.expand(1.35)).catch(() => null);
+                    updateHandNote(
+                        `Generated HAND screening for COMID ${{attrs.comid || "selected stream"}} | return period ${{returnPeriod}} year | stage ${{stageMeters}} m | buffer ${{distance}} m.`,
+                        "success"
+                    );
+                }}
+
+                async function generateHandInundation() {{
+                    const comidInput = document.getElementById("handComid");
+                    const rpInput = document.getElementById("handReturnPeriod");
+                    const stageInput = document.getElementById("handStage");
+                    const comid = String(comidInput?.value || "").trim();
+                    const returnPeriod = Number(rpInput?.value || 10);
+                    const stageMeters = Number(stageInput?.value || 3.5);
+                    updateHandNote("Generating HAND screening layer from GEOGLOWS stream geometry...");
+                    try {{
+                        let feature = null;
+                        if (comid) feature = await queryGeoglowsFeatureByComid(comid);
+                        if (!feature && selectedGeoglowsLayer.graphics.length) {{
+                            const selected = selectedGeoglowsLayer.graphics.getItemAt(0);
+                            feature = {{
+                                type: "Feature",
+                                geometry: {{
+                                    type: "MultiLineString",
+                                    coordinates: selected.geometry.paths
+                                }},
+                                properties: selected.attributes || {{}}
+                            }};
+                        }}
+                        if (!feature) {{
+                            updateHandNote("No GEOGLOWS stream selected. Click a dam/map point first or enter a valid COMID.", "error");
+                            return;
+                        }}
+                        const attrs = feature.properties || feature.attributes || {{}};
+                        if (comidInput && attrs.comid) comidInput.value = attrs.comid;
+                        drawSelectedGeoglowsFeature(feature);
+                        drawHandInundation(feature, returnPeriod, stageMeters);
+                    }} catch (error) {{
+                        updateHandNote(`HAND screening failed: ${{error.message}}`, "error");
+                    }}
+                }}
+
                 async function selectGeoglows(latitude, longitude, label) {{
                     const feature = await loadGeoglowsForPoint(latitude, longitude, label);
                     drawSelectedGeoglowsFeature(feature);
+                    const attrs = feature?.properties || feature?.attributes || {{}};
+                    const handComid = document.getElementById("handComid");
+                    if (handComid && attrs.comid) handComid.value = attrs.comid;
                 }}
 
                 const graphics = damFeatures.map((feature) => new Graphic({{
@@ -1597,6 +1961,8 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                             expandTooltip: "Select basemap",
                             group: "top-right"
                         }}), "top-right");
+                        const handButton = document.getElementById("handGenerate");
+                        if (handButton) handButton.addEventListener("click", generateHandInundation);
                     }});
                 }}
                 const hoverCard = document.getElementById("hoverCard");
@@ -1640,7 +2006,7 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
             }});
         </script>
         """,
-        height=790,
+        height=980,
     )
 
 
@@ -1871,17 +2237,23 @@ with st.sidebar:
         help="Applies to river gauge observations only.",
     )
     st.header("Forecast Data")
+    forecast_data_mode = st.radio(
+        "Forecast Mode",
+        ["Full dynamic mode", "Fallback/demo mode"],
+        index=0,
+        help="Full dynamic mode uses only configured live/preprocessed endpoints. Fallback/demo mode keeps the synthetic MP screening panels available when endpoints are blank.",
+    )
     glofas_endpoint = st.text_input(
         "GloFAS Timeseries Endpoint",
-        value="",
-        placeholder="Optional CDS/EWDS-backed or preprocessed GloFAS API endpoint",
-        help="Leave blank to use the dashboard's GloFAS-ready MP basin fallback. Paste a prepared GloFAS time-series API later for live service mode.",
+        value=GLOFAS_PROJECT_JSON.as_uri() if GLOFAS_PROJECT_JSON.exists() else "",
+        placeholder="Required for full dynamic GloFAS mode",
+        help="Defaults to the project-area GloFAS-compatible JSON. Paste a CDS/EWDS-backed or hosted preprocessed GloFAS JSON endpoint to replace it.",
     )
     grrr_endpoint = st.text_input(
         "Google Runoff Reanalysis/Reforecast Endpoint",
-        value="",
-        placeholder="Optional GRRR notebook/API output endpoint",
-        help="Use this when the Colab workflow is published as a CSV/JSON/API service. Blank mode uses MP basin GRRR-ready fallback.",
+        value=GRRR_PROJECT_JSON.as_uri() if GRRR_PROJECT_JSON.exists() else "",
+        placeholder="Required for full dynamic GRRR mode",
+        help="Defaults to the project-area Google Runoff/GRRR-compatible JSON. Paste a published notebook/API JSON endpoint to replace it.",
     )
 
 reservoir_view = reservoirs.copy()
@@ -2128,11 +2500,20 @@ else:
         st.altair_chart(gauge_chart, use_container_width=True)
 
     st.subheader("GloFAS Forecast Context for Madhya Pradesh")
-    glofas_nodes = build_mp_glofas_nodes(map_status, reservoir_view, forecast_days=10)
-    if not glofas_nodes:
-        st.info("No mapped MP basin locations are available for GloFAS context under the current filters.")
+    dynamic_mode = forecast_data_mode == "Full dynamic mode"
+    if dynamic_mode:
+        glofas_nodes, glofas_error = fetch_dynamic_nodes(glofas_endpoint, "GloFAS")
     else:
-        live_mode = bool(str(glofas_endpoint or "").strip())
+        glofas_nodes, glofas_error = build_mp_glofas_nodes(map_status, reservoir_view, forecast_days=10), None
+    if not glofas_nodes:
+        if dynamic_mode and glofas_error == "endpoint_not_configured":
+            st.warning("Full dynamic GloFAS mode is active. Configure a live/preprocessed GloFAS endpoint in the sidebar to show forecast nodes.")
+        elif dynamic_mode and glofas_error:
+            st.error(glofas_error)
+        else:
+            st.info("No mapped MP basin locations are available for GloFAS context under the current filters.")
+    else:
+        live_mode = dynamic_mode
         risk_counts = pd.Series([node["risk_band"] for node in glofas_nodes]).value_counts().to_dict()
         highest_node = sorted(
             glofas_nodes,
@@ -2141,7 +2522,7 @@ else:
         st.markdown(
             f"""
             <div class="glofas-status-grid">
-              <div class="glofas-card"><span>Source Mode</span><b>{'Live endpoint configured' if live_mode else 'GloFAS-ready fallback'}</b></div>
+              <div class="glofas-card"><span>Source Mode</span><b>{'Full dynamic endpoint' if live_mode else 'Fallback/demo mode'}</b></div>
               <div class="glofas-card"><span>MP Basin Nodes</span><b>{len(glofas_nodes)}</b></div>
               <div class="glofas-card"><span>Highest Risk</span><b style="color:{risk_color(highest_node['risk_band'])}">{escape(highest_node['risk_band'])}</b></div>
               <div class="glofas-card"><span>Forecast Lead</span><b>10 days</b></div>
@@ -2150,9 +2531,9 @@ else:
             unsafe_allow_html=True,
         )
         if live_mode:
-            st.caption("A GloFAS endpoint has been configured in the sidebar. This panel is ready for live/preprocessed time-series integration; current charting still uses the normalized GloFAS ensemble schema.")
+            st.caption("Full dynamic GloFAS mode is active. Rows are read from the configured endpoint and normalized into the dashboard schema.")
         else:
-            st.caption("GloFAS live discharge generally requires Copernicus CDS/EWDS retrieval or a prepared service. This panel uses a GloFAS-style MP basin ensemble fallback until that endpoint is supplied.")
+            st.caption("Fallback/demo mode is active. Switch Forecast Mode to Full dynamic mode and configure an endpoint to disable fallback data.")
 
         glofas_labels = [f"{node['basin']} | {node['risk_band']}" for node in glofas_nodes]
         selected_glofas_label = st.selectbox("GloFAS MP basin node", glofas_labels, key="selected_glofas_node")
@@ -2238,11 +2619,19 @@ else:
             st.dataframe(display_rows, use_container_width=True, hide_index=True, height=285)
 
     st.subheader("Google Runoff Reanalysis & Reforecast for Madhya Pradesh")
-    grrr_nodes = build_mp_grrr_nodes(map_status, reservoir_view, forecast_days=7)
-    if not grrr_nodes:
-        st.info("No mapped MP basin locations are available for GRRR runoff context under the current filters.")
+    if dynamic_mode:
+        grrr_nodes, grrr_error = fetch_dynamic_nodes(grrr_endpoint, "GRRR")
     else:
-        grrr_live_mode = bool(str(grrr_endpoint or "").strip())
+        grrr_nodes, grrr_error = build_mp_grrr_nodes(map_status, reservoir_view, forecast_days=7), None
+    if not grrr_nodes:
+        if dynamic_mode and grrr_error == "endpoint_not_configured":
+            st.warning("Full dynamic GRRR mode is active. Configure a published GRRR JSON/API endpoint in the sidebar to show runoff nodes.")
+        elif dynamic_mode and grrr_error:
+            st.error(grrr_error)
+        else:
+            st.info("No mapped MP basin locations are available for GRRR runoff context under the current filters.")
+    else:
+        grrr_live_mode = dynamic_mode
         grrr_highest = sorted(
             grrr_nodes,
             key=lambda item: {"Danger": 0, "Flood": 1, "Watch": 2, "Normal": 3}.get(item["risk_band"], 4),
@@ -2250,7 +2639,7 @@ else:
         st.markdown(
             f"""
             <div class="glofas-status-grid">
-              <div class="glofas-card"><span>Source Mode</span><b>{'GRRR endpoint configured' if grrr_live_mode else 'GRRR-ready fallback'}</b></div>
+              <div class="glofas-card"><span>Source Mode</span><b>{'Full dynamic endpoint' if grrr_live_mode else 'Fallback/demo mode'}</b></div>
               <div class="glofas-card"><span>MP Runoff Nodes</span><b>{len(grrr_nodes)}</b></div>
               <div class="glofas-card"><span>Highest Risk</span><b style="color:{risk_color(grrr_highest['risk_band'])}">{escape(grrr_highest['risk_band'])}</b></div>
               <div class="glofas-card"><span>Reforecast Lead</span><b>7 days</b></div>
@@ -2259,9 +2648,9 @@ else:
             unsafe_allow_html=True,
         )
         if grrr_live_mode:
-            st.caption("A GRRR endpoint/notebook output location has been configured in the sidebar. The dashboard schema is ready for live reanalysis/reforecast rows.")
+            st.caption("Full dynamic GRRR mode is active. Rows are read from the configured endpoint and normalized into the dashboard schema.")
         else:
-            st.caption("The shared Colab requires sign-in from this environment, so this panel is wired as GRRR-ready fallback. Export the notebook output as CSV/JSON/API and paste the endpoint in the sidebar to switch to live data mode.")
+            st.caption("Fallback/demo mode is active. Switch Forecast Mode to Full dynamic mode and configure an endpoint to disable fallback data.")
 
         grrr_labels = [f"{node['basin']} | {node['risk_band']}" for node in grrr_nodes]
         selected_grrr_label = st.selectbox("GRRR MP runoff node", grrr_labels, key="selected_grrr_node")

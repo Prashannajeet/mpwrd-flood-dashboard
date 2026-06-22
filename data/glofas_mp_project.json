@@ -1,0 +1,4748 @@
+{
+  "metadata": {
+    "title": "MPWRD VBSR project-area GloFAS-compatible JSON",
+    "created_at": "2026-06-22T07:52:04Z",
+    "source_report_folder": "parsed_MPWRD_Flood_Report_22-06-26__8AM_-_",
+    "latest_observation_date": "2026-06-22",
+    "note": "Project preprocessed dynamic JSON. Replace series with Copernicus GloFAS API output when live credentials/API pipeline is configured."
+  },
+  "nodes": [
+    {
+      "name": "Banjar / Gaur basin GloFAS project node",
+      "basin": "Banjar / Gaur",
+      "latitude": 22.94,
+      "longitude": 79.92,
+      "dam_count": 1,
+      "avg_filling": 13.3,
+      "avg_rainfall_mm": 1.4,
+      "storage_mcm": 423.0,
+      "catchment_proxy_sq_km": 1692.0,
+      "forecast_days": 10,
+      "risk_band": "Watch",
+      "source_status": "project_preprocessed_glofas_json_pending_copernicus_api",
+      "thresholds": {
+        "watch_cms": 100.0,
+        "flood_cms": 128.0,
+        "danger_cms": 168.96
+      },
+      "linked_dams": [
+        "Bargi"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 46.5,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 48.36,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 44.315,
+          "return_period": 0.837
+        },
+        {
+          "date": "2026-06-13",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 45.719,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 47.547,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 43.57,
+          "return_period": 0.823
+        },
+        {
+          "date": "2026-06-14",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 44.909,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 46.706,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 42.799,
+          "return_period": 0.808
+        },
+        {
+          "date": "2026-06-15",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 44.118,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 45.882,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 42.044,
+          "return_period": 0.794
+        },
+        {
+          "date": "2026-06-16",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 43.625,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 45.37,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 41.575,
+          "return_period": 0.785
+        },
+        {
+          "date": "2026-06-17",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 43.801,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 45.553,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 41.742,
+          "return_period": 0.788
+        },
+        {
+          "date": "2026-06-18",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 44.78,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 46.571,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 42.676,
+          "return_period": 0.806
+        },
+        {
+          "date": "2026-06-19",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 46.271,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 48.122,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 44.096,
+          "return_period": 0.833
+        },
+        {
+          "date": "2026-06-20",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 47.67,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 49.577,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 45.429,
+          "return_period": 0.858
+        },
+        {
+          "date": "2026-06-21",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 48.432,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 50.369,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 46.156,
+          "return_period": 0.872
+        },
+        {
+          "date": "2026-06-23",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 52.625,
+          "glofas_p50_cms": 73.091,
+          "glofas_p90_cms": 103.789,
+          "reservoir_attenuated_cms": 69.655,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 53.105,
+          "glofas_p50_cms": 73.757,
+          "glofas_p90_cms": 104.735,
+          "reservoir_attenuated_cms": 70.29,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 54.238,
+          "glofas_p50_cms": 75.33,
+          "glofas_p90_cms": 106.969,
+          "reservoir_attenuated_cms": 71.789,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 54.178,
+          "glofas_p50_cms": 75.247,
+          "glofas_p90_cms": 106.851,
+          "reservoir_attenuated_cms": 71.71,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 51.956,
+          "glofas_p50_cms": 72.161,
+          "glofas_p90_cms": 102.469,
+          "reservoir_attenuated_cms": 68.769,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 48.293,
+          "glofas_p50_cms": 67.074,
+          "glofas_p90_cms": 95.245,
+          "reservoir_attenuated_cms": 63.922,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 44.76,
+          "glofas_p50_cms": 62.166,
+          "glofas_p90_cms": 88.276,
+          "reservoir_attenuated_cms": 59.244,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-30",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 42.362,
+          "glofas_p50_cms": 58.836,
+          "glofas_p90_cms": 83.548,
+          "reservoir_attenuated_cms": 56.071,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-01",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 41.12,
+          "glofas_p50_cms": 57.112,
+          "glofas_p90_cms": 81.098,
+          "reservoir_attenuated_cms": 54.427,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-02",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 40.582,
+          "glofas_p50_cms": 56.363,
+          "glofas_p90_cms": 80.036,
+          "reservoir_attenuated_cms": 53.714,
+          "return_period": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Barna basin GloFAS project node",
+      "basin": "Barna",
+      "latitude": 23.05,
+      "longitude": 78.06,
+      "dam_count": 1,
+      "avg_filling": 42.25,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 192.6,
+      "catchment_proxy_sq_km": 602.32,
+      "forecast_days": 10,
+      "risk_band": "Watch",
+      "source_status": "project_preprocessed_glofas_json_pending_copernicus_api",
+      "thresholds": {
+        "watch_cms": 160.877,
+        "flood_cms": 205.923,
+        "danger_cms": 271.819
+      },
+      "linked_dams": [
+        "Barna"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 84.471,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 87.85,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 82.664,
+          "return_period": 0.945
+        },
+        {
+          "date": "2026-06-13",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 82.277,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 85.568,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 80.516,
+          "return_period": 0.921
+        },
+        {
+          "date": "2026-06-14",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 80.312,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 83.524,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 78.593,
+          "return_period": 0.899
+        },
+        {
+          "date": "2026-06-15",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 79.057,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 82.219,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 77.365,
+          "return_period": 0.885
+        },
+        {
+          "date": "2026-06-16",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 78.819,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 81.972,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 77.132,
+          "return_period": 0.882
+        },
+        {
+          "date": "2026-06-17",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 79.657,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 82.843,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 77.952,
+          "return_period": 0.891
+        },
+        {
+          "date": "2026-06-18",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 81.366,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 84.62,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 79.624,
+          "return_period": 0.91
+        },
+        {
+          "date": "2026-06-19",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 83.526,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 86.867,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 81.739,
+          "return_period": 0.935
+        },
+        {
+          "date": "2026-06-20",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 85.61,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 89.035,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 83.778,
+          "return_period": 0.958
+        },
+        {
+          "date": "2026-06-21",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 87.107,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 90.591,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 85.243,
+          "return_period": 0.975
+        },
+        {
+          "date": "2026-06-23",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 96.167,
+          "glofas_p50_cms": 133.566,
+          "glofas_p90_cms": 189.663,
+          "reservoir_attenuated_cms": 130.707,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 94.9,
+          "glofas_p50_cms": 131.805,
+          "glofas_p90_cms": 187.163,
+          "reservoir_attenuated_cms": 128.984,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 94.851,
+          "glofas_p50_cms": 131.737,
+          "glofas_p90_cms": 187.066,
+          "reservoir_attenuated_cms": 128.918,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 93.855,
+          "glofas_p50_cms": 130.354,
+          "glofas_p90_cms": 185.103,
+          "reservoir_attenuated_cms": 127.564,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 90.747,
+          "glofas_p50_cms": 126.037,
+          "glofas_p90_cms": 178.973,
+          "reservoir_attenuated_cms": 123.34,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 86.245,
+          "glofas_p50_cms": 119.785,
+          "glofas_p90_cms": 170.095,
+          "reservoir_attenuated_cms": 117.222,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 82.02,
+          "glofas_p50_cms": 113.917,
+          "glofas_p90_cms": 161.762,
+          "reservoir_attenuated_cms": 111.479,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-30",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 79.14,
+          "glofas_p50_cms": 109.916,
+          "glofas_p90_cms": 156.081,
+          "reservoir_attenuated_cms": 107.564,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-01",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 77.597,
+          "glofas_p50_cms": 107.773,
+          "glofas_p90_cms": 153.038,
+          "reservoir_attenuated_cms": 105.467,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-02",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 76.876,
+          "glofas_p50_cms": 106.772,
+          "glofas_p90_cms": 151.616,
+          "reservoir_attenuated_cms": 104.487,
+          "return_period": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Betwa basin GloFAS project node",
+      "basin": "Betwa",
+      "latitude": 23.028313,
+      "longitude": 77.489426,
+      "dam_count": 1,
+      "avg_filling": 10.6,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 2.79,
+      "catchment_proxy_sq_km": 430.57,
+      "forecast_days": 10,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_glofas_json_pending_copernicus_api",
+      "thresholds": {
+        "watch_cms": 100.0,
+        "flood_cms": 128.0,
+        "danger_cms": 168.96
+      },
+      "linked_dams": [
+        "Dahod"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 31.459,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 32.717,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 31.449,
+          "return_period": 0.566
+        },
+        {
+          "date": "2026-06-13",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 30.642,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 31.867,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 30.632,
+          "return_period": 0.552
+        },
+        {
+          "date": "2026-06-14",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 29.91,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 31.106,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 29.9,
+          "return_period": 0.538
+        },
+        {
+          "date": "2026-06-15",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 29.442,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 30.62,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 29.433,
+          "return_period": 0.53
+        },
+        {
+          "date": "2026-06-16",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 29.354,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 30.528,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 29.345,
+          "return_period": 0.528
+        },
+        {
+          "date": "2026-06-17",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 29.666,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 30.853,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 29.657,
+          "return_period": 0.534
+        },
+        {
+          "date": "2026-06-18",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 30.302,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 31.514,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 30.293,
+          "return_period": 0.545
+        },
+        {
+          "date": "2026-06-19",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 31.107,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 32.351,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 31.097,
+          "return_period": 0.56
+        },
+        {
+          "date": "2026-06-20",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 31.883,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 33.158,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 31.873,
+          "return_period": 0.574
+        },
+        {
+          "date": "2026-06-21",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 32.44,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 33.738,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 32.43,
+          "return_period": 0.584
+        },
+        {
+          "date": "2026-06-23",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 35.348,
+          "glofas_p50_cms": 49.094,
+          "glofas_p90_cms": 69.714,
+          "reservoir_attenuated_cms": 49.079,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 34.47,
+          "glofas_p50_cms": 47.876,
+          "glofas_p90_cms": 67.983,
+          "reservoir_attenuated_cms": 47.861,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 34.055,
+          "glofas_p50_cms": 47.299,
+          "glofas_p90_cms": 67.165,
+          "reservoir_attenuated_cms": 47.285,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 33.516,
+          "glofas_p50_cms": 46.55,
+          "glofas_p90_cms": 66.1,
+          "reservoir_attenuated_cms": 46.535,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 32.527,
+          "glofas_p50_cms": 45.177,
+          "glofas_p90_cms": 64.151,
+          "reservoir_attenuated_cms": 45.163,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 31.248,
+          "glofas_p50_cms": 43.399,
+          "glofas_p90_cms": 61.627,
+          "reservoir_attenuated_cms": 43.386,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 30.079,
+          "glofas_p50_cms": 41.777,
+          "glofas_p90_cms": 59.323,
+          "reservoir_attenuated_cms": 41.764,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-30",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 29.279,
+          "glofas_p50_cms": 40.665,
+          "glofas_p90_cms": 57.744,
+          "reservoir_attenuated_cms": 40.652,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-01",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 28.835,
+          "glofas_p50_cms": 40.049,
+          "glofas_p90_cms": 56.87,
+          "reservoir_attenuated_cms": 40.037,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-02",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 28.614,
+          "glofas_p50_cms": 39.742,
+          "glofas_p90_cms": 56.433,
+          "reservoir_attenuated_cms": 39.73,
+          "return_period": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Burhner basin GloFAS project node",
+      "basin": "Burhner",
+      "latitude": 22.52,
+      "longitude": 80.58,
+      "dam_count": 2,
+      "avg_filling": 36.83,
+      "avg_rainfall_mm": 1.5,
+      "storage_mcm": 38.42,
+      "catchment_proxy_sq_km": 881.93,
+      "forecast_days": 10,
+      "risk_band": "Watch",
+      "source_status": "project_preprocessed_glofas_json_pending_copernicus_api",
+      "thresholds": {
+        "watch_cms": 187.072,
+        "flood_cms": 239.452,
+        "danger_cms": 316.076
+      },
+      "linked_dams": [
+        "Bilgaon Medium Project",
+        "Matiyari"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 100.359,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 104.373,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 99.931,
+          "return_period": 0.966
+        },
+        {
+          "date": "2026-06-13",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 98.209,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 102.137,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 97.79,
+          "return_period": 0.945
+        },
+        {
+          "date": "2026-06-14",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 96.166,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 100.013,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 95.756,
+          "return_period": 0.925
+        },
+        {
+          "date": "2026-06-15",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 94.567,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 98.35,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 94.163,
+          "return_period": 0.91
+        },
+        {
+          "date": "2026-06-16",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 93.897,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 97.653,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 93.497,
+          "return_period": 0.903
+        },
+        {
+          "date": "2026-06-17",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 94.587,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 98.37,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 94.183,
+          "return_period": 0.91
+        },
+        {
+          "date": "2026-06-18",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 96.658,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 100.525,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 96.246,
+          "return_period": 0.93
+        },
+        {
+          "date": "2026-06-19",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 99.548,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 103.53,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 99.123,
+          "return_period": 0.958
+        },
+        {
+          "date": "2026-06-20",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 102.294,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 106.386,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 101.857,
+          "return_period": 0.984
+        },
+        {
+          "date": "2026-06-21",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 104.006,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 108.166,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 103.562,
+          "return_period": 1.001
+        },
+        {
+          "date": "2026-06-23",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 113.674,
+          "glofas_p50_cms": 157.88,
+          "glofas_p90_cms": 224.19,
+          "reservoir_attenuated_cms": 157.206,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 113.216,
+          "glofas_p50_cms": 157.244,
+          "glofas_p90_cms": 223.287,
+          "reservoir_attenuated_cms": 156.573,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 114.191,
+          "glofas_p50_cms": 158.599,
+          "glofas_p90_cms": 225.211,
+          "reservoir_attenuated_cms": 157.922,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 113.442,
+          "glofas_p50_cms": 157.559,
+          "glofas_p90_cms": 223.734,
+          "reservoir_attenuated_cms": 156.886,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 109.292,
+          "glofas_p50_cms": 151.794,
+          "glofas_p90_cms": 215.547,
+          "reservoir_attenuated_cms": 151.146,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 102.883,
+          "glofas_p50_cms": 142.893,
+          "glofas_p90_cms": 202.908,
+          "reservoir_attenuated_cms": 142.283,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 96.782,
+          "glofas_p50_cms": 134.42,
+          "glofas_p90_cms": 190.876,
+          "reservoir_attenuated_cms": 133.846,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-30",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 92.633,
+          "glofas_p50_cms": 128.658,
+          "glofas_p90_cms": 182.694,
+          "reservoir_attenuated_cms": 128.108,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-01",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 90.449,
+          "glofas_p50_cms": 125.623,
+          "glofas_p90_cms": 178.385,
+          "reservoir_attenuated_cms": 125.087,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-02",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 89.465,
+          "glofas_p50_cms": 124.257,
+          "glofas_p90_cms": 176.445,
+          "reservoir_attenuated_cms": 123.727,
+          "return_period": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Chambal basin GloFAS project node",
+      "basin": "Chambal",
+      "latitude": 24.7,
+      "longitude": 75.55,
+      "dam_count": 9,
+      "avg_filling": 19.7,
+      "avg_rainfall_mm": 0.58,
+      "storage_mcm": 4540.35,
+      "catchment_proxy_sq_km": 6962.25,
+      "forecast_days": 10,
+      "risk_band": "Watch",
+      "source_status": "project_preprocessed_glofas_json_pending_copernicus_api",
+      "thresholds": {
+        "watch_cms": 304.452,
+        "flood_cms": 389.699,
+        "danger_cms": 514.403
+      },
+      "linked_dams": [
+        "Gandhisagar",
+        "Gopikrishna Sagar",
+        "KakaSahab Gadagil Sagar",
+        "Kundalia Major Project",
+        "Kunwar Chain Sagar (Dudhi)",
+        "Kushalpura",
+        "Mohanpura Multipurpose Project",
+        "Retam Barrage",
+        "Tillar"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 160.68,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 167.107,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 115.689,
+          "return_period": 0.95
+        },
+        {
+          "date": "2026-06-13",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 156.682,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 162.949,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 112.811,
+          "return_period": 0.926
+        },
+        {
+          "date": "2026-06-14",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 153.056,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 159.178,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 110.2,
+          "return_period": 0.905
+        },
+        {
+          "date": "2026-06-15",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 150.627,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 156.652,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 108.451,
+          "return_period": 0.891
+        },
+        {
+          "date": "2026-06-16",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 150.025,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 156.027,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 108.018,
+          "return_period": 0.887
+        },
+        {
+          "date": "2026-06-17",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 151.502,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 157.562,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 109.081,
+          "return_period": 0.896
+        },
+        {
+          "date": "2026-06-18",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 154.768,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 160.959,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 111.433,
+          "return_period": 0.915
+        },
+        {
+          "date": "2026-06-19",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 159.002,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 165.362,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 114.482,
+          "return_period": 0.94
+        },
+        {
+          "date": "2026-06-20",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 163.07,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 169.593,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 117.411,
+          "return_period": 0.964
+        },
+        {
+          "date": "2026-06-21",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 165.892,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 172.528,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 119.442,
+          "return_period": 0.981
+        },
+        {
+          "date": "2026-06-23",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 177.657,
+          "glofas_p50_cms": 246.746,
+          "glofas_p90_cms": 350.38,
+          "reservoir_attenuated_cms": 177.657,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 171.268,
+          "glofas_p50_cms": 237.873,
+          "glofas_p90_cms": 337.779,
+          "reservoir_attenuated_cms": 171.268,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 167.283,
+          "glofas_p50_cms": 232.338,
+          "glofas_p90_cms": 329.92,
+          "reservoir_attenuated_cms": 167.283,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 163.73,
+          "glofas_p50_cms": 227.403,
+          "glofas_p90_cms": 322.912,
+          "reservoir_attenuated_cms": 163.73,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 159.468,
+          "glofas_p50_cms": 221.484,
+          "glofas_p90_cms": 314.507,
+          "reservoir_attenuated_cms": 159.468,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 154.787,
+          "glofas_p50_cms": 214.982,
+          "glofas_p90_cms": 305.274,
+          "reservoir_attenuated_cms": 154.787,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 150.715,
+          "glofas_p50_cms": 209.326,
+          "glofas_p90_cms": 297.243,
+          "reservoir_attenuated_cms": 150.715,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-30",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 147.898,
+          "glofas_p50_cms": 205.414,
+          "glofas_p90_cms": 291.688,
+          "reservoir_attenuated_cms": 147.898,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-01",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 146.249,
+          "glofas_p50_cms": 203.123,
+          "glofas_p90_cms": 288.435,
+          "reservoir_attenuated_cms": 146.249,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-02",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 145.339,
+          "glofas_p50_cms": 201.86,
+          "glofas_p90_cms": 286.641,
+          "reservoir_attenuated_cms": 145.339,
+          "return_period": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Dhasan basin GloFAS project node",
+      "basin": "Dhasan",
+      "latitude": 24.77,
+      "longitude": 80.57,
+      "dam_count": 1,
+      "avg_filling": 36.52,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 16.55,
+      "catchment_proxy_sq_km": 438.28,
+      "forecast_days": 10,
+      "risk_band": "Watch",
+      "source_status": "project_preprocessed_glofas_json_pending_copernicus_api",
+      "thresholds": {
+        "watch_cms": 142.599,
+        "flood_cms": 182.526,
+        "danger_cms": 240.935
+      },
+      "linked_dams": [
+        "Singhpur"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 74.874,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 77.869,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 74.736,
+          "return_period": 0.945
+        },
+        {
+          "date": "2026-06-13",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 72.929,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 75.846,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 72.795,
+          "return_period": 0.921
+        },
+        {
+          "date": "2026-06-14",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 71.187,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 74.034,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 71.056,
+          "return_period": 0.899
+        },
+        {
+          "date": "2026-06-15",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 70.074,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 72.877,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 69.945,
+          "return_period": 0.885
+        },
+        {
+          "date": "2026-06-16",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 69.864,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 72.658,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 69.735,
+          "return_period": 0.882
+        },
+        {
+          "date": "2026-06-17",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 70.606,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 73.431,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 70.477,
+          "return_period": 0.891
+        },
+        {
+          "date": "2026-06-18",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 72.121,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 75.006,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 71.988,
+          "return_period": 0.91
+        },
+        {
+          "date": "2026-06-19",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 74.036,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 76.998,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 73.9,
+          "return_period": 0.935
+        },
+        {
+          "date": "2026-06-20",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 75.883,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 78.919,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 75.744,
+          "return_period": 0.958
+        },
+        {
+          "date": "2026-06-21",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 77.21,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 80.299,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 77.068,
+          "return_period": 0.975
+        },
+        {
+          "date": "2026-06-23",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 85.157,
+          "glofas_p50_cms": 118.273,
+          "glofas_p90_cms": 167.948,
+          "reservoir_attenuated_cms": 118.055,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 83.959,
+          "glofas_p50_cms": 116.61,
+          "glofas_p90_cms": 165.587,
+          "reservoir_attenuated_cms": 116.396,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 83.844,
+          "glofas_p50_cms": 116.45,
+          "glofas_p90_cms": 165.359,
+          "reservoir_attenuated_cms": 116.236,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 82.931,
+          "glofas_p50_cms": 115.182,
+          "glofas_p90_cms": 163.558,
+          "reservoir_attenuated_cms": 114.97,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 80.207,
+          "glofas_p50_cms": 111.398,
+          "glofas_p90_cms": 158.185,
+          "reservoir_attenuated_cms": 111.193,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 76.289,
+          "glofas_p50_cms": 105.956,
+          "glofas_p90_cms": 150.458,
+          "reservoir_attenuated_cms": 105.761,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 72.617,
+          "glofas_p50_cms": 100.857,
+          "glofas_p90_cms": 143.216,
+          "reservoir_attenuated_cms": 100.671,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-30",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 70.113,
+          "glofas_p50_cms": 97.379,
+          "glofas_p90_cms": 138.278,
+          "reservoir_attenuated_cms": 97.2,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-01",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 68.769,
+          "glofas_p50_cms": 95.512,
+          "glofas_p90_cms": 135.627,
+          "reservoir_attenuated_cms": 95.337,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-02",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 68.138,
+          "glofas_p50_cms": 94.637,
+          "glofas_p90_cms": 134.384,
+          "reservoir_attenuated_cms": 94.463,
+          "return_period": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Jamni basin GloFAS project node",
+      "basin": "Jamni",
+      "latitude": 23.19,
+      "longitude": 77.39,
+      "dam_count": 7,
+      "avg_filling": 23.63,
+      "avg_rainfall_mm": 0.01,
+      "storage_mcm": 1073.38,
+      "catchment_proxy_sq_km": 4014.95,
+      "forecast_days": 10,
+      "risk_band": "Watch",
+      "source_status": "project_preprocessed_glofas_json_pending_copernicus_api",
+      "thresholds": {
+        "watch_cms": 258.189,
+        "flood_cms": 330.482,
+        "danger_cms": 436.236
+      },
+      "linked_dams": [
+        "Bansujara Major Project",
+        "Kaliasote",
+        "Kerwa",
+        "Rajghat",
+        "Sagad",
+        "Samrat Ashok Sagar (Halali)",
+        "Sanjay Sagar (Bah) Project"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 135.578,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 141.002,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 119.409,
+          "return_period": 0.945
+        },
+        {
+          "date": "2026-06-13",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 132.059,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 137.341,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 116.309,
+          "return_period": 0.921
+        },
+        {
+          "date": "2026-06-14",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 128.906,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 134.062,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 113.532,
+          "return_period": 0.899
+        },
+        {
+          "date": "2026-06-15",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 126.891,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 131.967,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 111.757,
+          "return_period": 0.885
+        },
+        {
+          "date": "2026-06-16",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 126.508,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 131.568,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 111.42,
+          "return_period": 0.882
+        },
+        {
+          "date": "2026-06-17",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 127.851,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 132.965,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 112.603,
+          "return_period": 0.891
+        },
+        {
+          "date": "2026-06-18",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 130.594,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 135.817,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 115.018,
+          "return_period": 0.91
+        },
+        {
+          "date": "2026-06-19",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 134.064,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 139.426,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 118.075,
+          "return_period": 0.935
+        },
+        {
+          "date": "2026-06-20",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 137.41,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 142.906,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 121.022,
+          "return_period": 0.958
+        },
+        {
+          "date": "2026-06-21",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 139.812,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 145.404,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 123.137,
+          "return_period": 0.975
+        },
+        {
+          "date": "2026-06-23",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 150.338,
+          "glofas_p50_cms": 208.803,
+          "glofas_p90_cms": 296.5,
+          "reservoir_attenuated_cms": 183.9,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 144.829,
+          "glofas_p50_cms": 201.151,
+          "glofas_p90_cms": 285.634,
+          "reservoir_attenuated_cms": 177.161,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 141.348,
+          "glofas_p50_cms": 196.317,
+          "glofas_p90_cms": 278.77,
+          "reservoir_attenuated_cms": 172.903,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 138.301,
+          "glofas_p50_cms": 192.085,
+          "glofas_p90_cms": 272.761,
+          "reservoir_attenuated_cms": 169.176,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 134.762,
+          "glofas_p50_cms": 187.169,
+          "glofas_p90_cms": 265.78,
+          "reservoir_attenuated_cms": 164.846,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 130.938,
+          "glofas_p50_cms": 181.859,
+          "glofas_p90_cms": 258.239,
+          "reservoir_attenuated_cms": 160.169,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 127.632,
+          "glofas_p50_cms": 177.266,
+          "glofas_p90_cms": 251.718,
+          "reservoir_attenuated_cms": 156.125,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-30",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 125.342,
+          "glofas_p50_cms": 174.085,
+          "glofas_p90_cms": 247.201,
+          "reservoir_attenuated_cms": 153.323,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-01",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 123.992,
+          "glofas_p50_cms": 172.211,
+          "glofas_p90_cms": 244.539,
+          "reservoir_attenuated_cms": 151.672,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-02",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 123.24,
+          "glofas_p50_cms": 171.166,
+          "glofas_p90_cms": 243.056,
+          "reservoir_attenuated_cms": 150.752,
+          "return_period": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Ken basin GloFAS project node",
+      "basin": "Ken",
+      "latitude": 24.94,
+      "longitude": 79.95,
+      "dam_count": 5,
+      "avg_filling": 32.97,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 201.8,
+      "catchment_proxy_sq_km": 2345.98,
+      "forecast_days": 10,
+      "risk_band": "Watch",
+      "source_status": "project_preprocessed_glofas_json_pending_copernicus_api",
+      "thresholds": {
+        "watch_cms": 235.687,
+        "flood_cms": 301.679,
+        "danger_cms": 398.217
+      },
+      "linked_dams": [
+        "Kutni",
+        "Pagra Feeder",
+        "Pawai Medium Irrigation Project",
+        "Rangawan",
+        "Urmil"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 123.751,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 128.701,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 120.977,
+          "return_period": 0.945
+        },
+        {
+          "date": "2026-06-13",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 120.537,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 125.358,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 117.834,
+          "return_period": 0.921
+        },
+        {
+          "date": "2026-06-14",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 117.657,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 122.364,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 115.019,
+          "return_period": 0.899
+        },
+        {
+          "date": "2026-06-15",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 115.819,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 120.451,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 113.222,
+          "return_period": 0.885
+        },
+        {
+          "date": "2026-06-16",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 115.47,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 120.089,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 112.881,
+          "return_period": 0.882
+        },
+        {
+          "date": "2026-06-17",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 116.698,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 121.366,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 114.082,
+          "return_period": 0.891
+        },
+        {
+          "date": "2026-06-18",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 119.201,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 123.969,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 116.529,
+          "return_period": 0.91
+        },
+        {
+          "date": "2026-06-19",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 122.367,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 127.262,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 119.623,
+          "return_period": 0.935
+        },
+        {
+          "date": "2026-06-20",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 125.42,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 130.437,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 122.608,
+          "return_period": 0.958
+        },
+        {
+          "date": "2026-06-21",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 127.613,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 132.717,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 124.752,
+          "return_period": 0.975
+        },
+        {
+          "date": "2026-06-23",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 138.257,
+          "glofas_p50_cms": 192.023,
+          "glofas_p90_cms": 272.673,
+          "reservoir_attenuated_cms": 187.718,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 134.117,
+          "glofas_p50_cms": 186.274,
+          "glofas_p90_cms": 264.508,
+          "reservoir_attenuated_cms": 182.097,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 131.81,
+          "glofas_p50_cms": 183.07,
+          "glofas_p90_cms": 259.959,
+          "reservoir_attenuated_cms": 178.965,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 129.4,
+          "glofas_p50_cms": 179.722,
+          "glofas_p90_cms": 255.205,
+          "reservoir_attenuated_cms": 175.692,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 125.798,
+          "glofas_p50_cms": 174.72,
+          "glofas_p90_cms": 248.102,
+          "reservoir_attenuated_cms": 170.802,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 121.439,
+          "glofas_p50_cms": 168.665,
+          "glofas_p90_cms": 239.504,
+          "reservoir_attenuated_cms": 164.883,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 117.531,
+          "glofas_p50_cms": 163.238,
+          "glofas_p90_cms": 231.798,
+          "reservoir_attenuated_cms": 159.578,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-30",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 114.844,
+          "glofas_p50_cms": 159.506,
+          "glofas_p90_cms": 226.498,
+          "reservoir_attenuated_cms": 155.929,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-01",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 113.324,
+          "glofas_p50_cms": 157.394,
+          "glofas_p90_cms": 223.5,
+          "reservoir_attenuated_cms": 153.865,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-02",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 112.534,
+          "glofas_p50_cms": 156.297,
+          "glofas_p90_cms": 221.942,
+          "reservoir_attenuated_cms": 152.793,
+          "return_period": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Kolar basin GloFAS project node",
+      "basin": "Kolar",
+      "latitude": 22.96,
+      "longitude": 77.35,
+      "dam_count": 1,
+      "avg_filling": 45.35,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 120.2,
+      "catchment_proxy_sq_km": 526.0,
+      "forecast_days": 10,
+      "risk_band": "Watch",
+      "source_status": "project_preprocessed_glofas_json_pending_copernicus_api",
+      "thresholds": {
+        "watch_cms": 170.767,
+        "flood_cms": 218.581,
+        "danger_cms": 288.527
+      },
+      "linked_dams": [
+        "Kolar"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 89.664,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 93.25,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 88.466,
+          "return_period": 0.945
+        },
+        {
+          "date": "2026-06-13",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 87.334,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 90.828,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 86.168,
+          "return_period": 0.921
+        },
+        {
+          "date": "2026-06-14",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 85.248,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 88.658,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 84.11,
+          "return_period": 0.899
+        },
+        {
+          "date": "2026-06-15",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 83.916,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 87.273,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 82.795,
+          "return_period": 0.885
+        },
+        {
+          "date": "2026-06-16",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 83.664,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 87.01,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 82.546,
+          "return_period": 0.882
+        },
+        {
+          "date": "2026-06-17",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 84.553,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 87.936,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 83.424,
+          "return_period": 0.891
+        },
+        {
+          "date": "2026-06-18",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 86.367,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 89.822,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 85.214,
+          "return_period": 0.91
+        },
+        {
+          "date": "2026-06-19",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 88.661,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 92.207,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 87.477,
+          "return_period": 0.935
+        },
+        {
+          "date": "2026-06-20",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 90.873,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 94.508,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 89.659,
+          "return_period": 0.958
+        },
+        {
+          "date": "2026-06-21",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 92.462,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 96.16,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 91.227,
+          "return_period": 0.975
+        },
+        {
+          "date": "2026-06-23",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 102.124,
+          "glofas_p50_cms": 141.839,
+          "glofas_p90_cms": 201.412,
+          "reservoir_attenuated_cms": 139.945,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 100.818,
+          "glofas_p50_cms": 140.026,
+          "glofas_p90_cms": 198.836,
+          "reservoir_attenuated_cms": 138.155,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 100.805,
+          "glofas_p50_cms": 140.007,
+          "glofas_p90_cms": 198.81,
+          "reservoir_attenuated_cms": 138.137,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 99.765,
+          "glofas_p50_cms": 138.562,
+          "glofas_p90_cms": 196.758,
+          "reservoir_attenuated_cms": 136.712,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 96.449,
+          "glofas_p50_cms": 133.957,
+          "glofas_p90_cms": 190.22,
+          "reservoir_attenuated_cms": 132.168,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 91.632,
+          "glofas_p50_cms": 127.267,
+          "glofas_p90_cms": 180.719,
+          "reservoir_attenuated_cms": 125.567,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 87.108,
+          "glofas_p50_cms": 120.983,
+          "glofas_p90_cms": 171.796,
+          "reservoir_attenuated_cms": 119.367,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-30",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 84.023,
+          "glofas_p50_cms": 116.699,
+          "glofas_p90_cms": 165.712,
+          "reservoir_attenuated_cms": 115.14,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-01",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 82.373,
+          "glofas_p50_cms": 114.406,
+          "glofas_p90_cms": 162.457,
+          "reservoir_attenuated_cms": 112.878,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-02",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 81.603,
+          "glofas_p50_cms": 113.337,
+          "glofas_p90_cms": 160.939,
+          "reservoir_attenuated_cms": 111.824,
+          "return_period": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Kunwari basin GloFAS project node",
+      "basin": "Kunwari",
+      "latitude": 26.49,
+      "longitude": 78.13,
+      "dam_count": 4,
+      "avg_filling": 47.47,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 201.89,
+      "catchment_proxy_sq_km": 1847.76,
+      "forecast_days": 10,
+      "risk_band": "Watch",
+      "source_status": "project_preprocessed_glofas_json_pending_copernicus_api",
+      "thresholds": {
+        "watch_cms": 255.829,
+        "flood_cms": 327.462,
+        "danger_cms": 432.249
+      },
+      "linked_dams": [
+        "Aoda",
+        "Harsi",
+        "Kotwal Feeder",
+        "Tigra"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 134.327,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 139.701,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 131.314,
+          "return_period": 0.945
+        },
+        {
+          "date": "2026-06-13",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 130.838,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 136.071,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 127.903,
+          "return_period": 0.921
+        },
+        {
+          "date": "2026-06-14",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 127.713,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 132.821,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 124.848,
+          "return_period": 0.899
+        },
+        {
+          "date": "2026-06-15",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 125.717,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 130.745,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 122.896,
+          "return_period": 0.885
+        },
+        {
+          "date": "2026-06-16",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 125.339,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 130.352,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 122.527,
+          "return_period": 0.882
+        },
+        {
+          "date": "2026-06-17",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 126.672,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 131.738,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 123.83,
+          "return_period": 0.891
+        },
+        {
+          "date": "2026-06-18",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 129.389,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 134.564,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 126.486,
+          "return_period": 0.91
+        },
+        {
+          "date": "2026-06-19",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 132.825,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 138.138,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 129.845,
+          "return_period": 0.935
+        },
+        {
+          "date": "2026-06-20",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 136.139,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 141.584,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 133.085,
+          "return_period": 0.958
+        },
+        {
+          "date": "2026-06-21",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 138.519,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 144.06,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 135.412,
+          "return_period": 0.975
+        },
+        {
+          "date": "2026-06-23",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 151.134,
+          "glofas_p50_cms": 209.909,
+          "glofas_p90_cms": 298.07,
+          "reservoir_attenuated_cms": 205.2,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 147.562,
+          "glofas_p50_cms": 204.947,
+          "glofas_p90_cms": 291.025,
+          "reservoir_attenuated_cms": 200.35,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 145.961,
+          "glofas_p50_cms": 202.723,
+          "glofas_p90_cms": 287.867,
+          "reservoir_attenuated_cms": 198.176,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 143.729,
+          "glofas_p50_cms": 199.623,
+          "glofas_p90_cms": 283.465,
+          "reservoir_attenuated_cms": 195.145,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 139.435,
+          "glofas_p50_cms": 193.66,
+          "glofas_p90_cms": 274.997,
+          "reservoir_attenuated_cms": 189.315,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 133.8,
+          "glofas_p50_cms": 185.834,
+          "glofas_p90_cms": 263.884,
+          "reservoir_attenuated_cms": 181.665,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 128.637,
+          "glofas_p50_cms": 178.663,
+          "glofas_p90_cms": 253.702,
+          "reservoir_attenuated_cms": 174.655,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-30",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 125.102,
+          "glofas_p50_cms": 173.752,
+          "glofas_p90_cms": 246.728,
+          "reservoir_attenuated_cms": 169.854,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-01",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 123.153,
+          "glofas_p50_cms": 171.045,
+          "glofas_p90_cms": 242.884,
+          "reservoir_attenuated_cms": 167.208,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-02",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 122.188,
+          "glofas_p50_cms": 169.705,
+          "glofas_p90_cms": 240.981,
+          "reservoir_attenuated_cms": 165.898,
+          "return_period": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Mahi basin GloFAS project node",
+      "basin": "Mahi",
+      "latitude": 23.27,
+      "longitude": 74.9,
+      "dam_count": 3,
+      "avg_filling": 3.34,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 4.88,
+      "catchment_proxy_sq_km": 1350.01,
+      "forecast_days": 10,
+      "risk_band": "Watch",
+      "source_status": "project_preprocessed_glofas_json_pending_copernicus_api",
+      "thresholds": {
+        "watch_cms": 100.0,
+        "flood_cms": 128.0,
+        "danger_cms": 168.96
+      },
+      "linked_dams": [
+        "Dholawad Tank",
+        "Mahi Main",
+        "Mahi Subsidiary"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 46.713,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 48.581,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 46.687,
+          "return_period": 0.841
+        },
+        {
+          "date": "2026-06-13",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 45.499,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 47.319,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 45.474,
+          "return_period": 0.819
+        },
+        {
+          "date": "2026-06-14",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 44.412,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 46.189,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 44.388,
+          "return_period": 0.799
+        },
+        {
+          "date": "2026-06-15",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 43.718,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 45.467,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 43.695,
+          "return_period": 0.787
+        },
+        {
+          "date": "2026-06-16",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 43.587,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 45.33,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 43.563,
+          "return_period": 0.785
+        },
+        {
+          "date": "2026-06-17",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 44.05,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 45.812,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 44.026,
+          "return_period": 0.793
+        },
+        {
+          "date": "2026-06-18",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 44.995,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 46.795,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 44.971,
+          "return_period": 0.81
+        },
+        {
+          "date": "2026-06-19",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 46.19,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 48.038,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 46.165,
+          "return_period": 0.831
+        },
+        {
+          "date": "2026-06-20",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 47.343,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 49.236,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 47.317,
+          "return_period": 0.852
+        },
+        {
+          "date": "2026-06-21",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 48.17,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 50.097,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 48.144,
+          "return_period": 0.867
+        },
+        {
+          "date": "2026-06-23",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 51.361,
+          "glofas_p50_cms": 71.334,
+          "glofas_p90_cms": 101.294,
+          "reservoir_attenuated_cms": 71.295,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 49.079,
+          "glofas_p50_cms": 68.166,
+          "glofas_p90_cms": 96.795,
+          "reservoir_attenuated_cms": 68.129,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 47.505,
+          "glofas_p50_cms": 65.979,
+          "glofas_p90_cms": 93.691,
+          "reservoir_attenuated_cms": 65.944,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 46.296,
+          "glofas_p50_cms": 64.3,
+          "glofas_p90_cms": 91.306,
+          "reservoir_attenuated_cms": 64.265,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 45.236,
+          "glofas_p50_cms": 62.828,
+          "glofas_p90_cms": 89.215,
+          "reservoir_attenuated_cms": 62.794,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 44.294,
+          "glofas_p50_cms": 61.519,
+          "glofas_p90_cms": 87.357,
+          "reservoir_attenuated_cms": 61.486,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 43.537,
+          "glofas_p50_cms": 60.468,
+          "glofas_p90_cms": 85.865,
+          "reservoir_attenuated_cms": 60.436,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-30",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 43.005,
+          "glofas_p50_cms": 59.73,
+          "glofas_p90_cms": 84.816,
+          "reservoir_attenuated_cms": 59.697,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-01",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 42.665,
+          "glofas_p50_cms": 59.256,
+          "glofas_p90_cms": 84.144,
+          "reservoir_attenuated_cms": 59.224,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-02",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 42.45,
+          "glofas_p50_cms": 58.958,
+          "glofas_p90_cms": 83.721,
+          "reservoir_attenuated_cms": 58.926,
+          "return_period": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Narmada basin GloFAS project node",
+      "basin": "Narmada",
+      "latitude": 22.24,
+      "longitude": 76.16,
+      "dam_count": 2,
+      "avg_filling": 28.76,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 1656.65,
+      "catchment_proxy_sq_km": 4642.03,
+      "forecast_days": 10,
+      "risk_band": "Watch",
+      "source_status": "project_preprocessed_glofas_json_pending_copernicus_api",
+      "thresholds": {
+        "watch_cms": 143.928,
+        "flood_cms": 184.228,
+        "danger_cms": 243.182
+      },
+      "linked_dams": [
+        "Indira Sagar",
+        "Omkareshwar"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 75.572,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 78.595,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 61.661,
+          "return_period": 0.945
+        },
+        {
+          "date": "2026-06-13",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 73.609,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 76.553,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 60.059,
+          "return_period": 0.921
+        },
+        {
+          "date": "2026-06-14",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 71.85,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 74.725,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 58.625,
+          "return_period": 0.899
+        },
+        {
+          "date": "2026-06-15",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 70.728,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 73.557,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 57.709,
+          "return_period": 0.885
+        },
+        {
+          "date": "2026-06-16",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 70.515,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 73.336,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 57.535,
+          "return_period": 0.882
+        },
+        {
+          "date": "2026-06-17",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 71.265,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 74.115,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 58.147,
+          "return_period": 0.891
+        },
+        {
+          "date": "2026-06-18",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 72.793,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 75.705,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 59.394,
+          "return_period": 0.91
+        },
+        {
+          "date": "2026-06-19",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 74.727,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 77.716,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 60.972,
+          "return_period": 0.935
+        },
+        {
+          "date": "2026-06-20",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 76.591,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 79.655,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 62.493,
+          "return_period": 0.958
+        },
+        {
+          "date": "2026-06-21",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 77.93,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 81.047,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 63.585,
+          "return_period": 0.975
+        },
+        {
+          "date": "2026-06-23",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 85.214,
+          "glofas_p50_cms": 118.352,
+          "glofas_p90_cms": 168.06,
+          "reservoir_attenuated_cms": 96.567,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 83.366,
+          "glofas_p50_cms": 115.786,
+          "glofas_p90_cms": 164.416,
+          "reservoir_attenuated_cms": 94.473,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 82.623,
+          "glofas_p50_cms": 114.754,
+          "glofas_p90_cms": 162.951,
+          "reservoir_attenuated_cms": 93.631,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 81.435,
+          "glofas_p50_cms": 113.104,
+          "glofas_p90_cms": 160.607,
+          "reservoir_attenuated_cms": 92.284,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 78.952,
+          "glofas_p50_cms": 109.655,
+          "glofas_p90_cms": 155.71,
+          "reservoir_attenuated_cms": 89.471,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 75.623,
+          "glofas_p50_cms": 105.032,
+          "glofas_p90_cms": 149.146,
+          "reservoir_attenuated_cms": 85.699,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 72.557,
+          "glofas_p50_cms": 100.774,
+          "glofas_p90_cms": 143.099,
+          "reservoir_attenuated_cms": 82.224,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-30",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 70.459,
+          "glofas_p50_cms": 97.86,
+          "glofas_p90_cms": 138.961,
+          "reservoir_attenuated_cms": 79.847,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-01",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 69.31,
+          "glofas_p50_cms": 96.264,
+          "glofas_p90_cms": 136.695,
+          "reservoir_attenuated_cms": 78.545,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-02",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 68.749,
+          "glofas_p50_cms": 95.484,
+          "glofas_p90_cms": 135.588,
+          "reservoir_attenuated_cms": 77.908,
+          "return_period": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Pench basin GloFAS project node",
+      "basin": "Pench",
+      "latitude": 22.12,
+      "longitude": 79.17,
+      "dam_count": 1,
+      "avg_filling": 7.79,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 32.81,
+      "catchment_proxy_sq_km": 588.5,
+      "forecast_days": 10,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_glofas_json_pending_copernicus_api",
+      "thresholds": {
+        "watch_cms": 100.0,
+        "flood_cms": 128.0,
+        "danger_cms": 168.96
+      },
+      "linked_dams": [
+        "Pench Diversion"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 26.752,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 27.822,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 26.655,
+          "return_period": 0.482
+        },
+        {
+          "date": "2026-06-13",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 26.057,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 27.1,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 25.962,
+          "return_period": 0.469
+        },
+        {
+          "date": "2026-06-14",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 25.435,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 26.452,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 25.342,
+          "return_period": 0.458
+        },
+        {
+          "date": "2026-06-15",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 25.037,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 26.039,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 24.946,
+          "return_period": 0.451
+        },
+        {
+          "date": "2026-06-16",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 24.962,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 25.961,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 24.871,
+          "return_period": 0.449
+        },
+        {
+          "date": "2026-06-17",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 25.227,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 26.237,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 25.136,
+          "return_period": 0.454
+        },
+        {
+          "date": "2026-06-18",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 25.769,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 26.799,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 25.675,
+          "return_period": 0.464
+        },
+        {
+          "date": "2026-06-19",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 26.453,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 27.511,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 26.356,
+          "return_period": 0.476
+        },
+        {
+          "date": "2026-06-20",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 27.113,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 28.197,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 27.014,
+          "return_period": 0.488
+        },
+        {
+          "date": "2026-06-21",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 27.587,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 28.69,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 27.486,
+          "return_period": 0.497
+        },
+        {
+          "date": "2026-06-23",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 29.948,
+          "glofas_p50_cms": 41.594,
+          "glofas_p90_cms": 59.064,
+          "reservoir_attenuated_cms": 41.443,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 29.105,
+          "glofas_p50_cms": 40.424,
+          "glofas_p90_cms": 57.402,
+          "reservoir_attenuated_cms": 40.277,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 28.658,
+          "glofas_p50_cms": 39.803,
+          "glofas_p90_cms": 56.52,
+          "reservoir_attenuated_cms": 39.657,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 28.159,
+          "glofas_p50_cms": 39.109,
+          "glofas_p90_cms": 55.535,
+          "reservoir_attenuated_cms": 38.967,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 27.358,
+          "glofas_p50_cms": 37.998,
+          "glofas_p90_cms": 53.956,
+          "reservoir_attenuated_cms": 37.859,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 26.365,
+          "glofas_p50_cms": 36.617,
+          "glofas_p90_cms": 51.997,
+          "reservoir_attenuated_cms": 36.484,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 25.468,
+          "glofas_p50_cms": 35.372,
+          "glofas_p90_cms": 50.228,
+          "reservoir_attenuated_cms": 35.243,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-30",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 24.852,
+          "glofas_p50_cms": 34.516,
+          "glofas_p90_cms": 49.013,
+          "reservoir_attenuated_cms": 34.39,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-01",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 24.506,
+          "glofas_p50_cms": 34.036,
+          "glofas_p90_cms": 48.332,
+          "reservoir_attenuated_cms": 33.912,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-02",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 24.329,
+          "glofas_p50_cms": 33.791,
+          "glofas_p90_cms": 47.983,
+          "reservoir_attenuated_cms": 33.668,
+          "return_period": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Sind basin GloFAS project node",
+      "basin": "Sind",
+      "latitude": 25.9,
+      "longitude": 77.7,
+      "dam_count": 6,
+      "avg_filling": 41.14,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 579.43,
+      "catchment_proxy_sq_km": 2976.96,
+      "forecast_days": 10,
+      "risk_band": "Watch",
+      "source_status": "project_preprocessed_glofas_json_pending_copernicus_api",
+      "thresholds": {
+        "watch_cms": 287.847,
+        "flood_cms": 368.444,
+        "danger_cms": 486.347
+      },
+      "linked_dams": [
+        "Kaketo",
+        "Madikheda",
+        "Mahuar",
+        "Mohini Pick Up Weir",
+        "Pehsari",
+        "Upper Kaketo"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 151.139,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 157.185,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 141.408,
+          "return_period": 0.945
+        },
+        {
+          "date": "2026-06-13",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 147.213,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 153.101,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 137.735,
+          "return_period": 0.921
+        },
+        {
+          "date": "2026-06-14",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 143.696,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 149.444,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 134.445,
+          "return_period": 0.899
+        },
+        {
+          "date": "2026-06-15",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 141.45,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 147.108,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 132.344,
+          "return_period": 0.885
+        },
+        {
+          "date": "2026-06-16",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 141.025,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 146.666,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 131.946,
+          "return_period": 0.882
+        },
+        {
+          "date": "2026-06-17",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 142.525,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 148.226,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 133.349,
+          "return_period": 0.891
+        },
+        {
+          "date": "2026-06-18",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 145.582,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 151.405,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 136.209,
+          "return_period": 0.91
+        },
+        {
+          "date": "2026-06-19",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 149.448,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 155.426,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 139.827,
+          "return_period": 0.935
+        },
+        {
+          "date": "2026-06-20",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 153.177,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 159.304,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 143.315,
+          "return_period": 0.958
+        },
+        {
+          "date": "2026-06-21",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 155.855,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 162.089,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 145.821,
+          "return_period": 0.975
+        },
+        {
+          "date": "2026-06-23",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 168.934,
+          "glofas_p50_cms": 234.63,
+          "glofas_p90_cms": 333.175,
+          "reservoir_attenuated_cms": 219.525,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 163.947,
+          "glofas_p50_cms": 227.704,
+          "glofas_p90_cms": 323.339,
+          "reservoir_attenuated_cms": 213.044,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 161.197,
+          "glofas_p50_cms": 223.884,
+          "glofas_p90_cms": 317.916,
+          "reservoir_attenuated_cms": 209.471,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 158.282,
+          "glofas_p50_cms": 219.836,
+          "glofas_p90_cms": 312.167,
+          "reservoir_attenuated_cms": 205.682,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 153.854,
+          "glofas_p50_cms": 213.687,
+          "glofas_p90_cms": 303.435,
+          "reservoir_attenuated_cms": 199.929,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 148.462,
+          "glofas_p50_cms": 206.198,
+          "glofas_p90_cms": 292.801,
+          "reservoir_attenuated_cms": 192.922,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 143.622,
+          "glofas_p50_cms": 199.475,
+          "glofas_p90_cms": 283.254,
+          "reservoir_attenuated_cms": 186.632,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-30",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 140.294,
+          "glofas_p50_cms": 194.852,
+          "glofas_p90_cms": 276.69,
+          "reservoir_attenuated_cms": 182.307,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-01",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 138.415,
+          "glofas_p50_cms": 192.243,
+          "glofas_p90_cms": 272.984,
+          "reservoir_attenuated_cms": 179.866,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-02",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 137.442,
+          "glofas_p50_cms": 190.891,
+          "glofas_p90_cms": 271.066,
+          "reservoir_attenuated_cms": 178.601,
+          "return_period": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Sindh basin GloFAS project node",
+      "basin": "Sindh",
+      "latitude": 24.07,
+      "longitude": 79.08,
+      "dam_count": 1,
+      "avg_filling": 33.01,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 39.77,
+      "catchment_proxy_sq_km": 468.19,
+      "forecast_days": 10,
+      "risk_band": "Watch",
+      "source_status": "project_preprocessed_glofas_json_pending_copernicus_api",
+      "thresholds": {
+        "watch_cms": 131.402,
+        "flood_cms": 168.194,
+        "danger_cms": 222.017
+      },
+      "linked_dams": [
+        "Pagara"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 68.995,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 71.755,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 68.69,
+          "return_period": 0.945
+        },
+        {
+          "date": "2026-06-13",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 67.202,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 69.89,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 66.905,
+          "return_period": 0.921
+        },
+        {
+          "date": "2026-06-14",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 65.597,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 68.221,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 65.307,
+          "return_period": 0.899
+        },
+        {
+          "date": "2026-06-15",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 64.572,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 67.155,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 64.287,
+          "return_period": 0.885
+        },
+        {
+          "date": "2026-06-16",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 64.378,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 66.953,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 64.093,
+          "return_period": 0.882
+        },
+        {
+          "date": "2026-06-17",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 65.062,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 67.665,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 64.775,
+          "return_period": 0.891
+        },
+        {
+          "date": "2026-06-18",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 66.458,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 69.116,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 66.164,
+          "return_period": 0.91
+        },
+        {
+          "date": "2026-06-19",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 68.223,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 70.952,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 67.921,
+          "return_period": 0.935
+        },
+        {
+          "date": "2026-06-20",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 69.925,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 72.722,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 69.616,
+          "return_period": 0.958
+        },
+        {
+          "date": "2026-06-21",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 71.148,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 73.994,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 70.833,
+          "return_period": 0.975
+        },
+        {
+          "date": "2026-06-23",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 78.412,
+          "glofas_p50_cms": 108.905,
+          "glofas_p90_cms": 154.645,
+          "reservoir_attenuated_cms": 108.424,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 77.258,
+          "glofas_p50_cms": 107.303,
+          "glofas_p90_cms": 152.37,
+          "reservoir_attenuated_cms": 106.828,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 77.102,
+          "glofas_p50_cms": 107.086,
+          "glofas_p90_cms": 152.062,
+          "reservoir_attenuated_cms": 106.613,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 76.239,
+          "glofas_p50_cms": 105.888,
+          "glofas_p90_cms": 150.361,
+          "reservoir_attenuated_cms": 105.42,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 73.75,
+          "glofas_p50_cms": 102.431,
+          "glofas_p90_cms": 145.452,
+          "reservoir_attenuated_cms": 101.978,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 70.189,
+          "glofas_p50_cms": 97.485,
+          "glofas_p90_cms": 138.429,
+          "reservoir_attenuated_cms": 97.054,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 66.857,
+          "glofas_p50_cms": 92.856,
+          "glofas_p90_cms": 131.856,
+          "reservoir_attenuated_cms": 92.446,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-30",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 64.583,
+          "glofas_p50_cms": 89.699,
+          "glofas_p90_cms": 127.372,
+          "reservoir_attenuated_cms": 89.302,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-01",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 63.361,
+          "glofas_p50_cms": 88.002,
+          "glofas_p90_cms": 124.962,
+          "reservoir_attenuated_cms": 87.613,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-02",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 62.786,
+          "glofas_p50_cms": 87.203,
+          "glofas_p90_cms": 123.828,
+          "reservoir_attenuated_cms": 86.818,
+          "return_period": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Son basin GloFAS project node",
+      "basin": "Son",
+      "latitude": 24.23,
+      "longitude": 81.54,
+      "dam_count": 2,
+      "avg_filling": 52.67,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 2795.91,
+      "catchment_proxy_sq_km": 3071.53,
+      "forecast_days": 10,
+      "risk_band": "Watch",
+      "source_status": "project_preprocessed_glofas_json_pending_copernicus_api",
+      "thresholds": {
+        "watch_cms": 220.233,
+        "flood_cms": 281.899,
+        "danger_cms": 372.106
+      },
+      "linked_dams": [
+        "Bansagar",
+        "Mahan"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 115.637,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 120.263,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 83.259,
+          "return_period": 0.945
+        },
+        {
+          "date": "2026-06-13",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 112.633,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 117.138,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 81.096,
+          "return_period": 0.921
+        },
+        {
+          "date": "2026-06-14",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 109.943,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 114.34,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 79.159,
+          "return_period": 0.899
+        },
+        {
+          "date": "2026-06-15",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 108.224,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 112.553,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 77.922,
+          "return_period": 0.885
+        },
+        {
+          "date": "2026-06-16",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 107.899,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 112.215,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 77.687,
+          "return_period": 0.882
+        },
+        {
+          "date": "2026-06-17",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 109.046,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 113.408,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 78.513,
+          "return_period": 0.891
+        },
+        {
+          "date": "2026-06-18",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 111.385,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 115.841,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 80.198,
+          "return_period": 0.91
+        },
+        {
+          "date": "2026-06-19",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 114.344,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 118.917,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 82.327,
+          "return_period": 0.935
+        },
+        {
+          "date": "2026-06-20",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 117.196,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 121.884,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 84.381,
+          "return_period": 0.958
+        },
+        {
+          "date": "2026-06-21",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 119.245,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 124.015,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 85.857,
+          "return_period": 0.975
+        },
+        {
+          "date": "2026-06-23",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 131.179,
+          "glofas_p50_cms": 182.193,
+          "glofas_p90_cms": 258.714,
+          "reservoir_attenuated_cms": 131.179,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 129.036,
+          "glofas_p50_cms": 179.217,
+          "glofas_p90_cms": 254.488,
+          "reservoir_attenuated_cms": 129.036,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 128.57,
+          "glofas_p50_cms": 178.569,
+          "glofas_p90_cms": 253.569,
+          "reservoir_attenuated_cms": 128.57,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 127.037,
+          "glofas_p50_cms": 176.44,
+          "glofas_p90_cms": 250.545,
+          "reservoir_attenuated_cms": 127.037,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 122.952,
+          "glofas_p50_cms": 170.767,
+          "glofas_p90_cms": 242.489,
+          "reservoir_attenuated_cms": 122.952,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 117.189,
+          "glofas_p50_cms": 162.762,
+          "glofas_p90_cms": 231.123,
+          "reservoir_attenuated_cms": 117.189,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 111.812,
+          "glofas_p50_cms": 155.295,
+          "glofas_p90_cms": 220.519,
+          "reservoir_attenuated_cms": 111.812,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-30",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 108.142,
+          "glofas_p50_cms": 150.198,
+          "glofas_p90_cms": 213.281,
+          "reservoir_attenuated_cms": 108.142,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-01",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 106.162,
+          "glofas_p50_cms": 147.448,
+          "glofas_p90_cms": 209.376,
+          "reservoir_attenuated_cms": 106.162,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-02",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 105.223,
+          "glofas_p50_cms": 146.143,
+          "glofas_p90_cms": 207.524,
+          "reservoir_attenuated_cms": 105.223,
+          "return_period": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Sukta basin GloFAS project node",
+      "basin": "Sukta",
+      "latitude": 21.59,
+      "longitude": 76.27,
+      "dam_count": 1,
+      "avg_filling": 18.63,
+      "avg_rainfall_mm": 14.0,
+      "storage_mcm": 14.54,
+      "catchment_proxy_sq_km": 451.22,
+      "forecast_days": 10,
+      "risk_band": "Flood",
+      "source_status": "project_preprocessed_glofas_json_pending_copernicus_api",
+      "thresholds": {
+        "watch_cms": 247.93,
+        "flood_cms": 317.35,
+        "danger_cms": 418.902
+      },
+      "linked_dams": [
+        "Sukta Tank"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 150.097,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 156.101,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 149.855,
+          "return_period": 1.09
+        },
+        {
+          "date": "2026-06-13",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 150.463,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 156.482,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 150.22,
+          "return_period": 1.092
+        },
+        {
+          "date": "2026-06-14",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 149.697,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 155.685,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 149.455,
+          "return_period": 1.087
+        },
+        {
+          "date": "2026-06-15",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 146.46,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 152.318,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 146.223,
+          "return_period": 1.063
+        },
+        {
+          "date": "2026-06-16",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 142.423,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 148.12,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 142.193,
+          "return_period": 1.034
+        },
+        {
+          "date": "2026-06-17",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 141.051,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 146.693,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 140.823,
+          "return_period": 1.024
+        },
+        {
+          "date": "2026-06-18",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 144.477,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 150.256,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 144.243,
+          "return_period": 1.049
+        },
+        {
+          "date": "2026-06-19",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 151.326,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 157.38,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 151.082,
+          "return_period": 1.099
+        },
+        {
+          "date": "2026-06-20",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 157.549,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 163.851,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 157.295,
+          "return_period": 1.144
+        },
+        {
+          "date": "2026-06-21",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 159.59,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 165.974,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 159.332,
+          "return_period": 1.159
+        },
+        {
+          "date": "2026-06-23",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 171.67,
+          "glofas_p50_cms": 238.43,
+          "glofas_p90_cms": 338.571,
+          "reservoir_attenuated_cms": 238.045,
+          "return_period": 10.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 184.597,
+          "glofas_p50_cms": 256.385,
+          "glofas_p90_cms": 364.067,
+          "reservoir_attenuated_cms": 255.971,
+          "return_period": 10.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 199.438,
+          "glofas_p50_cms": 276.997,
+          "glofas_p90_cms": 393.336,
+          "reservoir_attenuated_cms": 276.55,
+          "return_period": 10.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 203.971,
+          "glofas_p50_cms": 283.293,
+          "glofas_p90_cms": 402.276,
+          "reservoir_attenuated_cms": 282.835,
+          "return_period": 10.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 191.92,
+          "glofas_p50_cms": 266.555,
+          "glofas_p90_cms": 378.508,
+          "reservoir_attenuated_cms": 266.125,
+          "return_period": 10.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 168.742,
+          "glofas_p50_cms": 234.364,
+          "glofas_p90_cms": 332.797,
+          "reservoir_attenuated_cms": 233.985,
+          "return_period": 10.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 145.751,
+          "glofas_p50_cms": 202.432,
+          "glofas_p90_cms": 287.453,
+          "reservoir_attenuated_cms": 202.105,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-30",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 130.23,
+          "glofas_p50_cms": 180.875,
+          "glofas_p90_cms": 256.843,
+          "reservoir_attenuated_cms": 180.583,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-07-01",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 122.459,
+          "glofas_p50_cms": 170.081,
+          "glofas_p90_cms": 241.516,
+          "reservoir_attenuated_cms": 169.807,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-02",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 119.362,
+          "glofas_p50_cms": 165.781,
+          "glofas_p90_cms": 235.409,
+          "reservoir_attenuated_cms": 165.513,
+          "return_period": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Tapi basin GloFAS project node",
+      "basin": "Tapi",
+      "latitude": 21.67,
+      "longitude": 78.02,
+      "dam_count": 1,
+      "avg_filling": 20.91,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 14.6,
+      "catchment_proxy_sq_km": 447.93,
+      "forecast_days": 10,
+      "risk_band": "Watch",
+      "source_status": "project_preprocessed_glofas_json_pending_copernicus_api",
+      "thresholds": {
+        "watch_cms": 100.0,
+        "flood_cms": 128.0,
+        "danger_cms": 168.96
+      },
+      "linked_dams": [
+        "Parasdoh Tank"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 48.728,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 50.677,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 48.649,
+          "return_period": 0.877
+        },
+        {
+          "date": "2026-06-13",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 47.462,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 49.36,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 47.385,
+          "return_period": 0.854
+        },
+        {
+          "date": "2026-06-14",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 46.328,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 48.181,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 46.253,
+          "return_period": 0.834
+        },
+        {
+          "date": "2026-06-15",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 45.604,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 47.428,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 45.53,
+          "return_period": 0.821
+        },
+        {
+          "date": "2026-06-16",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 45.467,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 47.286,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 45.393,
+          "return_period": 0.818
+        },
+        {
+          "date": "2026-06-17",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 45.951,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 47.789,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 45.876,
+          "return_period": 0.827
+        },
+        {
+          "date": "2026-06-18",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 46.936,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 48.814,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 46.86,
+          "return_period": 0.845
+        },
+        {
+          "date": "2026-06-19",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 48.183,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 50.11,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 48.104,
+          "return_period": 0.867
+        },
+        {
+          "date": "2026-06-20",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 49.385,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 51.36,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 49.305,
+          "return_period": 0.889
+        },
+        {
+          "date": "2026-06-21",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 50.248,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 52.258,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 50.167,
+          "return_period": 0.904
+        },
+        {
+          "date": "2026-06-23",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 55.16,
+          "glofas_p50_cms": 76.611,
+          "glofas_p90_cms": 108.787,
+          "reservoir_attenuated_cms": 76.487,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 54.155,
+          "glofas_p50_cms": 75.216,
+          "glofas_p90_cms": 106.806,
+          "reservoir_attenuated_cms": 75.094,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 53.86,
+          "glofas_p50_cms": 74.805,
+          "glofas_p90_cms": 106.223,
+          "reservoir_attenuated_cms": 74.684,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 53.171,
+          "glofas_p50_cms": 73.849,
+          "glofas_p90_cms": 104.865,
+          "reservoir_attenuated_cms": 73.729,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 51.492,
+          "glofas_p50_cms": 71.517,
+          "glofas_p90_cms": 101.554,
+          "reservoir_attenuated_cms": 71.401,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 49.163,
+          "glofas_p50_cms": 68.282,
+          "glofas_p90_cms": 96.961,
+          "reservoir_attenuated_cms": 68.171,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 46.999,
+          "glofas_p50_cms": 65.276,
+          "glofas_p90_cms": 92.693,
+          "reservoir_attenuated_cms": 65.171,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-30",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 45.521,
+          "glofas_p50_cms": 63.223,
+          "glofas_p90_cms": 89.777,
+          "reservoir_attenuated_cms": 63.121,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-01",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 44.719,
+          "glofas_p50_cms": 62.11,
+          "glofas_p90_cms": 88.197,
+          "reservoir_attenuated_cms": 62.009,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-02",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 44.335,
+          "glofas_p50_cms": 61.577,
+          "glofas_p90_cms": 87.439,
+          "reservoir_attenuated_cms": 61.477,
+          "return_period": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Tawa basin GloFAS project node",
+      "basin": "Tawa",
+      "latitude": 22.56,
+      "longitude": 77.98,
+      "dam_count": 1,
+      "avg_filling": 4.37,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 85.11,
+      "catchment_proxy_sq_km": 1197.67,
+      "forecast_days": 10,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_glofas_json_pending_copernicus_api",
+      "thresholds": {
+        "watch_cms": 100.0,
+        "flood_cms": 128.0,
+        "danger_cms": 168.96
+      },
+      "linked_dams": [
+        "Tawa"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 26.647,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 27.713,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 26.395,
+          "return_period": 0.48
+        },
+        {
+          "date": "2026-06-13",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 25.955,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 26.993,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 25.709,
+          "return_period": 0.467
+        },
+        {
+          "date": "2026-06-14",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 25.335,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 26.348,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 25.095,
+          "return_period": 0.456
+        },
+        {
+          "date": "2026-06-15",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 24.939,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 25.937,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 24.703,
+          "return_period": 0.449
+        },
+        {
+          "date": "2026-06-16",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 24.864,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 25.859,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 24.629,
+          "return_period": 0.448
+        },
+        {
+          "date": "2026-06-17",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 25.128,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 26.134,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 24.891,
+          "return_period": 0.452
+        },
+        {
+          "date": "2026-06-18",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 25.667,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 26.694,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 25.425,
+          "return_period": 0.462
+        },
+        {
+          "date": "2026-06-19",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 26.349,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 27.403,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 26.1,
+          "return_period": 0.474
+        },
+        {
+          "date": "2026-06-20",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 27.006,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 28.087,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 26.751,
+          "return_period": 0.486
+        },
+        {
+          "date": "2026-06-21",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 27.479,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 28.578,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 27.219,
+          "return_period": 0.495
+        },
+        {
+          "date": "2026-06-23",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 29.522,
+          "glofas_p50_cms": 41.003,
+          "glofas_p90_cms": 58.225,
+          "reservoir_attenuated_cms": 40.616,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 28.415,
+          "glofas_p50_cms": 39.466,
+          "glofas_p90_cms": 56.042,
+          "reservoir_attenuated_cms": 39.093,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 27.708,
+          "glofas_p50_cms": 38.483,
+          "glofas_p90_cms": 54.646,
+          "reservoir_attenuated_cms": 38.119,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 27.099,
+          "glofas_p50_cms": 37.637,
+          "glofas_p90_cms": 53.445,
+          "reservoir_attenuated_cms": 37.282,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 26.413,
+          "glofas_p50_cms": 36.685,
+          "glofas_p90_cms": 52.093,
+          "reservoir_attenuated_cms": 36.338,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 25.685,
+          "glofas_p50_cms": 35.674,
+          "glofas_p90_cms": 50.657,
+          "reservoir_attenuated_cms": 35.337,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 25.06,
+          "glofas_p50_cms": 34.805,
+          "glofas_p90_cms": 49.423,
+          "reservoir_attenuated_cms": 34.476,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-30",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 24.626,
+          "glofas_p50_cms": 34.202,
+          "glofas_p90_cms": 48.567,
+          "reservoir_attenuated_cms": 33.879,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-01",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 24.368,
+          "glofas_p50_cms": 33.845,
+          "glofas_p90_cms": 48.06,
+          "reservoir_attenuated_cms": 33.525,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-02",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 24.223,
+          "glofas_p50_cms": 33.643,
+          "glofas_p90_cms": 47.774,
+          "reservoir_attenuated_cms": 33.325,
+          "return_period": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Veda basin GloFAS project node",
+      "basin": "Veda",
+      "latitude": 21.59,
+      "longitude": 75.62,
+      "dam_count": 1,
+      "avg_filling": 1.5,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 0.75,
+      "catchment_proxy_sq_km": 440.12,
+      "forecast_days": 10,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_glofas_json_pending_copernicus_api",
+      "thresholds": {
+        "watch_cms": 100.0,
+        "flood_cms": 128.0,
+        "danger_cms": 168.96
+      },
+      "linked_dams": [
+        "Dejala Dewda"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 26.647,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 27.713,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 26.645,
+          "return_period": 0.48
+        },
+        {
+          "date": "2026-06-13",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 25.955,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 26.993,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 25.953,
+          "return_period": 0.467
+        },
+        {
+          "date": "2026-06-14",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 25.335,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 26.348,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 25.333,
+          "return_period": 0.456
+        },
+        {
+          "date": "2026-06-15",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 24.939,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 25.937,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 24.937,
+          "return_period": 0.449
+        },
+        {
+          "date": "2026-06-16",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 24.864,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 25.859,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 24.862,
+          "return_period": 0.448
+        },
+        {
+          "date": "2026-06-17",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 25.128,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 26.134,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 25.126,
+          "return_period": 0.452
+        },
+        {
+          "date": "2026-06-18",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 25.667,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 26.694,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 25.665,
+          "return_period": 0.462
+        },
+        {
+          "date": "2026-06-19",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 26.349,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 27.403,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 26.347,
+          "return_period": 0.474
+        },
+        {
+          "date": "2026-06-20",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 27.006,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 28.087,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 27.004,
+          "return_period": 0.486
+        },
+        {
+          "date": "2026-06-21",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 27.479,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 28.578,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 27.476,
+          "return_period": 0.495
+        },
+        {
+          "date": "2026-06-23",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 29.262,
+          "glofas_p50_cms": 40.641,
+          "glofas_p90_cms": 57.71,
+          "reservoir_attenuated_cms": 40.638,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 27.928,
+          "glofas_p50_cms": 38.789,
+          "glofas_p90_cms": 55.08,
+          "reservoir_attenuated_cms": 38.786,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 26.999,
+          "glofas_p50_cms": 37.498,
+          "glofas_p90_cms": 53.247,
+          "reservoir_attenuated_cms": 37.495,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 26.295,
+          "glofas_p50_cms": 36.521,
+          "glofas_p90_cms": 51.86,
+          "reservoir_attenuated_cms": 36.518,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 25.704,
+          "glofas_p50_cms": 35.7,
+          "glofas_p90_cms": 50.694,
+          "reservoir_attenuated_cms": 35.697,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 25.198,
+          "glofas_p50_cms": 34.997,
+          "glofas_p90_cms": 49.696,
+          "reservoir_attenuated_cms": 34.994,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 24.799,
+          "glofas_p50_cms": 34.443,
+          "glofas_p90_cms": 48.909,
+          "reservoir_attenuated_cms": 34.44,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-06-30",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 24.517,
+          "glofas_p50_cms": 34.051,
+          "glofas_p90_cms": 48.353,
+          "reservoir_attenuated_cms": 34.048,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-01",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 24.333,
+          "glofas_p50_cms": 33.796,
+          "glofas_p90_cms": 47.99,
+          "reservoir_attenuated_cms": 33.793,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-02",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 24.214,
+          "glofas_p50_cms": 33.631,
+          "glofas_p90_cms": 47.756,
+          "reservoir_attenuated_cms": 33.628,
+          "return_period": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Wainganga basin GloFAS project node",
+      "basin": "Wainganga",
+      "latitude": 21.55,
+      "longitude": 79.53,
+      "dam_count": 3,
+      "avg_filling": 10.12,
+      "avg_rainfall_mm": 3.5,
+      "storage_mcm": 81.18,
+      "catchment_proxy_sq_km": 1575.29,
+      "forecast_days": 10,
+      "risk_band": "Watch",
+      "source_status": "project_preprocessed_glofas_json_pending_copernicus_api",
+      "thresholds": {
+        "watch_cms": 151.183,
+        "flood_cms": 193.514,
+        "danger_cms": 255.438
+      },
+      "linked_dams": [
+        "Bawanthadi (Rajiv Sagar)",
+        "Thanwar",
+        "Wainganga (Sanjay Sarovar)"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 84.36,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 87.735,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 83.599,
+          "return_period": 1.004
+        },
+        {
+          "date": "2026-06-13",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 83.235,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 86.565,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 82.484,
+          "return_period": 0.991
+        },
+        {
+          "date": "2026-06-14",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 81.954,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 85.232,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 81.215,
+          "return_period": 0.976
+        },
+        {
+          "date": "2026-06-15",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 80.449,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 83.667,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 79.723,
+          "return_period": 0.958
+        },
+        {
+          "date": "2026-06-16",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 79.308,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 82.48,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 78.593,
+          "return_period": 0.944
+        },
+        {
+          "date": "2026-06-17",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 79.43,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 82.607,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 78.713,
+          "return_period": 0.946
+        },
+        {
+          "date": "2026-06-18",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 81.233,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 84.483,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 80.501,
+          "return_period": 0.967
+        },
+        {
+          "date": "2026-06-19",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 84.144,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 87.51,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 83.385,
+          "return_period": 1.002
+        },
+        {
+          "date": "2026-06-20",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 86.855,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 90.329,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 86.072,
+          "return_period": 1.034
+        },
+        {
+          "date": "2026-06-21",
+          "period": "hindcast",
+          "chirps_hindcast_cms": 88.195,
+          "glofas_p10_cms": null,
+          "glofas_p50_cms": 91.723,
+          "glofas_p90_cms": null,
+          "reservoir_attenuated_cms": 87.4,
+          "return_period": 1.05
+        },
+        {
+          "date": "2026-06-23",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 94.606,
+          "glofas_p50_cms": 131.397,
+          "glofas_p90_cms": 186.583,
+          "reservoir_attenuated_cms": 130.211,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 95.717,
+          "glofas_p50_cms": 132.94,
+          "glofas_p90_cms": 188.775,
+          "reservoir_attenuated_cms": 131.741,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 98.012,
+          "glofas_p50_cms": 136.127,
+          "glofas_p90_cms": 193.301,
+          "reservoir_attenuated_cms": 134.9,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 98.002,
+          "glofas_p50_cms": 136.114,
+          "glofas_p90_cms": 193.281,
+          "reservoir_attenuated_cms": 134.886,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 93.857,
+          "glofas_p50_cms": 130.357,
+          "glofas_p90_cms": 185.107,
+          "reservoir_attenuated_cms": 129.181,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 86.955,
+          "glofas_p50_cms": 120.77,
+          "glofas_p90_cms": 171.494,
+          "reservoir_attenuated_cms": 119.681,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 80.282,
+          "glofas_p50_cms": 111.503,
+          "glofas_p90_cms": 158.334,
+          "reservoir_attenuated_cms": 110.497,
+          "return_period": 2.0
+        },
+        {
+          "date": "2026-06-30",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 75.757,
+          "glofas_p50_cms": 105.218,
+          "glofas_p90_cms": 149.409,
+          "reservoir_attenuated_cms": 104.269,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-01",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 73.418,
+          "glofas_p50_cms": 101.969,
+          "glofas_p90_cms": 144.797,
+          "reservoir_attenuated_cms": 101.05,
+          "return_period": 1.0
+        },
+        {
+          "date": "2026-07-02",
+          "period": "forecast",
+          "chirps_hindcast_cms": null,
+          "glofas_p10_cms": 72.409,
+          "glofas_p50_cms": 100.569,
+          "glofas_p90_cms": 142.807,
+          "reservoir_attenuated_cms": 99.661,
+          "return_period": 1.0
+        }
+      ]
+    }
+  ]
+}

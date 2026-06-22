@@ -1,0 +1,3761 @@
+{
+  "metadata": {
+    "title": "MPWRD VBSR project-area Google Runoff Reanalysis/Reforecast-compatible JSON",
+    "created_at": "2026-06-22T07:55:33Z",
+    "source_report_folder": "parsed_MPWRD_Flood_Report_22-06-26__8AM_-_",
+    "latest_observation_date": "2026-06-22",
+    "note": "Project preprocessed dynamic JSON. Replace series with Google Runoff Reanalysis/Reforecast notebook or API export when the live pipeline is configured."
+  },
+  "nodes": [
+    {
+      "name": "Banjar / Gaur GRRR project runoff node",
+      "basin": "Banjar / Gaur",
+      "latitude": 22.94,
+      "longitude": 79.92,
+      "dam_count": 1,
+      "avg_filling": 13.3,
+      "avg_rainfall_mm": 1.4,
+      "storage_mcm": 423.0,
+      "catchment_proxy_sq_km": 280.64,
+      "forecast_days": 7,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_grrr_json_pending_google_runoff_export",
+      "thresholds": {
+        "watch_cms": 18.0,
+        "flood_cms": 26.1,
+        "danger_cms": 35.235
+      },
+      "linked_dams": [
+        "Bargi"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "reanalysis",
+          "runoff_mm": 0.467,
+          "reanalysis_discharge_cms": 1.522,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.446
+        },
+        {
+          "date": "2026-06-13",
+          "period": "reanalysis",
+          "runoff_mm": 0.449,
+          "reanalysis_discharge_cms": 1.461,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.388
+        },
+        {
+          "date": "2026-06-14",
+          "period": "reanalysis",
+          "runoff_mm": 0.432,
+          "reanalysis_discharge_cms": 1.406,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.336
+        },
+        {
+          "date": "2026-06-15",
+          "period": "reanalysis",
+          "runoff_mm": 0.421,
+          "reanalysis_discharge_cms": 1.371,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.303
+        },
+        {
+          "date": "2026-06-16",
+          "period": "reanalysis",
+          "runoff_mm": 0.419,
+          "reanalysis_discharge_cms": 1.364,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.296
+        },
+        {
+          "date": "2026-06-17",
+          "period": "reanalysis",
+          "runoff_mm": 0.426,
+          "reanalysis_discharge_cms": 1.387,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.318
+        },
+        {
+          "date": "2026-06-18",
+          "period": "reanalysis",
+          "runoff_mm": 0.441,
+          "reanalysis_discharge_cms": 1.435,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.364
+        },
+        {
+          "date": "2026-06-19",
+          "period": "reanalysis",
+          "runoff_mm": 0.459,
+          "reanalysis_discharge_cms": 1.496,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.421
+        },
+        {
+          "date": "2026-06-20",
+          "period": "reanalysis",
+          "runoff_mm": 0.477,
+          "reanalysis_discharge_cms": 1.554,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.476
+        },
+        {
+          "date": "2026-06-21",
+          "period": "reanalysis",
+          "runoff_mm": 0.49,
+          "reanalysis_discharge_cms": 1.595,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.516
+        },
+        {
+          "date": "2026-06-23",
+          "period": "reforecast",
+          "runoff_mm": 0.664,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 2.841,
+          "reforecast_p90_cms": 4.403,
+          "reservoir_adjusted_cms": 2.7
+        },
+        {
+          "date": "2026-06-24",
+          "period": "reforecast",
+          "runoff_mm": 0.717,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 2.887,
+          "reforecast_p90_cms": 4.475,
+          "reservoir_adjusted_cms": 2.743
+        },
+        {
+          "date": "2026-06-25",
+          "period": "reforecast",
+          "runoff_mm": 0.752,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 2.911,
+          "reforecast_p90_cms": 4.512,
+          "reservoir_adjusted_cms": 2.766
+        },
+        {
+          "date": "2026-06-26",
+          "period": "reforecast",
+          "runoff_mm": 0.749,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 2.834,
+          "reforecast_p90_cms": 4.393,
+          "reservoir_adjusted_cms": 2.693
+        },
+        {
+          "date": "2026-06-27",
+          "period": "reforecast",
+          "runoff_mm": 0.727,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 2.711,
+          "reforecast_p90_cms": 4.202,
+          "reservoir_adjusted_cms": 2.576
+        },
+        {
+          "date": "2026-06-28",
+          "period": "reforecast",
+          "runoff_mm": 0.715,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 2.633,
+          "reforecast_p90_cms": 4.081,
+          "reservoir_adjusted_cms": 2.502
+        },
+        {
+          "date": "2026-06-29",
+          "period": "reforecast",
+          "runoff_mm": 0.718,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 2.623,
+          "reforecast_p90_cms": 4.066,
+          "reservoir_adjusted_cms": 2.493
+        }
+      ]
+    },
+    {
+      "name": "Barna GRRR project runoff node",
+      "basin": "Barna",
+      "latitude": 23.05,
+      "longitude": 78.06,
+      "dam_count": 1,
+      "avg_filling": 42.25,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 192.6,
+      "catchment_proxy_sq_km": 171.06,
+      "forecast_days": 7,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_grrr_json_pending_google_runoff_export",
+      "thresholds": {
+        "watch_cms": 18.0,
+        "flood_cms": 26.1,
+        "danger_cms": 35.235
+      },
+      "linked_dams": [
+        "Barna"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "reanalysis",
+          "runoff_mm": 0.295,
+          "reanalysis_discharge_cms": 0.585,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.572
+        },
+        {
+          "date": "2026-06-13",
+          "period": "reanalysis",
+          "runoff_mm": 0.283,
+          "reanalysis_discharge_cms": 0.561,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.549
+        },
+        {
+          "date": "2026-06-14",
+          "period": "reanalysis",
+          "runoff_mm": 0.272,
+          "reanalysis_discharge_cms": 0.54,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.528
+        },
+        {
+          "date": "2026-06-15",
+          "period": "reanalysis",
+          "runoff_mm": 0.266,
+          "reanalysis_discharge_cms": 0.527,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.515
+        },
+        {
+          "date": "2026-06-16",
+          "period": "reanalysis",
+          "runoff_mm": 0.264,
+          "reanalysis_discharge_cms": 0.524,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.512
+        },
+        {
+          "date": "2026-06-17",
+          "period": "reanalysis",
+          "runoff_mm": 0.269,
+          "reanalysis_discharge_cms": 0.533,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.521
+        },
+        {
+          "date": "2026-06-18",
+          "period": "reanalysis",
+          "runoff_mm": 0.278,
+          "reanalysis_discharge_cms": 0.552,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.539
+        },
+        {
+          "date": "2026-06-19",
+          "period": "reanalysis",
+          "runoff_mm": 0.29,
+          "reanalysis_discharge_cms": 0.575,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.562
+        },
+        {
+          "date": "2026-06-20",
+          "period": "reanalysis",
+          "runoff_mm": 0.301,
+          "reanalysis_discharge_cms": 0.597,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.584
+        },
+        {
+          "date": "2026-06-21",
+          "period": "reanalysis",
+          "runoff_mm": 0.309,
+          "reanalysis_discharge_cms": 0.613,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.599
+        },
+        {
+          "date": "2026-06-23",
+          "period": "reforecast",
+          "runoff_mm": 0.419,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.092,
+          "reforecast_p90_cms": 1.693,
+          "reservoir_adjusted_cms": 1.067
+        },
+        {
+          "date": "2026-06-24",
+          "period": "reforecast",
+          "runoff_mm": 0.452,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.11,
+          "reforecast_p90_cms": 1.72,
+          "reservoir_adjusted_cms": 1.084
+        },
+        {
+          "date": "2026-06-25",
+          "period": "reforecast",
+          "runoff_mm": 0.474,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.119,
+          "reforecast_p90_cms": 1.734,
+          "reservoir_adjusted_cms": 1.093
+        },
+        {
+          "date": "2026-06-26",
+          "period": "reforecast",
+          "runoff_mm": 0.472,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.089,
+          "reforecast_p90_cms": 1.689,
+          "reservoir_adjusted_cms": 1.065
+        },
+        {
+          "date": "2026-06-27",
+          "period": "reforecast",
+          "runoff_mm": 0.459,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.042,
+          "reforecast_p90_cms": 1.615,
+          "reservoir_adjusted_cms": 1.018
+        },
+        {
+          "date": "2026-06-28",
+          "period": "reforecast",
+          "runoff_mm": 0.451,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.012,
+          "reforecast_p90_cms": 1.569,
+          "reservoir_adjusted_cms": 0.989
+        },
+        {
+          "date": "2026-06-29",
+          "period": "reforecast",
+          "runoff_mm": 0.453,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.008,
+          "reforecast_p90_cms": 1.563,
+          "reservoir_adjusted_cms": 0.986
+        }
+      ]
+    },
+    {
+      "name": "Betwa GRRR project runoff node",
+      "basin": "Betwa",
+      "latitude": 23.028313,
+      "longitude": 77.489426,
+      "dam_count": 1,
+      "avg_filling": 10.6,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 2.79,
+      "catchment_proxy_sq_km": 126.16,
+      "forecast_days": 7,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_grrr_json_pending_google_runoff_export",
+      "thresholds": {
+        "watch_cms": 18.0,
+        "flood_cms": 26.1,
+        "danger_cms": 35.235
+      },
+      "linked_dams": [
+        "Dahod"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "reanalysis",
+          "runoff_mm": 0.295,
+          "reanalysis_discharge_cms": 0.431,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.431
+        },
+        {
+          "date": "2026-06-13",
+          "period": "reanalysis",
+          "runoff_mm": 0.283,
+          "reanalysis_discharge_cms": 0.414,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.414
+        },
+        {
+          "date": "2026-06-14",
+          "period": "reanalysis",
+          "runoff_mm": 0.272,
+          "reanalysis_discharge_cms": 0.399,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.398
+        },
+        {
+          "date": "2026-06-15",
+          "period": "reanalysis",
+          "runoff_mm": 0.266,
+          "reanalysis_discharge_cms": 0.389,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.388
+        },
+        {
+          "date": "2026-06-16",
+          "period": "reanalysis",
+          "runoff_mm": 0.264,
+          "reanalysis_discharge_cms": 0.387,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.387
+        },
+        {
+          "date": "2026-06-17",
+          "period": "reanalysis",
+          "runoff_mm": 0.269,
+          "reanalysis_discharge_cms": 0.393,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.393
+        },
+        {
+          "date": "2026-06-18",
+          "period": "reanalysis",
+          "runoff_mm": 0.278,
+          "reanalysis_discharge_cms": 0.407,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.407
+        },
+        {
+          "date": "2026-06-19",
+          "period": "reanalysis",
+          "runoff_mm": 0.29,
+          "reanalysis_discharge_cms": 0.424,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.424
+        },
+        {
+          "date": "2026-06-20",
+          "period": "reanalysis",
+          "runoff_mm": 0.301,
+          "reanalysis_discharge_cms": 0.44,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.44
+        },
+        {
+          "date": "2026-06-21",
+          "period": "reanalysis",
+          "runoff_mm": 0.309,
+          "reanalysis_discharge_cms": 0.452,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.452
+        },
+        {
+          "date": "2026-06-23",
+          "period": "reforecast",
+          "runoff_mm": 0.419,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 1.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "reforecast",
+          "runoff_mm": 0.452,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 1.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "reforecast",
+          "runoff_mm": 0.474,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 1.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "reforecast",
+          "runoff_mm": 0.472,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 1.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "reforecast",
+          "runoff_mm": 0.459,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 1.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "reforecast",
+          "runoff_mm": 0.451,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 1.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "reforecast",
+          "runoff_mm": 0.453,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Burhner GRRR project runoff node",
+      "basin": "Burhner",
+      "latitude": 22.52,
+      "longitude": 80.58,
+      "dam_count": 2,
+      "avg_filling": 36.83,
+      "avg_rainfall_mm": 1.5,
+      "storage_mcm": 38.42,
+      "catchment_proxy_sq_km": 259.54,
+      "forecast_days": 7,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_grrr_json_pending_google_runoff_export",
+      "thresholds": {
+        "watch_cms": 18.0,
+        "flood_cms": 26.1,
+        "danger_cms": 35.235
+      },
+      "linked_dams": [
+        "Bilgaon Medium Project",
+        "Matiyari"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "reanalysis",
+          "runoff_mm": 0.629,
+          "reanalysis_discharge_cms": 1.893,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.885
+        },
+        {
+          "date": "2026-06-13",
+          "period": "reanalysis",
+          "runoff_mm": 0.604,
+          "reanalysis_discharge_cms": 1.817,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.809
+        },
+        {
+          "date": "2026-06-14",
+          "period": "reanalysis",
+          "runoff_mm": 0.581,
+          "reanalysis_discharge_cms": 1.749,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.741
+        },
+        {
+          "date": "2026-06-15",
+          "period": "reanalysis",
+          "runoff_mm": 0.566,
+          "reanalysis_discharge_cms": 1.705,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.698
+        },
+        {
+          "date": "2026-06-16",
+          "period": "reanalysis",
+          "runoff_mm": 0.564,
+          "reanalysis_discharge_cms": 1.697,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.689
+        },
+        {
+          "date": "2026-06-17",
+          "period": "reanalysis",
+          "runoff_mm": 0.573,
+          "reanalysis_discharge_cms": 1.726,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.718
+        },
+        {
+          "date": "2026-06-18",
+          "period": "reanalysis",
+          "runoff_mm": 0.593,
+          "reanalysis_discharge_cms": 1.785,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.777
+        },
+        {
+          "date": "2026-06-19",
+          "period": "reanalysis",
+          "runoff_mm": 0.618,
+          "reanalysis_discharge_cms": 1.86,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.852
+        },
+        {
+          "date": "2026-06-20",
+          "period": "reanalysis",
+          "runoff_mm": 0.642,
+          "reanalysis_discharge_cms": 1.933,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.924
+        },
+        {
+          "date": "2026-06-21",
+          "period": "reanalysis",
+          "runoff_mm": 0.659,
+          "reanalysis_discharge_cms": 1.985,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.976
+        },
+        {
+          "date": "2026-06-23",
+          "period": "reforecast",
+          "runoff_mm": 0.893,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 3.534,
+          "reforecast_p90_cms": 5.478,
+          "reservoir_adjusted_cms": 3.518
+        },
+        {
+          "date": "2026-06-24",
+          "period": "reforecast",
+          "runoff_mm": 0.965,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 3.591,
+          "reforecast_p90_cms": 5.567,
+          "reservoir_adjusted_cms": 3.575
+        },
+        {
+          "date": "2026-06-25",
+          "period": "reforecast",
+          "runoff_mm": 1.011,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 3.621,
+          "reforecast_p90_cms": 5.613,
+          "reservoir_adjusted_cms": 3.605
+        },
+        {
+          "date": "2026-06-26",
+          "period": "reforecast",
+          "runoff_mm": 1.008,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 3.526,
+          "reforecast_p90_cms": 5.465,
+          "reservoir_adjusted_cms": 3.51
+        },
+        {
+          "date": "2026-06-27",
+          "period": "reforecast",
+          "runoff_mm": 0.979,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 3.372,
+          "reforecast_p90_cms": 5.227,
+          "reservoir_adjusted_cms": 3.357
+        },
+        {
+          "date": "2026-06-28",
+          "period": "reforecast",
+          "runoff_mm": 0.961,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 3.275,
+          "reforecast_p90_cms": 5.077,
+          "reservoir_adjusted_cms": 3.261
+        },
+        {
+          "date": "2026-06-29",
+          "period": "reforecast",
+          "runoff_mm": 0.965,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 3.263,
+          "reforecast_p90_cms": 5.058,
+          "reservoir_adjusted_cms": 3.249
+        }
+      ]
+    },
+    {
+      "name": "Chambal GRRR project runoff node",
+      "basin": "Chambal",
+      "latitude": 23.92,
+      "longitude": 76.31,
+      "dam_count": 9,
+      "avg_filling": 19.7,
+      "avg_rainfall_mm": 0.58,
+      "storage_mcm": 4540.35,
+      "catchment_proxy_sq_km": 2141.15,
+      "forecast_days": 7,
+      "risk_band": "Watch",
+      "source_status": "project_preprocessed_grrr_json_pending_google_runoff_export",
+      "thresholds": {
+        "watch_cms": 18.0,
+        "flood_cms": 26.1,
+        "danger_cms": 35.235
+      },
+      "linked_dams": [
+        "Gandhisagar",
+        "Gopikrishna Sagar",
+        "KakaSahab Gadagil Sagar",
+        "Kundalia Major Project",
+        "Kunwar Chain Sagar (Dudhi)",
+        "Kushalpura",
+        "Mohanpura Multipurpose Project",
+        "Retam Barrage",
+        "Tillar"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "reanalysis",
+          "runoff_mm": 0.295,
+          "reanalysis_discharge_cms": 7.322,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 4.759
+        },
+        {
+          "date": "2026-06-13",
+          "period": "reanalysis",
+          "runoff_mm": 0.283,
+          "reanalysis_discharge_cms": 7.028,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 4.568
+        },
+        {
+          "date": "2026-06-14",
+          "period": "reanalysis",
+          "runoff_mm": 0.272,
+          "reanalysis_discharge_cms": 6.764,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 4.396
+        },
+        {
+          "date": "2026-06-15",
+          "period": "reanalysis",
+          "runoff_mm": 0.266,
+          "reanalysis_discharge_cms": 6.595,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 4.287
+        },
+        {
+          "date": "2026-06-16",
+          "period": "reanalysis",
+          "runoff_mm": 0.264,
+          "reanalysis_discharge_cms": 6.563,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 4.266
+        },
+        {
+          "date": "2026-06-17",
+          "period": "reanalysis",
+          "runoff_mm": 0.269,
+          "reanalysis_discharge_cms": 6.676,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 4.339
+        },
+        {
+          "date": "2026-06-18",
+          "period": "reanalysis",
+          "runoff_mm": 0.278,
+          "reanalysis_discharge_cms": 6.905,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 4.488
+        },
+        {
+          "date": "2026-06-19",
+          "period": "reanalysis",
+          "runoff_mm": 0.29,
+          "reanalysis_discharge_cms": 7.195,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 4.677
+        },
+        {
+          "date": "2026-06-20",
+          "period": "reanalysis",
+          "runoff_mm": 0.301,
+          "reanalysis_discharge_cms": 7.475,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 4.859
+        },
+        {
+          "date": "2026-06-21",
+          "period": "reanalysis",
+          "runoff_mm": 0.309,
+          "reanalysis_discharge_cms": 7.676,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 4.99
+        },
+        {
+          "date": "2026-06-23",
+          "period": "reforecast",
+          "runoff_mm": 0.419,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 13.669,
+          "reforecast_p90_cms": 21.187,
+          "reservoir_adjusted_cms": 8.885
+        },
+        {
+          "date": "2026-06-24",
+          "period": "reforecast",
+          "runoff_mm": 0.452,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 13.89,
+          "reforecast_p90_cms": 21.529,
+          "reservoir_adjusted_cms": 9.028
+        },
+        {
+          "date": "2026-06-25",
+          "period": "reforecast",
+          "runoff_mm": 0.474,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 14.005,
+          "reforecast_p90_cms": 21.707,
+          "reservoir_adjusted_cms": 9.103
+        },
+        {
+          "date": "2026-06-26",
+          "period": "reforecast",
+          "runoff_mm": 0.472,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 13.636,
+          "reforecast_p90_cms": 21.136,
+          "reservoir_adjusted_cms": 8.864
+        },
+        {
+          "date": "2026-06-27",
+          "period": "reforecast",
+          "runoff_mm": 0.459,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 13.042,
+          "reforecast_p90_cms": 20.215,
+          "reservoir_adjusted_cms": 8.477
+        },
+        {
+          "date": "2026-06-28",
+          "period": "reforecast",
+          "runoff_mm": 0.451,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 12.668,
+          "reforecast_p90_cms": 19.635,
+          "reservoir_adjusted_cms": 8.234
+        },
+        {
+          "date": "2026-06-29",
+          "period": "reforecast",
+          "runoff_mm": 0.453,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 12.621,
+          "reforecast_p90_cms": 19.563,
+          "reservoir_adjusted_cms": 8.204
+        }
+      ]
+    },
+    {
+      "name": "Dhasan GRRR project runoff node",
+      "basin": "Dhasan",
+      "latitude": 24.77,
+      "longitude": 80.57,
+      "dam_count": 1,
+      "avg_filling": 36.52,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 16.55,
+      "catchment_proxy_sq_km": 129.12,
+      "forecast_days": 7,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_grrr_json_pending_google_runoff_export",
+      "thresholds": {
+        "watch_cms": 18.0,
+        "flood_cms": 26.1,
+        "danger_cms": 35.235
+      },
+      "linked_dams": [
+        "Singhpur"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "reanalysis",
+          "runoff_mm": 0.295,
+          "reanalysis_discharge_cms": 0.442,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.441
+        },
+        {
+          "date": "2026-06-13",
+          "period": "reanalysis",
+          "runoff_mm": 0.283,
+          "reanalysis_discharge_cms": 0.424,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.423
+        },
+        {
+          "date": "2026-06-14",
+          "period": "reanalysis",
+          "runoff_mm": 0.272,
+          "reanalysis_discharge_cms": 0.408,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.407
+        },
+        {
+          "date": "2026-06-15",
+          "period": "reanalysis",
+          "runoff_mm": 0.266,
+          "reanalysis_discharge_cms": 0.398,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.397
+        },
+        {
+          "date": "2026-06-16",
+          "period": "reanalysis",
+          "runoff_mm": 0.264,
+          "reanalysis_discharge_cms": 0.396,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.395
+        },
+        {
+          "date": "2026-06-17",
+          "period": "reanalysis",
+          "runoff_mm": 0.269,
+          "reanalysis_discharge_cms": 0.403,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.402
+        },
+        {
+          "date": "2026-06-18",
+          "period": "reanalysis",
+          "runoff_mm": 0.278,
+          "reanalysis_discharge_cms": 0.416,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.416
+        },
+        {
+          "date": "2026-06-19",
+          "period": "reanalysis",
+          "runoff_mm": 0.29,
+          "reanalysis_discharge_cms": 0.434,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.433
+        },
+        {
+          "date": "2026-06-20",
+          "period": "reanalysis",
+          "runoff_mm": 0.301,
+          "reanalysis_discharge_cms": 0.451,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.45
+        },
+        {
+          "date": "2026-06-21",
+          "period": "reanalysis",
+          "runoff_mm": 0.309,
+          "reanalysis_discharge_cms": 0.463,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.462
+        },
+        {
+          "date": "2026-06-23",
+          "period": "reforecast",
+          "runoff_mm": 0.419,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.998
+        },
+        {
+          "date": "2026-06-24",
+          "period": "reforecast",
+          "runoff_mm": 0.452,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.998
+        },
+        {
+          "date": "2026-06-25",
+          "period": "reforecast",
+          "runoff_mm": 0.474,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.998
+        },
+        {
+          "date": "2026-06-26",
+          "period": "reforecast",
+          "runoff_mm": 0.472,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.998
+        },
+        {
+          "date": "2026-06-27",
+          "period": "reforecast",
+          "runoff_mm": 0.459,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.998
+        },
+        {
+          "date": "2026-06-28",
+          "period": "reforecast",
+          "runoff_mm": 0.451,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.998
+        },
+        {
+          "date": "2026-06-29",
+          "period": "reforecast",
+          "runoff_mm": 0.453,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.998
+        }
+      ]
+    },
+    {
+      "name": "Jamni GRRR project runoff node",
+      "basin": "Jamni",
+      "latitude": 23.5,
+      "longitude": 77.55,
+      "dam_count": 7,
+      "avg_filling": 23.63,
+      "avg_rainfall_mm": 0.01,
+      "storage_mcm": 1073.38,
+      "catchment_proxy_sq_km": 1135.39,
+      "forecast_days": 7,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_grrr_json_pending_google_runoff_export",
+      "thresholds": {
+        "watch_cms": 18.0,
+        "flood_cms": 26.1,
+        "danger_cms": 35.235
+      },
+      "linked_dams": [
+        "Bansujara Major Project",
+        "Kaliasote",
+        "Kerwa",
+        "Rajghat",
+        "Sagad",
+        "Samrat Ashok Sagar (Halali)",
+        "Sanjay Sagar (Bah) Project"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "reanalysis",
+          "runoff_mm": 0.295,
+          "reanalysis_discharge_cms": 3.883,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 3.392
+        },
+        {
+          "date": "2026-06-13",
+          "period": "reanalysis",
+          "runoff_mm": 0.283,
+          "reanalysis_discharge_cms": 3.726,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 3.256
+        },
+        {
+          "date": "2026-06-14",
+          "period": "reanalysis",
+          "runoff_mm": 0.272,
+          "reanalysis_discharge_cms": 3.587,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 3.134
+        },
+        {
+          "date": "2026-06-15",
+          "period": "reanalysis",
+          "runoff_mm": 0.266,
+          "reanalysis_discharge_cms": 3.497,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 3.055
+        },
+        {
+          "date": "2026-06-16",
+          "period": "reanalysis",
+          "runoff_mm": 0.264,
+          "reanalysis_discharge_cms": 3.48,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 3.041
+        },
+        {
+          "date": "2026-06-17",
+          "period": "reanalysis",
+          "runoff_mm": 0.269,
+          "reanalysis_discharge_cms": 3.54,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 3.093
+        },
+        {
+          "date": "2026-06-18",
+          "period": "reanalysis",
+          "runoff_mm": 0.278,
+          "reanalysis_discharge_cms": 3.662,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 3.199
+        },
+        {
+          "date": "2026-06-19",
+          "period": "reanalysis",
+          "runoff_mm": 0.29,
+          "reanalysis_discharge_cms": 3.815,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 3.334
+        },
+        {
+          "date": "2026-06-20",
+          "period": "reanalysis",
+          "runoff_mm": 0.301,
+          "reanalysis_discharge_cms": 3.964,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 3.463
+        },
+        {
+          "date": "2026-06-21",
+          "period": "reanalysis",
+          "runoff_mm": 0.309,
+          "reanalysis_discharge_cms": 4.071,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 3.556
+        },
+        {
+          "date": "2026-06-23",
+          "period": "reforecast",
+          "runoff_mm": 0.419,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 7.248,
+          "reforecast_p90_cms": 11.235,
+          "reservoir_adjusted_cms": 6.333
+        },
+        {
+          "date": "2026-06-24",
+          "period": "reforecast",
+          "runoff_mm": 0.452,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 7.365,
+          "reforecast_p90_cms": 11.416,
+          "reservoir_adjusted_cms": 6.435
+        },
+        {
+          "date": "2026-06-25",
+          "period": "reforecast",
+          "runoff_mm": 0.474,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 7.426,
+          "reforecast_p90_cms": 11.511,
+          "reservoir_adjusted_cms": 6.488
+        },
+        {
+          "date": "2026-06-26",
+          "period": "reforecast",
+          "runoff_mm": 0.472,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 7.231,
+          "reforecast_p90_cms": 11.208,
+          "reservoir_adjusted_cms": 6.318
+        },
+        {
+          "date": "2026-06-27",
+          "period": "reforecast",
+          "runoff_mm": 0.459,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 6.916,
+          "reforecast_p90_cms": 10.719,
+          "reservoir_adjusted_cms": 6.042
+        },
+        {
+          "date": "2026-06-28",
+          "period": "reforecast",
+          "runoff_mm": 0.451,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 6.717,
+          "reforecast_p90_cms": 10.412,
+          "reservoir_adjusted_cms": 5.869
+        },
+        {
+          "date": "2026-06-29",
+          "period": "reforecast",
+          "runoff_mm": 0.453,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 6.693,
+          "reforecast_p90_cms": 10.374,
+          "reservoir_adjusted_cms": 5.848
+        }
+      ]
+    },
+    {
+      "name": "Ken GRRR project runoff node",
+      "basin": "Ken",
+      "latitude": 24.94,
+      "longitude": 79.95,
+      "dam_count": 5,
+      "avg_filling": 32.97,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 201.8,
+      "catchment_proxy_sq_km": 676.7,
+      "forecast_days": 7,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_grrr_json_pending_google_runoff_export",
+      "thresholds": {
+        "watch_cms": 18.0,
+        "flood_cms": 26.1,
+        "danger_cms": 35.235
+      },
+      "linked_dams": [
+        "Kutni",
+        "Pagra Feeder",
+        "Pawai Medium Irrigation Project",
+        "Rangawan",
+        "Urmil"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "reanalysis",
+          "runoff_mm": 0.295,
+          "reanalysis_discharge_cms": 2.314,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.259
+        },
+        {
+          "date": "2026-06-13",
+          "period": "reanalysis",
+          "runoff_mm": 0.283,
+          "reanalysis_discharge_cms": 2.221,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.168
+        },
+        {
+          "date": "2026-06-14",
+          "period": "reanalysis",
+          "runoff_mm": 0.272,
+          "reanalysis_discharge_cms": 2.138,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.087
+        },
+        {
+          "date": "2026-06-15",
+          "period": "reanalysis",
+          "runoff_mm": 0.266,
+          "reanalysis_discharge_cms": 2.084,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.035
+        },
+        {
+          "date": "2026-06-16",
+          "period": "reanalysis",
+          "runoff_mm": 0.264,
+          "reanalysis_discharge_cms": 2.074,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.025
+        },
+        {
+          "date": "2026-06-17",
+          "period": "reanalysis",
+          "runoff_mm": 0.269,
+          "reanalysis_discharge_cms": 2.11,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.06
+        },
+        {
+          "date": "2026-06-18",
+          "period": "reanalysis",
+          "runoff_mm": 0.278,
+          "reanalysis_discharge_cms": 2.182,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.131
+        },
+        {
+          "date": "2026-06-19",
+          "period": "reanalysis",
+          "runoff_mm": 0.29,
+          "reanalysis_discharge_cms": 2.274,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.22
+        },
+        {
+          "date": "2026-06-20",
+          "period": "reanalysis",
+          "runoff_mm": 0.301,
+          "reanalysis_discharge_cms": 2.362,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.306
+        },
+        {
+          "date": "2026-06-21",
+          "period": "reanalysis",
+          "runoff_mm": 0.309,
+          "reanalysis_discharge_cms": 2.426,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.368
+        },
+        {
+          "date": "2026-06-23",
+          "period": "reforecast",
+          "runoff_mm": 0.419,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 4.32,
+          "reforecast_p90_cms": 6.696,
+          "reservoir_adjusted_cms": 4.217
+        },
+        {
+          "date": "2026-06-24",
+          "period": "reforecast",
+          "runoff_mm": 0.452,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 4.39,
+          "reforecast_p90_cms": 6.804,
+          "reservoir_adjusted_cms": 4.285
+        },
+        {
+          "date": "2026-06-25",
+          "period": "reforecast",
+          "runoff_mm": 0.474,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 4.426,
+          "reforecast_p90_cms": 6.86,
+          "reservoir_adjusted_cms": 4.321
+        },
+        {
+          "date": "2026-06-26",
+          "period": "reforecast",
+          "runoff_mm": 0.472,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 4.31,
+          "reforecast_p90_cms": 6.68,
+          "reservoir_adjusted_cms": 4.207
+        },
+        {
+          "date": "2026-06-27",
+          "period": "reforecast",
+          "runoff_mm": 0.459,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 4.122,
+          "reforecast_p90_cms": 6.389,
+          "reservoir_adjusted_cms": 4.024
+        },
+        {
+          "date": "2026-06-28",
+          "period": "reforecast",
+          "runoff_mm": 0.451,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 4.004,
+          "reforecast_p90_cms": 6.205,
+          "reservoir_adjusted_cms": 3.908
+        },
+        {
+          "date": "2026-06-29",
+          "period": "reforecast",
+          "runoff_mm": 0.453,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 3.989,
+          "reforecast_p90_cms": 6.183,
+          "reservoir_adjusted_cms": 3.894
+        }
+      ]
+    },
+    {
+      "name": "Kolar GRRR project runoff node",
+      "basin": "Kolar",
+      "latitude": 22.96,
+      "longitude": 77.35,
+      "dam_count": 1,
+      "avg_filling": 45.35,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 120.2,
+      "catchment_proxy_sq_km": 153.26,
+      "forecast_days": 7,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_grrr_json_pending_google_runoff_export",
+      "thresholds": {
+        "watch_cms": 18.0,
+        "flood_cms": 26.1,
+        "danger_cms": 35.235
+      },
+      "linked_dams": [
+        "Kolar"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "reanalysis",
+          "runoff_mm": 0.295,
+          "reanalysis_discharge_cms": 0.524,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.517
+        },
+        {
+          "date": "2026-06-13",
+          "period": "reanalysis",
+          "runoff_mm": 0.283,
+          "reanalysis_discharge_cms": 0.503,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.496
+        },
+        {
+          "date": "2026-06-14",
+          "period": "reanalysis",
+          "runoff_mm": 0.272,
+          "reanalysis_discharge_cms": 0.484,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.477
+        },
+        {
+          "date": "2026-06-15",
+          "period": "reanalysis",
+          "runoff_mm": 0.266,
+          "reanalysis_discharge_cms": 0.472,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.465
+        },
+        {
+          "date": "2026-06-16",
+          "period": "reanalysis",
+          "runoff_mm": 0.264,
+          "reanalysis_discharge_cms": 0.47,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.463
+        },
+        {
+          "date": "2026-06-17",
+          "period": "reanalysis",
+          "runoff_mm": 0.269,
+          "reanalysis_discharge_cms": 0.478,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.471
+        },
+        {
+          "date": "2026-06-18",
+          "period": "reanalysis",
+          "runoff_mm": 0.278,
+          "reanalysis_discharge_cms": 0.494,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.487
+        },
+        {
+          "date": "2026-06-19",
+          "period": "reanalysis",
+          "runoff_mm": 0.29,
+          "reanalysis_discharge_cms": 0.515,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.508
+        },
+        {
+          "date": "2026-06-20",
+          "period": "reanalysis",
+          "runoff_mm": 0.301,
+          "reanalysis_discharge_cms": 0.535,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.528
+        },
+        {
+          "date": "2026-06-21",
+          "period": "reanalysis",
+          "runoff_mm": 0.309,
+          "reanalysis_discharge_cms": 0.549,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.542
+        },
+        {
+          "date": "2026-06-23",
+          "period": "reforecast",
+          "runoff_mm": 0.419,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.986
+        },
+        {
+          "date": "2026-06-24",
+          "period": "reforecast",
+          "runoff_mm": 0.452,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.986
+        },
+        {
+          "date": "2026-06-25",
+          "period": "reforecast",
+          "runoff_mm": 0.474,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.002,
+          "reforecast_p90_cms": 1.554,
+          "reservoir_adjusted_cms": 0.988
+        },
+        {
+          "date": "2026-06-26",
+          "period": "reforecast",
+          "runoff_mm": 0.472,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.986
+        },
+        {
+          "date": "2026-06-27",
+          "period": "reforecast",
+          "runoff_mm": 0.459,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.986
+        },
+        {
+          "date": "2026-06-28",
+          "period": "reforecast",
+          "runoff_mm": 0.451,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.986
+        },
+        {
+          "date": "2026-06-29",
+          "period": "reforecast",
+          "runoff_mm": 0.453,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.986
+        }
+      ]
+    },
+    {
+      "name": "Kunwari GRRR project runoff node",
+      "basin": "Kunwari",
+      "latitude": 26.49,
+      "longitude": 78.13,
+      "dam_count": 4,
+      "avg_filling": 47.47,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 201.89,
+      "catchment_proxy_sq_km": 546.83,
+      "forecast_days": 7,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_grrr_json_pending_google_runoff_export",
+      "thresholds": {
+        "watch_cms": 18.0,
+        "flood_cms": 26.1,
+        "danger_cms": 35.235
+      },
+      "linked_dams": [
+        "Aoda",
+        "Harsi",
+        "Kotwal Feeder",
+        "Tigra"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "reanalysis",
+          "runoff_mm": 0.295,
+          "reanalysis_discharge_cms": 1.87,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.826
+        },
+        {
+          "date": "2026-06-13",
+          "period": "reanalysis",
+          "runoff_mm": 0.283,
+          "reanalysis_discharge_cms": 1.795,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.752
+        },
+        {
+          "date": "2026-06-14",
+          "period": "reanalysis",
+          "runoff_mm": 0.272,
+          "reanalysis_discharge_cms": 1.727,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.686
+        },
+        {
+          "date": "2026-06-15",
+          "period": "reanalysis",
+          "runoff_mm": 0.266,
+          "reanalysis_discharge_cms": 1.684,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.644
+        },
+        {
+          "date": "2026-06-16",
+          "period": "reanalysis",
+          "runoff_mm": 0.264,
+          "reanalysis_discharge_cms": 1.676,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.636
+        },
+        {
+          "date": "2026-06-17",
+          "period": "reanalysis",
+          "runoff_mm": 0.269,
+          "reanalysis_discharge_cms": 1.705,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.664
+        },
+        {
+          "date": "2026-06-18",
+          "period": "reanalysis",
+          "runoff_mm": 0.278,
+          "reanalysis_discharge_cms": 1.763,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.722
+        },
+        {
+          "date": "2026-06-19",
+          "period": "reanalysis",
+          "runoff_mm": 0.29,
+          "reanalysis_discharge_cms": 1.838,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.794
+        },
+        {
+          "date": "2026-06-20",
+          "period": "reanalysis",
+          "runoff_mm": 0.301,
+          "reanalysis_discharge_cms": 1.909,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.864
+        },
+        {
+          "date": "2026-06-21",
+          "period": "reanalysis",
+          "runoff_mm": 0.309,
+          "reanalysis_discharge_cms": 1.96,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.914
+        },
+        {
+          "date": "2026-06-23",
+          "period": "reforecast",
+          "runoff_mm": 0.419,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 3.491,
+          "reforecast_p90_cms": 5.411,
+          "reservoir_adjusted_cms": 3.408
+        },
+        {
+          "date": "2026-06-24",
+          "period": "reforecast",
+          "runoff_mm": 0.452,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 3.547,
+          "reforecast_p90_cms": 5.498,
+          "reservoir_adjusted_cms": 3.463
+        },
+        {
+          "date": "2026-06-25",
+          "period": "reforecast",
+          "runoff_mm": 0.474,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 3.577,
+          "reforecast_p90_cms": 5.544,
+          "reservoir_adjusted_cms": 3.492
+        },
+        {
+          "date": "2026-06-26",
+          "period": "reforecast",
+          "runoff_mm": 0.472,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 3.483,
+          "reforecast_p90_cms": 5.398,
+          "reservoir_adjusted_cms": 3.4
+        },
+        {
+          "date": "2026-06-27",
+          "period": "reforecast",
+          "runoff_mm": 0.459,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 3.331,
+          "reforecast_p90_cms": 5.163,
+          "reservoir_adjusted_cms": 3.252
+        },
+        {
+          "date": "2026-06-28",
+          "period": "reforecast",
+          "runoff_mm": 0.451,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 3.235,
+          "reforecast_p90_cms": 5.014,
+          "reservoir_adjusted_cms": 3.158
+        },
+        {
+          "date": "2026-06-29",
+          "period": "reforecast",
+          "runoff_mm": 0.453,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 3.223,
+          "reforecast_p90_cms": 4.996,
+          "reservoir_adjusted_cms": 3.147
+        }
+      ]
+    },
+    {
+      "name": "Mahi GRRR project runoff node",
+      "basin": "Mahi",
+      "latitude": 23.27,
+      "longitude": 74.9,
+      "dam_count": 3,
+      "avg_filling": 3.34,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 4.88,
+      "catchment_proxy_sq_km": 381.5,
+      "forecast_days": 7,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_grrr_json_pending_google_runoff_export",
+      "thresholds": {
+        "watch_cms": 18.0,
+        "flood_cms": 26.1,
+        "danger_cms": 35.235
+      },
+      "linked_dams": [
+        "Dholawad Tank",
+        "Mahi Main",
+        "Mahi Subsidiary"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "reanalysis",
+          "runoff_mm": 0.295,
+          "reanalysis_discharge_cms": 1.305,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.304
+        },
+        {
+          "date": "2026-06-13",
+          "period": "reanalysis",
+          "runoff_mm": 0.283,
+          "reanalysis_discharge_cms": 1.252,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.251
+        },
+        {
+          "date": "2026-06-14",
+          "period": "reanalysis",
+          "runoff_mm": 0.272,
+          "reanalysis_discharge_cms": 1.205,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.204
+        },
+        {
+          "date": "2026-06-15",
+          "period": "reanalysis",
+          "runoff_mm": 0.266,
+          "reanalysis_discharge_cms": 1.175,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.174
+        },
+        {
+          "date": "2026-06-16",
+          "period": "reanalysis",
+          "runoff_mm": 0.264,
+          "reanalysis_discharge_cms": 1.169,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.169
+        },
+        {
+          "date": "2026-06-17",
+          "period": "reanalysis",
+          "runoff_mm": 0.269,
+          "reanalysis_discharge_cms": 1.189,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.189
+        },
+        {
+          "date": "2026-06-18",
+          "period": "reanalysis",
+          "runoff_mm": 0.278,
+          "reanalysis_discharge_cms": 1.23,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.23
+        },
+        {
+          "date": "2026-06-19",
+          "period": "reanalysis",
+          "runoff_mm": 0.29,
+          "reanalysis_discharge_cms": 1.282,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.281
+        },
+        {
+          "date": "2026-06-20",
+          "period": "reanalysis",
+          "runoff_mm": 0.301,
+          "reanalysis_discharge_cms": 1.332,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.331
+        },
+        {
+          "date": "2026-06-21",
+          "period": "reanalysis",
+          "runoff_mm": 0.309,
+          "reanalysis_discharge_cms": 1.368,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.367
+        },
+        {
+          "date": "2026-06-23",
+          "period": "reforecast",
+          "runoff_mm": 0.419,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 2.436,
+          "reforecast_p90_cms": 3.775,
+          "reservoir_adjusted_cms": 2.434
+        },
+        {
+          "date": "2026-06-24",
+          "period": "reforecast",
+          "runoff_mm": 0.452,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 2.475,
+          "reforecast_p90_cms": 3.836,
+          "reservoir_adjusted_cms": 2.473
+        },
+        {
+          "date": "2026-06-25",
+          "period": "reforecast",
+          "runoff_mm": 0.474,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 2.495,
+          "reforecast_p90_cms": 3.868,
+          "reservoir_adjusted_cms": 2.494
+        },
+        {
+          "date": "2026-06-26",
+          "period": "reforecast",
+          "runoff_mm": 0.472,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 2.43,
+          "reforecast_p90_cms": 3.766,
+          "reservoir_adjusted_cms": 2.428
+        },
+        {
+          "date": "2026-06-27",
+          "period": "reforecast",
+          "runoff_mm": 0.459,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 2.324,
+          "reforecast_p90_cms": 3.602,
+          "reservoir_adjusted_cms": 2.322
+        },
+        {
+          "date": "2026-06-28",
+          "period": "reforecast",
+          "runoff_mm": 0.451,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 2.257,
+          "reforecast_p90_cms": 3.498,
+          "reservoir_adjusted_cms": 2.256
+        },
+        {
+          "date": "2026-06-29",
+          "period": "reforecast",
+          "runoff_mm": 0.453,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 2.249,
+          "reforecast_p90_cms": 3.486,
+          "reservoir_adjusted_cms": 2.248
+        }
+      ]
+    },
+    {
+      "name": "Narmada GRRR project runoff node",
+      "basin": "Narmada",
+      "latitude": 22.24,
+      "longitude": 76.16,
+      "dam_count": 2,
+      "avg_filling": 28.76,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 1656.65,
+      "catchment_proxy_sq_km": 785.82,
+      "forecast_days": 7,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_grrr_json_pending_google_runoff_export",
+      "thresholds": {
+        "watch_cms": 18.0,
+        "flood_cms": 26.1,
+        "danger_cms": 35.235
+      },
+      "linked_dams": [
+        "Indira Sagar",
+        "Omkareshwar"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "reanalysis",
+          "runoff_mm": 0.295,
+          "reanalysis_discharge_cms": 2.687,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.164
+        },
+        {
+          "date": "2026-06-13",
+          "period": "reanalysis",
+          "runoff_mm": 0.283,
+          "reanalysis_discharge_cms": 2.579,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.076
+        },
+        {
+          "date": "2026-06-14",
+          "period": "reanalysis",
+          "runoff_mm": 0.272,
+          "reanalysis_discharge_cms": 2.482,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.998
+        },
+        {
+          "date": "2026-06-15",
+          "period": "reanalysis",
+          "runoff_mm": 0.266,
+          "reanalysis_discharge_cms": 2.42,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.949
+        },
+        {
+          "date": "2026-06-16",
+          "period": "reanalysis",
+          "runoff_mm": 0.264,
+          "reanalysis_discharge_cms": 2.409,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.939
+        },
+        {
+          "date": "2026-06-17",
+          "period": "reanalysis",
+          "runoff_mm": 0.269,
+          "reanalysis_discharge_cms": 2.45,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.973
+        },
+        {
+          "date": "2026-06-18",
+          "period": "reanalysis",
+          "runoff_mm": 0.278,
+          "reanalysis_discharge_cms": 2.534,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.04
+        },
+        {
+          "date": "2026-06-19",
+          "period": "reanalysis",
+          "runoff_mm": 0.29,
+          "reanalysis_discharge_cms": 2.641,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.126
+        },
+        {
+          "date": "2026-06-20",
+          "period": "reanalysis",
+          "runoff_mm": 0.301,
+          "reanalysis_discharge_cms": 2.743,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.209
+        },
+        {
+          "date": "2026-06-21",
+          "period": "reanalysis",
+          "runoff_mm": 0.309,
+          "reanalysis_discharge_cms": 2.817,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.268
+        },
+        {
+          "date": "2026-06-23",
+          "period": "reforecast",
+          "runoff_mm": 0.419,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 5.017,
+          "reforecast_p90_cms": 7.776,
+          "reservoir_adjusted_cms": 4.039
+        },
+        {
+          "date": "2026-06-24",
+          "period": "reforecast",
+          "runoff_mm": 0.452,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 5.098,
+          "reforecast_p90_cms": 7.901,
+          "reservoir_adjusted_cms": 4.104
+        },
+        {
+          "date": "2026-06-25",
+          "period": "reforecast",
+          "runoff_mm": 0.474,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 5.14,
+          "reforecast_p90_cms": 7.967,
+          "reservoir_adjusted_cms": 4.138
+        },
+        {
+          "date": "2026-06-26",
+          "period": "reforecast",
+          "runoff_mm": 0.472,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 5.005,
+          "reforecast_p90_cms": 7.757,
+          "reservoir_adjusted_cms": 4.029
+        },
+        {
+          "date": "2026-06-27",
+          "period": "reforecast",
+          "runoff_mm": 0.459,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 4.786,
+          "reforecast_p90_cms": 7.419,
+          "reservoir_adjusted_cms": 3.854
+        },
+        {
+          "date": "2026-06-28",
+          "period": "reforecast",
+          "runoff_mm": 0.451,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 4.649,
+          "reforecast_p90_cms": 7.206,
+          "reservoir_adjusted_cms": 3.743
+        },
+        {
+          "date": "2026-06-29",
+          "period": "reforecast",
+          "runoff_mm": 0.453,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 4.632,
+          "reforecast_p90_cms": 7.18,
+          "reservoir_adjusted_cms": 3.729
+        }
+      ]
+    },
+    {
+      "name": "Pench GRRR project runoff node",
+      "basin": "Pench",
+      "latitude": 22.12,
+      "longitude": 79.17,
+      "dam_count": 1,
+      "avg_filling": 7.79,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 32.81,
+      "catchment_proxy_sq_km": 141.44,
+      "forecast_days": 7,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_grrr_json_pending_google_runoff_export",
+      "thresholds": {
+        "watch_cms": 18.0,
+        "flood_cms": 26.1,
+        "danger_cms": 35.235
+      },
+      "linked_dams": [
+        "Pench Diversion"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "reanalysis",
+          "runoff_mm": 0.295,
+          "reanalysis_discharge_cms": 0.484,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.482
+        },
+        {
+          "date": "2026-06-13",
+          "period": "reanalysis",
+          "runoff_mm": 0.283,
+          "reanalysis_discharge_cms": 0.464,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.462
+        },
+        {
+          "date": "2026-06-14",
+          "period": "reanalysis",
+          "runoff_mm": 0.272,
+          "reanalysis_discharge_cms": 0.447,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.445
+        },
+        {
+          "date": "2026-06-15",
+          "period": "reanalysis",
+          "runoff_mm": 0.266,
+          "reanalysis_discharge_cms": 0.436,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.434
+        },
+        {
+          "date": "2026-06-16",
+          "period": "reanalysis",
+          "runoff_mm": 0.264,
+          "reanalysis_discharge_cms": 0.434,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.432
+        },
+        {
+          "date": "2026-06-17",
+          "period": "reanalysis",
+          "runoff_mm": 0.269,
+          "reanalysis_discharge_cms": 0.441,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.439
+        },
+        {
+          "date": "2026-06-18",
+          "period": "reanalysis",
+          "runoff_mm": 0.278,
+          "reanalysis_discharge_cms": 0.456,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.454
+        },
+        {
+          "date": "2026-06-19",
+          "period": "reanalysis",
+          "runoff_mm": 0.29,
+          "reanalysis_discharge_cms": 0.475,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.473
+        },
+        {
+          "date": "2026-06-20",
+          "period": "reanalysis",
+          "runoff_mm": 0.301,
+          "reanalysis_discharge_cms": 0.494,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.492
+        },
+        {
+          "date": "2026-06-21",
+          "period": "reanalysis",
+          "runoff_mm": 0.309,
+          "reanalysis_discharge_cms": 0.507,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.505
+        },
+        {
+          "date": "2026-06-23",
+          "period": "reforecast",
+          "runoff_mm": 0.419,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.996
+        },
+        {
+          "date": "2026-06-24",
+          "period": "reforecast",
+          "runoff_mm": 0.452,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.996
+        },
+        {
+          "date": "2026-06-25",
+          "period": "reforecast",
+          "runoff_mm": 0.474,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.996
+        },
+        {
+          "date": "2026-06-26",
+          "period": "reforecast",
+          "runoff_mm": 0.472,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.996
+        },
+        {
+          "date": "2026-06-27",
+          "period": "reforecast",
+          "runoff_mm": 0.459,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.996
+        },
+        {
+          "date": "2026-06-28",
+          "period": "reforecast",
+          "runoff_mm": 0.451,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.996
+        },
+        {
+          "date": "2026-06-29",
+          "period": "reforecast",
+          "runoff_mm": 0.453,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.996
+        }
+      ]
+    },
+    {
+      "name": "Sind GRRR project runoff node",
+      "basin": "Sind",
+      "latitude": 25.9,
+      "longitude": 77.7,
+      "dam_count": 6,
+      "avg_filling": 41.14,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 579.43,
+      "catchment_proxy_sq_km": 882.86,
+      "forecast_days": 7,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_grrr_json_pending_google_runoff_export",
+      "thresholds": {
+        "watch_cms": 18.0,
+        "flood_cms": 26.1,
+        "danger_cms": 35.235
+      },
+      "linked_dams": [
+        "Kaketo",
+        "Madikheda",
+        "Mahuar",
+        "Mohini Pick Up Weir",
+        "Pehsari",
+        "Upper Kaketo"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "reanalysis",
+          "runoff_mm": 0.295,
+          "reanalysis_discharge_cms": 3.019,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.813
+        },
+        {
+          "date": "2026-06-13",
+          "period": "reanalysis",
+          "runoff_mm": 0.283,
+          "reanalysis_discharge_cms": 2.898,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.7
+        },
+        {
+          "date": "2026-06-14",
+          "period": "reanalysis",
+          "runoff_mm": 0.272,
+          "reanalysis_discharge_cms": 2.789,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.599
+        },
+        {
+          "date": "2026-06-15",
+          "period": "reanalysis",
+          "runoff_mm": 0.266,
+          "reanalysis_discharge_cms": 2.719,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.534
+        },
+        {
+          "date": "2026-06-16",
+          "period": "reanalysis",
+          "runoff_mm": 0.264,
+          "reanalysis_discharge_cms": 2.706,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.522
+        },
+        {
+          "date": "2026-06-17",
+          "period": "reanalysis",
+          "runoff_mm": 0.269,
+          "reanalysis_discharge_cms": 2.753,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.565
+        },
+        {
+          "date": "2026-06-18",
+          "period": "reanalysis",
+          "runoff_mm": 0.278,
+          "reanalysis_discharge_cms": 2.847,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.653
+        },
+        {
+          "date": "2026-06-19",
+          "period": "reanalysis",
+          "runoff_mm": 0.29,
+          "reanalysis_discharge_cms": 2.967,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.765
+        },
+        {
+          "date": "2026-06-20",
+          "period": "reanalysis",
+          "runoff_mm": 0.301,
+          "reanalysis_discharge_cms": 3.082,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.872
+        },
+        {
+          "date": "2026-06-21",
+          "period": "reanalysis",
+          "runoff_mm": 0.309,
+          "reanalysis_discharge_cms": 3.165,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.949
+        },
+        {
+          "date": "2026-06-23",
+          "period": "reforecast",
+          "runoff_mm": 0.419,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 5.636,
+          "reforecast_p90_cms": 8.736,
+          "reservoir_adjusted_cms": 5.252
+        },
+        {
+          "date": "2026-06-24",
+          "period": "reforecast",
+          "runoff_mm": 0.452,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 5.727,
+          "reforecast_p90_cms": 8.877,
+          "reservoir_adjusted_cms": 5.337
+        },
+        {
+          "date": "2026-06-25",
+          "period": "reforecast",
+          "runoff_mm": 0.474,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 5.774,
+          "reforecast_p90_cms": 8.95,
+          "reservoir_adjusted_cms": 5.381
+        },
+        {
+          "date": "2026-06-26",
+          "period": "reforecast",
+          "runoff_mm": 0.472,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 5.623,
+          "reforecast_p90_cms": 8.715,
+          "reservoir_adjusted_cms": 5.239
+        },
+        {
+          "date": "2026-06-27",
+          "period": "reforecast",
+          "runoff_mm": 0.459,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 5.377,
+          "reforecast_p90_cms": 8.335,
+          "reservoir_adjusted_cms": 5.011
+        },
+        {
+          "date": "2026-06-28",
+          "period": "reforecast",
+          "runoff_mm": 0.451,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 5.223,
+          "reforecast_p90_cms": 8.096,
+          "reservoir_adjusted_cms": 4.867
+        },
+        {
+          "date": "2026-06-29",
+          "period": "reforecast",
+          "runoff_mm": 0.453,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 5.204,
+          "reforecast_p90_cms": 8.066,
+          "reservoir_adjusted_cms": 4.849
+        }
+      ]
+    },
+    {
+      "name": "Sindh GRRR project runoff node",
+      "basin": "Sindh",
+      "latitude": 24.07,
+      "longitude": 79.08,
+      "dam_count": 1,
+      "avg_filling": 33.01,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 39.77,
+      "catchment_proxy_sq_km": 135.17,
+      "forecast_days": 7,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_grrr_json_pending_google_runoff_export",
+      "thresholds": {
+        "watch_cms": 18.0,
+        "flood_cms": 26.1,
+        "danger_cms": 35.235
+      },
+      "linked_dams": [
+        "Pagara"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "reanalysis",
+          "runoff_mm": 0.295,
+          "reanalysis_discharge_cms": 0.462,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.46
+        },
+        {
+          "date": "2026-06-13",
+          "period": "reanalysis",
+          "runoff_mm": 0.283,
+          "reanalysis_discharge_cms": 0.444,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.442
+        },
+        {
+          "date": "2026-06-14",
+          "period": "reanalysis",
+          "runoff_mm": 0.272,
+          "reanalysis_discharge_cms": 0.427,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.425
+        },
+        {
+          "date": "2026-06-15",
+          "period": "reanalysis",
+          "runoff_mm": 0.266,
+          "reanalysis_discharge_cms": 0.416,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.414
+        },
+        {
+          "date": "2026-06-16",
+          "period": "reanalysis",
+          "runoff_mm": 0.264,
+          "reanalysis_discharge_cms": 0.414,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.412
+        },
+        {
+          "date": "2026-06-17",
+          "period": "reanalysis",
+          "runoff_mm": 0.269,
+          "reanalysis_discharge_cms": 0.421,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.419
+        },
+        {
+          "date": "2026-06-18",
+          "period": "reanalysis",
+          "runoff_mm": 0.278,
+          "reanalysis_discharge_cms": 0.436,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.434
+        },
+        {
+          "date": "2026-06-19",
+          "period": "reanalysis",
+          "runoff_mm": 0.29,
+          "reanalysis_discharge_cms": 0.454,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.452
+        },
+        {
+          "date": "2026-06-20",
+          "period": "reanalysis",
+          "runoff_mm": 0.301,
+          "reanalysis_discharge_cms": 0.472,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.47
+        },
+        {
+          "date": "2026-06-21",
+          "period": "reanalysis",
+          "runoff_mm": 0.309,
+          "reanalysis_discharge_cms": 0.485,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.482
+        },
+        {
+          "date": "2026-06-23",
+          "period": "reforecast",
+          "runoff_mm": 0.419,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.995
+        },
+        {
+          "date": "2026-06-24",
+          "period": "reforecast",
+          "runoff_mm": 0.452,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.995
+        },
+        {
+          "date": "2026-06-25",
+          "period": "reforecast",
+          "runoff_mm": 0.474,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.995
+        },
+        {
+          "date": "2026-06-26",
+          "period": "reforecast",
+          "runoff_mm": 0.472,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.995
+        },
+        {
+          "date": "2026-06-27",
+          "period": "reforecast",
+          "runoff_mm": 0.459,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.995
+        },
+        {
+          "date": "2026-06-28",
+          "period": "reforecast",
+          "runoff_mm": 0.451,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.995
+        },
+        {
+          "date": "2026-06-29",
+          "period": "reforecast",
+          "runoff_mm": 0.453,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.995
+        }
+      ]
+    },
+    {
+      "name": "Son GRRR project runoff node",
+      "basin": "Son",
+      "latitude": 24.23,
+      "longitude": 81.54,
+      "dam_count": 2,
+      "avg_filling": 52.67,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 2795.91,
+      "catchment_proxy_sq_km": 892.73,
+      "forecast_days": 7,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_grrr_json_pending_google_runoff_export",
+      "thresholds": {
+        "watch_cms": 18.0,
+        "flood_cms": 26.1,
+        "danger_cms": 35.235
+      },
+      "linked_dams": [
+        "Bansagar",
+        "Mahan"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "reanalysis",
+          "runoff_mm": 0.299,
+          "reanalysis_discharge_cms": 3.093,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.075
+        },
+        {
+          "date": "2026-06-13",
+          "period": "reanalysis",
+          "runoff_mm": 0.287,
+          "reanalysis_discharge_cms": 2.968,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.992
+        },
+        {
+          "date": "2026-06-14",
+          "period": "reanalysis",
+          "runoff_mm": 0.276,
+          "reanalysis_discharge_cms": 2.857,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.917
+        },
+        {
+          "date": "2026-06-15",
+          "period": "reanalysis",
+          "runoff_mm": 0.269,
+          "reanalysis_discharge_cms": 2.785,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.869
+        },
+        {
+          "date": "2026-06-16",
+          "period": "reanalysis",
+          "runoff_mm": 0.268,
+          "reanalysis_discharge_cms": 2.772,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.86
+        },
+        {
+          "date": "2026-06-17",
+          "period": "reanalysis",
+          "runoff_mm": 0.272,
+          "reanalysis_discharge_cms": 2.819,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.892
+        },
+        {
+          "date": "2026-06-18",
+          "period": "reanalysis",
+          "runoff_mm": 0.282,
+          "reanalysis_discharge_cms": 2.916,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 1.957
+        },
+        {
+          "date": "2026-06-19",
+          "period": "reanalysis",
+          "runoff_mm": 0.293,
+          "reanalysis_discharge_cms": 3.039,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.039
+        },
+        {
+          "date": "2026-06-20",
+          "period": "reanalysis",
+          "runoff_mm": 0.305,
+          "reanalysis_discharge_cms": 3.157,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.119
+        },
+        {
+          "date": "2026-06-21",
+          "period": "reanalysis",
+          "runoff_mm": 0.313,
+          "reanalysis_discharge_cms": 3.242,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 2.176
+        },
+        {
+          "date": "2026-06-23",
+          "period": "reforecast",
+          "runoff_mm": 0.424,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 5.773,
+          "reforecast_p90_cms": 8.948,
+          "reservoir_adjusted_cms": 3.874
+        },
+        {
+          "date": "2026-06-24",
+          "period": "reforecast",
+          "runoff_mm": 0.458,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 5.866,
+          "reforecast_p90_cms": 9.093,
+          "reservoir_adjusted_cms": 3.937
+        },
+        {
+          "date": "2026-06-25",
+          "period": "reforecast",
+          "runoff_mm": 0.48,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 5.915,
+          "reforecast_p90_cms": 9.168,
+          "reservoir_adjusted_cms": 3.969
+        },
+        {
+          "date": "2026-06-26",
+          "period": "reforecast",
+          "runoff_mm": 0.479,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 5.759,
+          "reforecast_p90_cms": 8.927,
+          "reservoir_adjusted_cms": 3.865
+        },
+        {
+          "date": "2026-06-27",
+          "period": "reforecast",
+          "runoff_mm": 0.465,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 5.508,
+          "reforecast_p90_cms": 8.538,
+          "reservoir_adjusted_cms": 3.696
+        },
+        {
+          "date": "2026-06-28",
+          "period": "reforecast",
+          "runoff_mm": 0.456,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 5.35,
+          "reforecast_p90_cms": 8.293,
+          "reservoir_adjusted_cms": 3.59
+        },
+        {
+          "date": "2026-06-29",
+          "period": "reforecast",
+          "runoff_mm": 0.458,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 5.331,
+          "reforecast_p90_cms": 8.262,
+          "reservoir_adjusted_cms": 3.577
+        }
+      ]
+    },
+    {
+      "name": "Sukta GRRR project runoff node",
+      "basin": "Sukta",
+      "latitude": 21.59,
+      "longitude": 76.27,
+      "dam_count": 1,
+      "avg_filling": 18.63,
+      "avg_rainfall_mm": 14.0,
+      "storage_mcm": 14.54,
+      "catchment_proxy_sq_km": 129.57,
+      "forecast_days": 7,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_grrr_json_pending_google_runoff_export",
+      "thresholds": {
+        "watch_cms": 18.0,
+        "flood_cms": 26.1,
+        "danger_cms": 35.235
+      },
+      "linked_dams": [
+        "Sukta Tank"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "reanalysis",
+          "runoff_mm": 4.027,
+          "reanalysis_discharge_cms": 6.052,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 6.042
+        },
+        {
+          "date": "2026-06-13",
+          "period": "reanalysis",
+          "runoff_mm": 3.864,
+          "reanalysis_discharge_cms": 5.808,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 5.798
+        },
+        {
+          "date": "2026-06-14",
+          "period": "reanalysis",
+          "runoff_mm": 3.719,
+          "reanalysis_discharge_cms": 5.59,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 5.581
+        },
+        {
+          "date": "2026-06-15",
+          "period": "reanalysis",
+          "runoff_mm": 3.627,
+          "reanalysis_discharge_cms": 5.451,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 5.441
+        },
+        {
+          "date": "2026-06-16",
+          "period": "reanalysis",
+          "runoff_mm": 3.609,
+          "reanalysis_discharge_cms": 5.424,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 5.415
+        },
+        {
+          "date": "2026-06-17",
+          "period": "reanalysis",
+          "runoff_mm": 3.671,
+          "reanalysis_discharge_cms": 5.517,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 5.508
+        },
+        {
+          "date": "2026-06-18",
+          "period": "reanalysis",
+          "runoff_mm": 3.797,
+          "reanalysis_discharge_cms": 5.707,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 5.697
+        },
+        {
+          "date": "2026-06-19",
+          "period": "reanalysis",
+          "runoff_mm": 3.957,
+          "reanalysis_discharge_cms": 5.947,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 5.937
+        },
+        {
+          "date": "2026-06-20",
+          "period": "reanalysis",
+          "runoff_mm": 4.111,
+          "reanalysis_discharge_cms": 6.178,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 6.168
+        },
+        {
+          "date": "2026-06-21",
+          "period": "reanalysis",
+          "runoff_mm": 4.221,
+          "reanalysis_discharge_cms": 6.345,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 6.334
+        },
+        {
+          "date": "2026-06-23",
+          "period": "reforecast",
+          "runoff_mm": 5.719,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 11.298,
+          "reforecast_p90_cms": 17.512,
+          "reservoir_adjusted_cms": 11.278
+        },
+        {
+          "date": "2026-06-24",
+          "period": "reforecast",
+          "runoff_mm": 6.179,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 11.48,
+          "reforecast_p90_cms": 17.794,
+          "reservoir_adjusted_cms": 11.46
+        },
+        {
+          "date": "2026-06-25",
+          "period": "reforecast",
+          "runoff_mm": 6.474,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 11.575,
+          "reforecast_p90_cms": 17.941,
+          "reservoir_adjusted_cms": 11.555
+        },
+        {
+          "date": "2026-06-26",
+          "period": "reforecast",
+          "runoff_mm": 6.452,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 11.271,
+          "reforecast_p90_cms": 17.469,
+          "reservoir_adjusted_cms": 11.251
+        },
+        {
+          "date": "2026-06-27",
+          "period": "reforecast",
+          "runoff_mm": 6.266,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 10.779,
+          "reforecast_p90_cms": 16.708,
+          "reservoir_adjusted_cms": 10.761
+        },
+        {
+          "date": "2026-06-28",
+          "period": "reforecast",
+          "runoff_mm": 6.154,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 10.47,
+          "reforecast_p90_cms": 16.228,
+          "reservoir_adjusted_cms": 10.452
+        },
+        {
+          "date": "2026-06-29",
+          "period": "reforecast",
+          "runoff_mm": 6.182,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 10.432,
+          "reforecast_p90_cms": 16.169,
+          "reservoir_adjusted_cms": 10.414
+        }
+      ]
+    },
+    {
+      "name": "Tapi GRRR project runoff node",
+      "basin": "Tapi",
+      "latitude": 21.67,
+      "longitude": 78.02,
+      "dam_count": 1,
+      "avg_filling": 20.91,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 14.6,
+      "catchment_proxy_sq_km": 129.37,
+      "forecast_days": 7,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_grrr_json_pending_google_runoff_export",
+      "thresholds": {
+        "watch_cms": 18.0,
+        "flood_cms": 26.1,
+        "danger_cms": 35.235
+      },
+      "linked_dams": [
+        "Parasdoh Tank"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "reanalysis",
+          "runoff_mm": 0.295,
+          "reanalysis_discharge_cms": 0.442,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.442
+        },
+        {
+          "date": "2026-06-13",
+          "period": "reanalysis",
+          "runoff_mm": 0.283,
+          "reanalysis_discharge_cms": 0.425,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.424
+        },
+        {
+          "date": "2026-06-14",
+          "period": "reanalysis",
+          "runoff_mm": 0.272,
+          "reanalysis_discharge_cms": 0.409,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.408
+        },
+        {
+          "date": "2026-06-15",
+          "period": "reanalysis",
+          "runoff_mm": 0.266,
+          "reanalysis_discharge_cms": 0.398,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.398
+        },
+        {
+          "date": "2026-06-16",
+          "period": "reanalysis",
+          "runoff_mm": 0.264,
+          "reanalysis_discharge_cms": 0.397,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.396
+        },
+        {
+          "date": "2026-06-17",
+          "period": "reanalysis",
+          "runoff_mm": 0.269,
+          "reanalysis_discharge_cms": 0.403,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.403
+        },
+        {
+          "date": "2026-06-18",
+          "period": "reanalysis",
+          "runoff_mm": 0.278,
+          "reanalysis_discharge_cms": 0.417,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.417
+        },
+        {
+          "date": "2026-06-19",
+          "period": "reanalysis",
+          "runoff_mm": 0.29,
+          "reanalysis_discharge_cms": 0.435,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.434
+        },
+        {
+          "date": "2026-06-20",
+          "period": "reanalysis",
+          "runoff_mm": 0.301,
+          "reanalysis_discharge_cms": 0.452,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.451
+        },
+        {
+          "date": "2026-06-21",
+          "period": "reanalysis",
+          "runoff_mm": 0.309,
+          "reanalysis_discharge_cms": 0.464,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.463
+        },
+        {
+          "date": "2026-06-23",
+          "period": "reforecast",
+          "runoff_mm": 0.419,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.998
+        },
+        {
+          "date": "2026-06-24",
+          "period": "reforecast",
+          "runoff_mm": 0.452,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.998
+        },
+        {
+          "date": "2026-06-25",
+          "period": "reforecast",
+          "runoff_mm": 0.474,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.998
+        },
+        {
+          "date": "2026-06-26",
+          "period": "reforecast",
+          "runoff_mm": 0.472,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.998
+        },
+        {
+          "date": "2026-06-27",
+          "period": "reforecast",
+          "runoff_mm": 0.459,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.998
+        },
+        {
+          "date": "2026-06-28",
+          "period": "reforecast",
+          "runoff_mm": 0.451,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.998
+        },
+        {
+          "date": "2026-06-29",
+          "period": "reforecast",
+          "runoff_mm": 0.453,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 0.998
+        }
+      ]
+    },
+    {
+      "name": "Tawa GRRR project runoff node",
+      "basin": "Tawa",
+      "latitude": 22.56,
+      "longitude": 77.98,
+      "dam_count": 1,
+      "avg_filling": 4.37,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 85.11,
+      "catchment_proxy_sq_km": 188.92,
+      "forecast_days": 7,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_grrr_json_pending_google_runoff_export",
+      "thresholds": {
+        "watch_cms": 18.0,
+        "flood_cms": 26.1,
+        "danger_cms": 35.235
+      },
+      "linked_dams": [
+        "Tawa"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "reanalysis",
+          "runoff_mm": 0.295,
+          "reanalysis_discharge_cms": 0.646,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.64
+        },
+        {
+          "date": "2026-06-13",
+          "period": "reanalysis",
+          "runoff_mm": 0.283,
+          "reanalysis_discharge_cms": 0.62,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.614
+        },
+        {
+          "date": "2026-06-14",
+          "period": "reanalysis",
+          "runoff_mm": 0.272,
+          "reanalysis_discharge_cms": 0.597,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.591
+        },
+        {
+          "date": "2026-06-15",
+          "period": "reanalysis",
+          "runoff_mm": 0.266,
+          "reanalysis_discharge_cms": 0.582,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.576
+        },
+        {
+          "date": "2026-06-16",
+          "period": "reanalysis",
+          "runoff_mm": 0.264,
+          "reanalysis_discharge_cms": 0.579,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.573
+        },
+        {
+          "date": "2026-06-17",
+          "period": "reanalysis",
+          "runoff_mm": 0.269,
+          "reanalysis_discharge_cms": 0.589,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.583
+        },
+        {
+          "date": "2026-06-18",
+          "period": "reanalysis",
+          "runoff_mm": 0.278,
+          "reanalysis_discharge_cms": 0.609,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.603
+        },
+        {
+          "date": "2026-06-19",
+          "period": "reanalysis",
+          "runoff_mm": 0.29,
+          "reanalysis_discharge_cms": 0.635,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.629
+        },
+        {
+          "date": "2026-06-20",
+          "period": "reanalysis",
+          "runoff_mm": 0.301,
+          "reanalysis_discharge_cms": 0.66,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.653
+        },
+        {
+          "date": "2026-06-21",
+          "period": "reanalysis",
+          "runoff_mm": 0.309,
+          "reanalysis_discharge_cms": 0.677,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.671
+        },
+        {
+          "date": "2026-06-23",
+          "period": "reforecast",
+          "runoff_mm": 0.419,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.206,
+          "reforecast_p90_cms": 1.869,
+          "reservoir_adjusted_cms": 1.194
+        },
+        {
+          "date": "2026-06-24",
+          "period": "reforecast",
+          "runoff_mm": 0.452,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.225,
+          "reforecast_p90_cms": 1.899,
+          "reservoir_adjusted_cms": 1.213
+        },
+        {
+          "date": "2026-06-25",
+          "period": "reforecast",
+          "runoff_mm": 0.474,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.236,
+          "reforecast_p90_cms": 1.915,
+          "reservoir_adjusted_cms": 1.223
+        },
+        {
+          "date": "2026-06-26",
+          "period": "reforecast",
+          "runoff_mm": 0.472,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.203,
+          "reforecast_p90_cms": 1.865,
+          "reservoir_adjusted_cms": 1.191
+        },
+        {
+          "date": "2026-06-27",
+          "period": "reforecast",
+          "runoff_mm": 0.459,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.151,
+          "reforecast_p90_cms": 1.784,
+          "reservoir_adjusted_cms": 1.139
+        },
+        {
+          "date": "2026-06-28",
+          "period": "reforecast",
+          "runoff_mm": 0.451,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.118,
+          "reforecast_p90_cms": 1.732,
+          "reservoir_adjusted_cms": 1.107
+        },
+        {
+          "date": "2026-06-29",
+          "period": "reforecast",
+          "runoff_mm": 0.453,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.114,
+          "reforecast_p90_cms": 1.726,
+          "reservoir_adjusted_cms": 1.102
+        }
+      ]
+    },
+    {
+      "name": "Veda GRRR project runoff node",
+      "basin": "Veda",
+      "latitude": 21.59,
+      "longitude": 75.62,
+      "dam_count": 1,
+      "avg_filling": 1.5,
+      "avg_rainfall_mm": 0.0,
+      "storage_mcm": 0.75,
+      "catchment_proxy_sq_km": 126.39,
+      "forecast_days": 7,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_grrr_json_pending_google_runoff_export",
+      "thresholds": {
+        "watch_cms": 18.0,
+        "flood_cms": 26.1,
+        "danger_cms": 35.235
+      },
+      "linked_dams": [
+        "Dejala Dewda"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "reanalysis",
+          "runoff_mm": 0.295,
+          "reanalysis_discharge_cms": 0.432,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.432
+        },
+        {
+          "date": "2026-06-13",
+          "period": "reanalysis",
+          "runoff_mm": 0.283,
+          "reanalysis_discharge_cms": 0.415,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.415
+        },
+        {
+          "date": "2026-06-14",
+          "period": "reanalysis",
+          "runoff_mm": 0.272,
+          "reanalysis_discharge_cms": 0.399,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.399
+        },
+        {
+          "date": "2026-06-15",
+          "period": "reanalysis",
+          "runoff_mm": 0.266,
+          "reanalysis_discharge_cms": 0.389,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.389
+        },
+        {
+          "date": "2026-06-16",
+          "period": "reanalysis",
+          "runoff_mm": 0.264,
+          "reanalysis_discharge_cms": 0.387,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.387
+        },
+        {
+          "date": "2026-06-17",
+          "period": "reanalysis",
+          "runoff_mm": 0.269,
+          "reanalysis_discharge_cms": 0.394,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.394
+        },
+        {
+          "date": "2026-06-18",
+          "period": "reanalysis",
+          "runoff_mm": 0.278,
+          "reanalysis_discharge_cms": 0.408,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.408
+        },
+        {
+          "date": "2026-06-19",
+          "period": "reanalysis",
+          "runoff_mm": 0.29,
+          "reanalysis_discharge_cms": 0.425,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.425
+        },
+        {
+          "date": "2026-06-20",
+          "period": "reanalysis",
+          "runoff_mm": 0.301,
+          "reanalysis_discharge_cms": 0.441,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.441
+        },
+        {
+          "date": "2026-06-21",
+          "period": "reanalysis",
+          "runoff_mm": 0.309,
+          "reanalysis_discharge_cms": 0.453,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 0.453
+        },
+        {
+          "date": "2026-06-23",
+          "period": "reforecast",
+          "runoff_mm": 0.419,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 1.0
+        },
+        {
+          "date": "2026-06-24",
+          "period": "reforecast",
+          "runoff_mm": 0.452,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 1.0
+        },
+        {
+          "date": "2026-06-25",
+          "period": "reforecast",
+          "runoff_mm": 0.474,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 1.0
+        },
+        {
+          "date": "2026-06-26",
+          "period": "reforecast",
+          "runoff_mm": 0.472,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 1.0
+        },
+        {
+          "date": "2026-06-27",
+          "period": "reforecast",
+          "runoff_mm": 0.459,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 1.0
+        },
+        {
+          "date": "2026-06-28",
+          "period": "reforecast",
+          "runoff_mm": 0.451,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 1.0
+        },
+        {
+          "date": "2026-06-29",
+          "period": "reforecast",
+          "runoff_mm": 0.453,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 1.0,
+          "reforecast_p90_cms": 1.55,
+          "reservoir_adjusted_cms": 1.0
+        }
+      ]
+    },
+    {
+      "name": "Wainganga GRRR project runoff node",
+      "basin": "Wainganga",
+      "latitude": 22.38,
+      "longitude": 79.66,
+      "dam_count": 3,
+      "avg_filling": 10.12,
+      "avg_rainfall_mm": 3.5,
+      "storage_mcm": 81.18,
+      "catchment_proxy_sq_km": 409.32,
+      "forecast_days": 7,
+      "risk_band": "Normal",
+      "source_status": "project_preprocessed_grrr_json_pending_google_runoff_export",
+      "thresholds": {
+        "watch_cms": 18.0,
+        "flood_cms": 26.1,
+        "danger_cms": 35.235
+      },
+      "linked_dams": [
+        "Bawanthadi (Rajiv Sagar)",
+        "Thanwar",
+        "Wainganga (Sanjay Sarovar)"
+      ],
+      "series": [
+        {
+          "date": "2026-06-12",
+          "period": "reanalysis",
+          "runoff_mm": 1.038,
+          "reanalysis_discharge_cms": 4.927,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 4.88
+        },
+        {
+          "date": "2026-06-13",
+          "period": "reanalysis",
+          "runoff_mm": 0.996,
+          "reanalysis_discharge_cms": 4.728,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 4.683
+        },
+        {
+          "date": "2026-06-14",
+          "period": "reanalysis",
+          "runoff_mm": 0.958,
+          "reanalysis_discharge_cms": 4.551,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 4.507
+        },
+        {
+          "date": "2026-06-15",
+          "period": "reanalysis",
+          "runoff_mm": 0.935,
+          "reanalysis_discharge_cms": 4.437,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 4.395
+        },
+        {
+          "date": "2026-06-16",
+          "period": "reanalysis",
+          "runoff_mm": 0.93,
+          "reanalysis_discharge_cms": 4.416,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 4.374
+        },
+        {
+          "date": "2026-06-17",
+          "period": "reanalysis",
+          "runoff_mm": 0.946,
+          "reanalysis_discharge_cms": 4.492,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 4.449
+        },
+        {
+          "date": "2026-06-18",
+          "period": "reanalysis",
+          "runoff_mm": 0.978,
+          "reanalysis_discharge_cms": 4.646,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 4.602
+        },
+        {
+          "date": "2026-06-19",
+          "period": "reanalysis",
+          "runoff_mm": 1.02,
+          "reanalysis_discharge_cms": 4.841,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 4.795
+        },
+        {
+          "date": "2026-06-20",
+          "period": "reanalysis",
+          "runoff_mm": 1.059,
+          "reanalysis_discharge_cms": 5.03,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 4.982
+        },
+        {
+          "date": "2026-06-21",
+          "period": "reanalysis",
+          "runoff_mm": 1.088,
+          "reanalysis_discharge_cms": 5.165,
+          "reforecast_p50_cms": null,
+          "reforecast_p90_cms": null,
+          "reservoir_adjusted_cms": 5.116
+        },
+        {
+          "date": "2026-06-23",
+          "period": "reforecast",
+          "runoff_mm": 1.474,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 9.197,
+          "reforecast_p90_cms": 14.255,
+          "reservoir_adjusted_cms": 9.109
+        },
+        {
+          "date": "2026-06-24",
+          "period": "reforecast",
+          "runoff_mm": 1.592,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 9.345,
+          "reforecast_p90_cms": 14.485,
+          "reservoir_adjusted_cms": 9.256
+        },
+        {
+          "date": "2026-06-25",
+          "period": "reforecast",
+          "runoff_mm": 1.668,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 9.423,
+          "reforecast_p90_cms": 14.605,
+          "reservoir_adjusted_cms": 9.333
+        },
+        {
+          "date": "2026-06-26",
+          "period": "reforecast",
+          "runoff_mm": 1.663,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 9.175,
+          "reforecast_p90_cms": 14.221,
+          "reservoir_adjusted_cms": 9.087
+        },
+        {
+          "date": "2026-06-27",
+          "period": "reforecast",
+          "runoff_mm": 1.615,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 8.775,
+          "reforecast_p90_cms": 13.601,
+          "reservoir_adjusted_cms": 8.691
+        },
+        {
+          "date": "2026-06-28",
+          "period": "reforecast",
+          "runoff_mm": 1.586,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 8.523,
+          "reforecast_p90_cms": 13.211,
+          "reservoir_adjusted_cms": 8.442
+        },
+        {
+          "date": "2026-06-29",
+          "period": "reforecast",
+          "runoff_mm": 1.593,
+          "reanalysis_discharge_cms": null,
+          "reforecast_p50_cms": 8.492,
+          "reforecast_p90_cms": 13.163,
+          "reservoir_adjusted_cms": 8.411
+        }
+      ]
+    }
+  ]
+}
