@@ -34,6 +34,11 @@ MP_DISTRICTS_GEOJSON = (
     if (APP_DIR / "data" / "mp-districts.geojson").exists()
     else APP_DIR.parent / "nitageoai_platform" / "private_flood_dashboard" / "data" / "mpwrd" / "mp-districts.geojson"
 )
+MP_DRAINS_GEOJSON = (
+    APP_DIR / "data" / "mp-drains.geojson"
+    if (APP_DIR / "data" / "mp-drains.geojson").exists()
+    else APP_DIR.parent / "nitageoai_platform" / "private_flood_dashboard" / "data" / "mpwrd" / "mp-drains.geojson"
+)
 ARCGIS_EMBED_ITEM_ID = "5f7c5ee24d104d31bc2f85ecba4bd17a"
 ARCGIS_PORTAL_URL = "https://prashannajeet.maps.arcgis.com"
 ARCGIS_EMBED_CENTER = "78.22922399768257,23.48361289099537"
@@ -2621,6 +2626,82 @@ def load_light_district_geojson(path: str) -> dict:
     return {"type": "FeatureCollection", "features": features}
 
 
+def geometry_coordinate_sample(geometry: dict) -> list[list[float]]:
+    coords = geometry.get("coordinates", []) if geometry else []
+    geom_type = geometry.get("type") if geometry else ""
+    if geom_type == "LineString":
+        return coords if isinstance(coords, list) else []
+    if geom_type == "MultiLineString":
+        points: list[list[float]] = []
+        for part in coords if isinstance(coords, list) else []:
+            if isinstance(part, list):
+                points.extend(part)
+        return points
+    return []
+
+
+@st.cache_data(show_spinner=False)
+def load_light_drainage_geojson(path: str, dam_points_key: tuple[tuple[float, float], ...], max_features: int = 550) -> dict:
+    source = Path(path)
+    if not source.exists():
+        return {"type": "FeatureCollection", "features": []}
+    data = json.loads(source.read_text(encoding="utf-8"))
+    dam_points = [(float(lon), float(lat)) for lon, lat in dam_points_key if pd.notna(lon) and pd.notna(lat)]
+    if dam_points:
+        min_lon = min(lon for lon, _ in dam_points) - 1.25
+        max_lon = max(lon for lon, _ in dam_points) + 1.25
+        min_lat = min(lat for _, lat in dam_points) - 1.25
+        max_lat = max(lat for _, lat in dam_points) + 1.25
+    else:
+        min_lon, max_lon, min_lat, max_lat = 73.0, 83.5, 21.0, 27.0
+
+    candidates = []
+    for feature in data.get("features", []):
+        geometry = feature.get("geometry") or {}
+        points = geometry_coordinate_sample(geometry)
+        if not points:
+            continue
+        in_box = any(
+            isinstance(point, list)
+            and len(point) >= 2
+            and min_lon <= float(point[0]) <= max_lon
+            and min_lat <= float(point[1]) <= max_lat
+            for point in points[:: max(1, len(points) // 12)]
+        )
+        if not in_box:
+            continue
+        props = feature.get("properties", {}) or {}
+        order_value = pd.to_numeric(pd.Series([props.get("ORD_STRA")]), errors="coerce").iloc[0]
+        order_value = 1 if pd.isna(order_value) else int(order_value)
+        length_value = pd.to_numeric(pd.Series([props.get("LENGTH_KM")]), errors="coerce").iloc[0]
+        candidates.append(
+            (
+                order_value,
+                0 if pd.isna(length_value) else float(length_value),
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "ORD_STRA": order_value,
+                        "ORD_CLAS": props.get("ORD_CLAS"),
+                        "ORD_FLOW": props.get("ORD_FLOW"),
+                        "HYRIV_ID": props.get("HYRIV_ID"),
+                        "SUB_NAME": props.get("SUB_NAME") or "",
+                        "MAJ_NAME": props.get("MAJ_NAME") or "",
+                        "LENGTH_KM": props.get("LENGTH_KM"),
+                        "DIS_AV_CMS": props.get("DIS_AV_CMS"),
+                    },
+                    "geometry": {
+                        "type": geometry.get("type"),
+                        "coordinates": round_geojson_coordinates(geometry.get("coordinates", []), places=4),
+                    },
+                },
+            )
+        )
+    candidates = sorted(candidates, key=lambda item: (item[0], item[1]), reverse=True)
+    features = [item[2] for item in candidates[:max_features]]
+    return {"type": "FeatureCollection", "features": features}
+
+
 def render_infographic_leaflet_map(map_frame: pd.DataFrame, district_geojson: dict) -> None:
     if map_frame.empty or not {"latitude", "longitude"}.issubset(map_frame.columns):
         return
@@ -3197,6 +3278,432 @@ def speedometer_svg(percent: float | int | None, label: str = "", width: int = 1
     """
 
 
+def scenario_radius_km(event_label: str, return_period: str, depth_m: float) -> float:
+    event_factor = {
+        "2019 Monsoon Flood": 1.15,
+        "2020 High Rainfall Event": 0.95,
+        "2021 Chambal-Betwa Event": 1.05,
+        "2022 Narmada Event": 1.10,
+        "Custom Planning Scenario": 1.0,
+    }.get(event_label, 1.0)
+    rp_factor = {
+        "Normal floodplain": 0.75,
+        "1 in 10 year": 1.0,
+        "1 in 25 year": 1.25,
+        "1 in 50 year": 1.55,
+        "1 in 100 year": 1.9,
+    }.get(return_period, 1.0)
+    return max(3.0, min(45.0, (5.5 + depth_m * 4.2) * event_factor * rp_factor))
+
+
+def render_arcgis_3d_sentinel_scene(
+    dam_frame: pd.DataFrame,
+    district_geojson: dict,
+    drainage_geojson: dict,
+    selected_dam_names: list[str],
+    event_label: str,
+    return_period: str,
+    depth_m: float,
+) -> None:
+    if dam_frame.empty or not {"latitude", "longitude"}.issubset(dam_frame.columns):
+        st.info("Dam coordinates are not available for the 3D scenario scene.")
+        return
+    scenario_frame = dam_frame.dropna(subset=["latitude", "longitude"]).copy()
+    if selected_dam_names:
+        scenario_frame = scenario_frame[scenario_frame["reservoir_name"].isin(selected_dam_names)]
+    if scenario_frame.empty:
+        st.info("No dam points match the selected 3D scenario filters.")
+        return
+    scenario_frame = scenario_frame.sort_values("display_filling", ascending=False).head(18)
+    radius_km = scenario_radius_km(event_label, return_period, depth_m)
+    dam_records = []
+    for row in scenario_frame.to_dict("records"):
+        filling = pd.to_numeric(pd.Series([row.get("display_filling")]), errors="coerce").iloc[0]
+        frl_gap = pd.to_numeric(pd.Series([row.get("frl_gap_m")]), errors="coerce").iloc[0]
+        dam_records.append(
+            {
+                "name": str(row.get("reservoir_name") or row.get("dam_name") or "Dam"),
+                "dam": str(row.get("dam_name") or row.get("reservoir_name") or "Dam"),
+                "district": str(row.get("district") or row.get("map_district") or ""),
+                "basin": str(row.get("sub_basin") or row.get("major_basin") or ""),
+                "lat": float(row["latitude"]),
+                "lon": float(row["longitude"]),
+                "filling": 0 if pd.isna(filling) else round(float(filling), 1),
+                "frlGap": None if pd.isna(frl_gap) else round(float(frl_gap), 2),
+                "alert": str(row.get("alert_level") or "Normal"),
+                "waterLevel": None if pd.isna(row.get("water_level_m")) else round(float(row.get("water_level_m")), 2),
+                "radiusKm": radius_km,
+                "maxDepth": round(float(depth_m), 2),
+            }
+        )
+    scene_id = f"sentinel-3d-scene-{abs(hash(event_label + return_period + str(depth_m))) % 1000000}"
+    components.html(
+        f"""
+        <link rel="stylesheet" href="https://js.arcgis.com/4.30/esri/themes/light/main.css">
+        <style>
+            #{scene_id} {{
+                height: 640px;
+                width: 100%;
+                border: 1px solid #dbe6f4;
+                border-radius: 8px;
+                overflow: hidden;
+                background: #0f172a;
+            }}
+            .scenario-scene-note {{
+                font: 11px Roboto, Inter, Segoe UI, sans-serif;
+                color: #64748b;
+                margin: 0 0 8px;
+            }}
+            .scenario-scene-title {{
+                font: 800 14px Roboto, Inter, Segoe UI, sans-serif;
+                color: #172033;
+                margin: 0 0 5px;
+            }}
+        </style>
+        <div class="scenario-scene-title">ArcGIS 3D Sentinel Inundation Scenario</div>
+        <div class="scenario-scene-note">3D terrain scene with MP admin boundaries, dam alert markers, WSE depth zones, and scenario flood extents. Replace generated footprints with Sentinel-1 SAR polygons or FABDEM-derived depth rasters when event layers are available.</div>
+        <div id="{scene_id}"></div>
+        <script src="https://js.arcgis.com/4.30/"></script>
+        <script>
+        require([
+            "esri/Map",
+            "esri/views/SceneView",
+            "esri/layers/GraphicsLayer",
+            "esri/layers/GeoJSONLayer",
+            "esri/Graphic",
+            "esri/geometry/Point",
+            "esri/geometry/Polyline",
+            "esri/geometry/Polygon",
+            "esri/geometry/geometryEngine",
+            "esri/widgets/LayerList",
+            "esri/widgets/Legend",
+            "esri/widgets/Home",
+            "esri/widgets/Expand"
+        ], (Map, SceneView, GraphicsLayer, GeoJSONLayer, Graphic, Point, Polyline, Polygon, geometryEngine, LayerList, Legend, Home, Expand) => {{
+            const dams = {json.dumps(dam_records)};
+            const districts = {json.dumps(district_geojson)};
+            const drains = {json.dumps(drainage_geojson)};
+            const map = new Map({{
+                basemap: "satellite",
+                ground: "world-elevation"
+            }});
+            const view = new SceneView({{
+                container: "{scene_id}",
+                map,
+                qualityProfile: "high",
+                camera: {{
+                    position: {{ longitude: 78.6, latitude: 23.7, z: 850000 }},
+                    tilt: 48,
+                    heading: 0
+                }},
+                environment: {{
+                    atmosphereEnabled: true,
+                    starsEnabled: false,
+                    lighting: {{ directShadowsEnabled: true, ambientOcclusionEnabled: true }}
+                }}
+            }});
+            const districtBlob = new Blob([JSON.stringify(districts)], {{ type: "application/json" }});
+            const districtLayer = new GeoJSONLayer({{
+                title: "MP admin boundaries",
+                url: URL.createObjectURL(districtBlob),
+                renderer: {{
+                    type: "simple",
+                    symbol: {{
+                        type: "simple-fill",
+                        color: [255,255,255,0.02],
+                        outline: {{ color: [255,255,255,0.82], width: 1.1 }}
+                    }}
+                }},
+                labelingInfo: [{{
+                    labelExpressionInfo: {{ expression: "$feature.district" }},
+                    symbol: {{
+                        type: "label-3d",
+                        symbolLayers: [{{
+                            type: "text",
+                            material: {{ color: [255,255,255,0.9] }},
+                            size: 9,
+                            halo: {{ color: [15,23,42,0.85], size: 1 }}
+                        }}]
+                    }}
+                }}]
+            }});
+            map.add(districtLayer);
+            const inundationLayer = new GraphicsLayer({{ title: "Sentinel inundation scenario footprint" }});
+            const depthLayer = new GraphicsLayer({{ title: "Generated WSE depth / water-spread zones" }});
+            const drainageLayer = new GraphicsLayer({{ title: "MP drainage layer by ORD_STRA" }});
+            const drainageWseLayer = new GraphicsLayer({{ title: "Drainage-layer WSE spread depth" }});
+            const buildingLayer = new GraphicsLayer({{ title: "OSM 3D building footprints" }});
+            const damLayer = new GraphicsLayer({{ title: "VBSR dam alert points" }});
+            map.addMany([inundationLayer, drainageWseLayer, depthLayer, drainageLayer, buildingLayer, damLayer]);
+            const colorByAlert = (alert) => {{
+                if (alert === "Critical") return [239,68,68,0.95];
+                if (alert === "Warning") return [245,158,11,0.95];
+                if (alert === "Watch") return [234,179,8,0.92];
+                return [37,99,235,0.9];
+            }};
+            const drainageVector = (basin) => {{
+                const label = String(basin || "").toLowerCase();
+                if (label.includes("narmada")) return {{ dx: -0.52, dy: -0.06 }};
+                if (label.includes("chambal")) return {{ dx: -0.28, dy: 0.20 }};
+                if (label.includes("betwa")) return {{ dx: 0.28, dy: 0.12 }};
+                if (label.includes("ken")) return {{ dx: 0.34, dy: 0.05 }};
+                if (label.includes("son")) return {{ dx: 0.44, dy: 0.10 }};
+                if (label.includes("ganges")) return {{ dx: 0.32, dy: 0.14 }};
+                if (label.includes("mahanadi")) return {{ dx: 0.38, dy: -0.12 }};
+                return {{ dx: 0.24, dy: -0.10 }};
+            }};
+            const drainageLineForDam = (dam) => {{
+                const vector = drainageVector(dam.basin);
+                const reachScale = Math.min(1.7, Math.max(0.65, dam.radiusKm / 18));
+                const p0 = [dam.lon, dam.lat];
+                const p1 = [dam.lon + vector.dx * reachScale * 0.45, dam.lat + vector.dy * reachScale * 0.45];
+                const p2 = [dam.lon + vector.dx * reachScale, dam.lat + vector.dy * reachScale];
+                return new Polyline({{
+                    paths: [[p0, p1, p2]],
+                    spatialReference: {{ wkid: 4326 }}
+                }});
+            }};
+            const featurePolyline = (feature) => {{
+                const geom = feature.geometry || {{}};
+                if (geom.type === "LineString") {{
+                    return new Polyline({{ paths: [geom.coordinates], spatialReference: {{ wkid: 4326 }} }});
+                }}
+                if (geom.type === "MultiLineString") {{
+                    return new Polyline({{ paths: geom.coordinates, spatialReference: {{ wkid: 4326 }} }});
+                }}
+                return null;
+            }};
+            const orderWidth = (order) => Math.max(0.2, Math.min(1.5, 0.2 + (Number(order || 1) - 1) * 0.18));
+            const buildingColor = (exposure) => {{
+                if (exposure === "High") return [239,68,68,0.86];
+                if (exposure === "Moderate") return [245,158,11,0.84];
+                return [20,184,166,0.82];
+            }};
+            const exposureForDistance = (distanceKm, radiusKm) => {{
+                if (distanceKm <= Math.max(0.6, radiusKm * 0.18)) return "High";
+                if (distanceKm <= Math.max(1.2, radiusKm * 0.38)) return "Moderate";
+                return "Low";
+            }};
+            const parseOsmHeight = (tags = {{}}) => {{
+                const rawHeight = String(tags.height || tags["building:height"] || "").replace(",", ".").match(/[0-9.]+/);
+                if (rawHeight) return Math.max(3, Math.min(90, Number(rawHeight[0])));
+                const levels = Number(String(tags["building:levels"] || tags.levels || "").replace(",", "."));
+                if (Number.isFinite(levels) && levels > 0) return Math.max(3, Math.min(90, levels * 3.2));
+                return 10;
+            }};
+            const addOsmBuildingFootprints = async (dam) => {{
+                const radiusMeters = Math.min(3500, Math.max(900, Math.round(dam.radiusKm * 180)));
+                const query = `[out:json][timeout:20];way["building"](around:${{radiusMeters}},${{dam.lat}},${{dam.lon}});out tags geom 90;`;
+                const endpoints = [
+                    "https://overpass-api.de/api/interpreter?data=",
+                    "https://overpass.kumi.systems/api/interpreter?data="
+                ];
+                let osm = null;
+                for (const endpoint of endpoints) {{
+                    try {{
+                        const response = await fetch(endpoint + encodeURIComponent(query));
+                        if (response.ok) {{
+                            osm = await response.json();
+                            break;
+                        }}
+                    }} catch (error) {{
+                        console.warn("OSM building footprint request failed", error);
+                    }}
+                }}
+                if (!osm || !Array.isArray(osm.elements)) return;
+                osm.elements.slice(0, 90).forEach((element) => {{
+                    if (!Array.isArray(element.geometry) || element.geometry.length < 4) return;
+                    const ring = element.geometry.map((coord) => [coord.lon, coord.lat]);
+                    const first = ring[0];
+                    const last = ring[ring.length - 1];
+                    if (first[0] !== last[0] || first[1] !== last[1]) ring.push(first);
+                    const footprint = new Polygon({{
+                        rings: [ring],
+                        spatialReference: {{ wkid: 4326 }}
+                    }});
+                    const center = footprint.extent.center;
+                    const distanceKm = geometryEngine.distance(
+                        new Point({{ longitude: dam.lon, latitude: dam.lat, spatialReference: {{ wkid: 4326 }} }}),
+                        center,
+                        "kilometers"
+                    );
+                    const exposure = exposureForDistance(distanceKm || 0, dam.radiusKm);
+                    const height = parseOsmHeight(element.tags || {{}});
+                    buildingLayer.add(new Graphic({{
+                        geometry: footprint,
+                        attributes: {{
+                            dam: dam.name,
+                            district: dam.district,
+                            exposure,
+                            height,
+                            osm_id: element.id,
+                            osm_building: (element.tags || {{}}).building || "yes",
+                            scenario: "{escape(event_label)}",
+                            source: "OpenStreetMap building footprint"
+                        }},
+                        symbol: {{
+                            type: "polygon-3d",
+                            symbolLayers: [{{
+                                type: "extrude",
+                                size: height,
+                                material: {{ color: buildingColor(exposure) }},
+                                edges: {{ type: "solid", color: [15,23,42,0.42], size: 0.45 }}
+                            }}]
+                        }},
+                        popupTemplate: {{
+                            title: "OSM 3D building footprint",
+                            content: `Nearest dam: <b>${{dam.name}}</b><br/>Exposure class: <b>${{exposure}}</b><br/>Extruded height: ${{height.toFixed(1)}} m<br/>OSM building: ${{(element.tags || {{}}).building || "yes"}}<br/>OSM way: ${{element.id}}<br/>Scenario: {escape(return_period)}`
+                        }}
+                    }}));
+                }});
+            }};
+            const selectedDrainLines = [];
+            (drains.features || []).forEach((feature) => {{
+                const line = featurePolyline(feature);
+                if (!line) return;
+                const props = feature.properties || {{}};
+                const order = Number(props.ORD_STRA || 1);
+                const width = orderWidth(order);
+                selectedDrainLines.push({{ line, props, order, width }});
+                drainageLayer.add(new Graphic({{
+                    geometry: line,
+                    attributes: props,
+                    symbol: {{
+                        type: "simple-line",
+                        color: order >= 6 ? [8,47,73,0.98] : order >= 4 ? [14,116,144,0.95] : [6,182,212,0.85],
+                        width: width + 0.8,
+                        style: "solid"
+                    }},
+                    popupTemplate: {{
+                        title: `Drainage ORD_STRA ${{order}}`,
+                        content: `Sub basin: <b>${{props.SUB_NAME || "-"}}</b><br/>Major basin: <b>${{props.MAJ_NAME || "-"}}</b><br/>Length: ${{props.LENGTH_KM || "-"}} km<br/>Average discharge: ${{props.DIS_AV_CMS || "-"}} cms`
+                    }}
+                }}));
+            }});
+            const addWseCorridor = (line, dam, zone, order, sourceLabel) => {{
+                const corridorGeom = geometryEngine.geodesicBuffer(
+                    line,
+                    Math.max(250, dam.radiusKm * zone.ratio * (260 + Number(order || 1) * 34)),
+                    "meters"
+                );
+                drainageWseLayer.add(new Graphic({{
+                    geometry: corridorGeom,
+                    attributes: {{ ...dam, depthZone: zone.label, modeledDepthM: zone.depth, streamOrder: order, source: sourceLabel }},
+                    symbol: {{
+                        type: "simple-fill",
+                        color: [zone.color[0], zone.color[1], zone.color[2], Math.min(0.72, zone.color[3] + 0.08)],
+                        outline: {{ color: [255,255,255,0.62], width: 0.35 }}
+                    }},
+                    popupTemplate: {{
+                        title: `${{dam.name}} drainage-layer WSE`,
+                        content: `Depth class: <b>${{zone.label}}</b><br/>Modeled WSE depth: ${{zone.depth.toFixed(2)}} m<br/>Drainage ORD_STRA: ${{order}}<br/>Source: ${{sourceLabel}}<br/>Elevation context: ArcGIS world elevation`
+                    }}
+                }}));
+            }};
+            const nearestDrainLines = (point, limit = 3) => {{
+                const ranked = selectedDrainLines
+                    .map((item) => ({{ ...item, distance: geometryEngine.distance(point, item.line, "kilometers") }}))
+                    .filter((item) => Number.isFinite(item.distance))
+                    .sort((a, b) => a.distance - b.distance || b.order - a.order);
+                return ranked.slice(0, limit);
+            }};
+            dams.forEach((dam) => {{
+                const point = new Point({{ longitude: dam.lon, latitude: dam.lat, spatialReference: {{ wkid: 4326 }} }});
+                const buffer = geometryEngine.geodesicBuffer(point, dam.radiusKm, "kilometers");
+                inundationLayer.add(new Graphic({{
+                    geometry: buffer,
+                    attributes: dam,
+                    symbol: {{
+                        type: "simple-fill",
+                        color: [49,96,247,0.28],
+                        outline: {{ color: [49,96,247,0.72], width: 1.2 }}
+                    }},
+                    popupTemplate: {{
+                        title: "{escape(event_label)}",
+                        content: `<b>${{dam.name}}</b><br/>Scenario: {escape(return_period)}<br/>Screening depth: {depth_m:.2f} m<br/>Approx. radius: ${{dam.radiusKm.toFixed(1)}} km`
+                    }}
+                }}));
+                let nearbyDrainLines = nearestDrainLines(point, 3);
+                if (!nearbyDrainLines.length) {{
+                    const fallbackLine = drainageLineForDam(dam);
+                    nearbyDrainLines = [{{ line: fallbackLine, order: Math.max(1, Math.min(8, Math.round(1 + dam.radiusKm / 6))), width: 0.8, props: {{}}, distance: null, fallback: true }}];
+                    drainageLayer.add(new Graphic({{
+                        geometry: fallbackLine,
+                        attributes: {{ ...dam, ORD_STRA: nearbyDrainLines[0].order }},
+                        symbol: {{
+                            type: "simple-line",
+                            color: [6,182,212,0.95],
+                            width: orderWidth(nearbyDrainLines[0].order) + 0.8,
+                            style: "short-dash"
+                        }},
+                        popupTemplate: {{
+                            title: `${{dam.name}} fallback drainage`,
+                            content: `No nearby MP drainage segment found in filtered layer. Generated fallback flow path used.`
+                        }}
+                    }}));
+                }}
+                const depthZones = [
+                    {{ label: "0 - 25% WSE depth", ratio: 1.00, depth: dam.maxDepth * 0.25, color: [186,230,253,0.48] }},
+                    {{ label: "25 - 50% WSE depth", ratio: 0.74, depth: dam.maxDepth * 0.50, color: [56,189,248,0.52] }},
+                    {{ label: "50 - 75% WSE depth", ratio: 0.49, depth: dam.maxDepth * 0.75, color: [37,99,235,0.58] }},
+                    {{ label: "75 - 100% WSE depth", ratio: 0.25, depth: dam.maxDepth, color: [30,64,175,0.66] }}
+                ];
+                depthZones.forEach((zone) => {{
+                    const zoneGeom = geometryEngine.geodesicBuffer(point, Math.max(0.5, dam.radiusKm * zone.ratio), "kilometers");
+                    nearbyDrainLines.forEach((item) => addWseCorridor(item.line, dam, zone, item.order, item.fallback ? "fallback inferred line" : "MP drains ORD_STRA layer"));
+                    depthLayer.add(new Graphic({{
+                        geometry: zoneGeom,
+                        attributes: {{ ...dam, depthZone: zone.label, modeledDepthM: zone.depth }},
+                        symbol: {{
+                            type: "simple-fill",
+                            color: zone.color,
+                            outline: {{ color: [255,255,255,0.55], width: 0.5 }}
+                        }},
+                        popupTemplate: {{
+                            title: `${{dam.name}} WSE depth zone`,
+                            content: `Depth class: <b>${{zone.label}}</b><br/>Modeled WSE depth: ${{zone.depth.toFixed(2)}} m<br/>Water spread radius: ${{(dam.radiusKm * zone.ratio).toFixed(1)}} km<br/>Scenario: {escape(return_period)}`
+                        }}
+                    }}));
+                }});
+                addOsmBuildingFootprints(dam);
+                damLayer.add(new Graphic({{
+                    geometry: point,
+                    attributes: dam,
+                    symbol: {{
+                        type: "point-3d",
+                        symbolLayers: [{{
+                            type: "object",
+                            resource: {{ primitive: "cylinder" }},
+                            material: {{ color: colorByAlert(dam.alert) }},
+                            width: 18000,
+                            depth: 18000,
+                            height: Math.max(15000, dam.filling * 850),
+                            anchor: "bottom"
+                        }}],
+                        verticalOffset: {{ screenLength: 16, maxWorldLength: 90000, minWorldLength: 5000 }},
+                        callout: {{ type: "line", color: [255,255,255,0.72], size: 1 }}
+                    }},
+                    popupTemplate: {{
+                        title: dam.name,
+                        content: `District: <b>${{dam.district || "-"}}</b><br/>Basin: <b>${{dam.basin || "-"}}</b><br/>WL: ${{dam.waterLevel ?? "-"}} m<br/>FRL gap: ${{dam.frlGap ?? "-"}} m<br/>Filling: ${{dam.filling}}%<br/>Alert: <b>${{dam.alert}}</b>`
+                    }}
+                }}));
+            }});
+            view.ui.add(new Home({{ view }}), "top-left");
+            view.ui.add(new Expand({{ view, content: new LayerList({{ view }}), expanded: false }}), "top-right");
+            view.ui.add(new Expand({{ view, content: new Legend({{ view }}), expanded: false }}), "bottom-right");
+            view.when(() => {{
+                if (damLayer.graphics.length) {{
+                    view.goTo(damLayer.graphics, {{ tilt: 52, heading: 0, duration: 1200 }}).catch(() => {{}});
+                }}
+            }});
+        }});
+        </script>
+        """,
+        height=705,
+    )
+
+
 def reservoir_snapshot_chart(
     plot_df: pd.DataFrame,
     metric_col: str,
@@ -3702,9 +4209,9 @@ def dam_alert_message(row: pd.Series) -> str:
 if "main_dashboard_page" not in st.session_state:
     st.session_state.main_dashboard_page = "Infographics"
 
-nav_pages = ["Infographics", "Dam DSS & Analytics", "Weather Forecast", "Data & Timeseries"]
+nav_pages = ["Infographics", "Dam DSS & Analytics", "Weather Forecast", "3D Flood Scenarios", "Data & Timeseries"]
 st.markdown('<div class="dashboard-topnav-title">Dashboard Navigation</div>', unsafe_allow_html=True)
-nav_cols = st.columns(4)
+nav_cols = st.columns(5)
 for nav_col, page in zip(nav_cols, nav_pages):
     if nav_col.button(page, key=f"main_nav_{page}", type="primary" if page == st.session_state.main_dashboard_page else "secondary", use_container_width=True):
         st.session_state.main_dashboard_page = page
@@ -4478,6 +4985,149 @@ if main_page == "Weather Forecast":
                     hide_index=True,
                     height=260,
                 )
+
+
+if main_page == "3D Flood Scenarios":
+    st.subheader("3D Flood Scenarios")
+    st.markdown(
+        '<div class="panel-note">ArcGIS 3D terrain module for Sentinel historical inundation review and planning scenarios. The current version generates screening footprints from selected dams; Sentinel-1 SAR event polygons can be connected as GeoJSON/FeatureLayer inputs in the next data stage.</div>',
+        unsafe_allow_html=True,
+    )
+    if map_status.empty:
+        st.info("Dam map data is not available for 3D flood scenario generation under the current filters.")
+    else:
+        scenario_controls = st.columns([0.26, 0.22, 0.18, 0.34])
+        with scenario_controls[0]:
+            scenario_event = st.selectbox(
+                "Historical / planning scenario",
+                [
+                    "2019 Monsoon Flood",
+                    "2020 High Rainfall Event",
+                    "2021 Chambal-Betwa Event",
+                    "2022 Narmada Event",
+                    "Custom Planning Scenario",
+                ],
+                key="sentinel_3d_event",
+            )
+        with scenario_controls[1]:
+            scenario_return_period = st.selectbox(
+                "Return period band",
+                ["Normal floodplain", "1 in 10 year", "1 in 25 year", "1 in 50 year", "1 in 100 year"],
+                index=2,
+                key="sentinel_3d_return_period",
+            )
+        with scenario_controls[2]:
+            scenario_depth = st.slider(
+                "Water depth / HAND threshold (m)",
+                min_value=0.5,
+                max_value=8.0,
+                value=2.5,
+                step=0.5,
+                key="sentinel_3d_depth",
+            )
+        with scenario_controls[3]:
+            available_3d_dams = (
+                map_status.dropna(subset=["reservoir_name"])
+                .sort_values("display_filling", ascending=False)["reservoir_name"]
+                .drop_duplicates()
+                .tolist()
+            )
+            selected_3d_dams = st.multiselect(
+                "Dams for 3D scenario",
+                available_3d_dams,
+                default=available_3d_dams[:6],
+                key="sentinel_3d_dams",
+                help="Keep this focused for faster 3D rendering. Real Sentinel event polygons can cover full districts/basins when connected.",
+            )
+
+        scenario_source = map_status.copy()
+        if selected_3d_dams:
+            scenario_source = scenario_source[scenario_source["reservoir_name"].isin(selected_3d_dams)]
+        scenario_radius = scenario_radius_km(scenario_event, scenario_return_period, scenario_depth)
+        scenario_dam_count = int(scenario_source["reservoir_name"].dropna().nunique()) if "reservoir_name" in scenario_source else 0
+        scenario_alerts = int(scenario_source.get("alert_level", pd.Series(dtype=str)).isin(["Critical", "Warning"]).sum()) if not scenario_source.empty else 0
+        scenario_area_proxy = math.pi * (scenario_radius ** 2) * max(1, scenario_dam_count)
+        avg_filling_3d = pd.to_numeric(scenario_source.get("display_filling"), errors="coerce").mean() if not scenario_source.empty else math.nan
+        scenario_kpis = st.columns(5)
+        scenario_kpis[0].metric("Scenario Dams", scenario_dam_count)
+        scenario_kpis[1].metric("Screening Radius", f"{scenario_radius:.1f} km")
+        scenario_kpis[2].metric("Approx. Footprint", f"{scenario_area_proxy:,.0f} sq.km")
+        scenario_kpis[3].metric("Critical/Warning Dams", scenario_alerts)
+        scenario_kpis[4].metric("OSM 3D Footprints", f"{scenario_dam_count} dam zones")
+        st.markdown(
+            f"""
+            <div class="alert-legend-panel">
+              <b>Generated WSE Depth Legend</b>
+              <div><span class="legend-dot" style="background:#bae6fd"></span>0 - 25% WSE depth: shallow fringe</div>
+              <div><span class="legend-dot" style="background:#38bdf8"></span>25 - 50% WSE depth</div>
+              <div><span class="legend-dot" style="background:#2563eb"></span>50 - 75% WSE depth</div>
+              <div><span class="legend-dot" style="background:#1e40af"></span>75 - 100% WSE depth: deepest zone near source</div>
+              <div><span class="legend-dot" style="background:#06b6d4"></span>Drainage alignment: MP Drains layer styled by ORD_STRA and draped on ArcGIS elevation</div>
+              <div><span class="legend-dot" style="background:#ef4444"></span>OSM 3D buildings: high exposure</div>
+              <div><span class="legend-dot" style="background:#f59e0b"></span>OSM 3D buildings: moderate exposure</div>
+              <div><span class="legend-dot" style="background:#14b8a6"></span>OSM 3D buildings: low exposure</div>
+              <div style="margin-top:0.35rem;color:#64748b">Current max WSE depth threshold: {scenario_depth:.2f} m. Replace generated WSE widths with FABDEM/Sentinel-derived WSE raster when available.</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        drainage_points = tuple(
+            (float(row.longitude), float(row.latitude))
+            for row in scenario_source.dropna(subset=["longitude", "latitude"]).itertuples(index=False)
+            if pd.notna(row.longitude) and pd.notna(row.latitude)
+        )
+        scenario_drainage_geojson = load_light_drainage_geojson(str(MP_DRAINS_GEOJSON), drainage_points)
+        render_arcgis_3d_sentinel_scene(
+            map_status,
+            load_light_district_geojson(str(MP_DISTRICTS_GEOJSON)),
+            scenario_drainage_geojson,
+            selected_3d_dams,
+            scenario_event,
+            scenario_return_period,
+            scenario_depth,
+        )
+
+        st.markdown(
+            f"""
+            <div class="glofas-status-grid">
+              <div class="glofas-card"><span>Scenario Source</span><b>Sentinel-1 SAR ready</b></div>
+              <div class="glofas-card"><span>Terrain Context</span><b>ArcGIS world elevation</b></div>
+              <div class="glofas-card"><span>Avg Dam Filling</span><b>{fmt_number(avg_filling_3d, "%")}</b></div>
+              <div class="glofas-card"><span>Layer Mode</span><b>WSE + OSM 3D buildings</b></div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        scenario_table_cols = [
+            "reservoir_name",
+            "district",
+            "sub_basin",
+            "water_level_m",
+            "frl_gap_m",
+            "display_filling",
+            "alert_level",
+            "latitude",
+            "longitude",
+        ]
+        scenario_table = scenario_source[[col for col in scenario_table_cols if col in scenario_source.columns]].copy()
+        if not scenario_table.empty:
+            scenario_table["scenario_event"] = scenario_event
+            scenario_table["return_period"] = scenario_return_period
+            scenario_table["screening_depth_m"] = scenario_depth
+            scenario_table["screening_radius_km"] = scenario_radius
+            scenario_table["wse_depth_zone_count"] = 4
+            scenario_table["drainage_alignment"] = "MP Drains ORD_STRA layer on ArcGIS world elevation"
+            scenario_table["building_footprint_layer"] = "Dynamic OpenStreetMap building footprints loaded in ArcGIS SceneView and extruded by OSM height/building-level tags"
+            scenario_table["water_spread_method"] = "Generated WSE corridors along nearest MP drainage segments plus concentric depth zones; replace generated widths with DEM/Sentinel WSE raster"
+            st.dataframe(scenario_table, use_container_width=True, hide_index=True, height=260)
+            st.download_button(
+                "Download 3D Scenario Table CSV",
+                scenario_table.to_csv(index=False).encode("utf-8"),
+                file_name="mpwrd_3d_sentinel_inundation_scenario.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
 
 
 if main_page == "Infographics":
