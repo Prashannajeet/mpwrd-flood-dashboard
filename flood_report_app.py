@@ -2164,7 +2164,7 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
             require([
                 "esri/config",
                 "esri/WebMap",
-                "esri/views/MapView",
+                "esri/views/SceneView",
                 "esri/layers/GraphicsLayer",
                 "esri/layers/MapImageLayer",
                 "esri/layers/TileLayer",
@@ -2174,12 +2174,14 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                 "esri/widgets/Home",
                 "esri/geometry/Extent",
                 "esri/geometry/Polyline",
+                "esri/geometry/Polygon",
                 "esri/geometry/geometryEngine",
                 "esri/Graphic"
-            ], function(esriConfig, WebMap, MapView, GraphicsLayer, MapImageLayer, TileLayer, LayerList, BasemapGallery, Expand, Home, Extent, Polyline, geometryEngine, Graphic) {{
+            ], function(esriConfig, WebMap, SceneView, GraphicsLayer, MapImageLayer, TileLayer, LayerList, BasemapGallery, Expand, Home, Extent, Polyline, Polygon, geometryEngine, Graphic) {{
                 esriConfig.portalUrl = "{ARCGIS_PORTAL_URL}";
                 const webmap = new WebMap({{
-                    portalItem: {{ id: "{ARCGIS_EMBED_ITEM_ID}" }}
+                    portalItem: {{ id: "{ARCGIS_EMBED_ITEM_ID}" }},
+                    ground: "world-elevation"
                 }});
                 const mpExtent = new Extent({{
                     xmin: 74.029052,
@@ -2188,11 +2190,23 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                     ymax: 26.8683691,
                     spatialReference: {{ wkid: 4326 }}
                 }});
-                const view = new MapView({{
+                const view = new SceneView({{
                     container: "damMap",
                     map: webmap,
                     center: [78.22922399768257, 23.48361289099537],
                     zoom: 7,
+                    qualityProfile: "high",
+                    viewingMode: "global",
+                    camera: {{
+                        position: {{ longitude: 78.22922399768257, latitude: 23.48361289099537, z: 720000 }},
+                        tilt: 42,
+                        heading: 0
+                    }},
+                    environment: {{
+                        atmosphereEnabled: true,
+                        starsEnabled: false,
+                        lighting: {{ directShadowsEnabled: true, ambientOcclusionEnabled: true }}
+                    }},
                     popup: {{ dockEnabled: true, dockOptions: {{ position: "bottom-right", breakpoint: false }} }}
                 }});
                 const hillshadeLayer = new TileLayer({{
@@ -2204,7 +2218,12 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                 const layer = new GraphicsLayer({{ title: "Latest dashboard dam status" }});
                 const selectedGeoglowsLayer = new GraphicsLayer({{ title: "Selected GEOGLOWS reach" }});
                 const handInundationLayer = new GraphicsLayer({{ title: "HAND inundation screening" }});
+                const buildingRiskLayer = new GraphicsLayer({{
+                    title: "OSM 3D building risk exposure",
+                    elevationInfo: {{ mode: "on-the-ground" }}
+                }});
                 webmap.add(hillshadeLayer, 0);
+                webmap.add(buildingRiskLayer);
                 webmap.add(layer);
                 webmap.add(selectedGeoglowsLayer);
                 webmap.add(handInundationLayer);
@@ -2236,6 +2255,125 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                             width: isAlert && pulseOn ? 3 : 1
                         }}
                     }};
+                }}
+
+                function buildingRiskColor(risk) {{
+                    if (risk === "High") return [239, 68, 68, 0.86];
+                    if (risk === "Moderate") return [245, 158, 11, 0.84];
+                    return [20, 184, 166, 0.80];
+                }}
+
+                function damRiskScore(attributes) {{
+                    const filling = Number(attributes.display_filling || 0);
+                    const gap = Number(attributes.frl_gap_m);
+                    const alert = attributes.alert_level || "Normal";
+                    let score = filling;
+                    if (alert === "Critical") score += 60;
+                    if (alert === "Warning") score += 35;
+                    if (alert === "Watch") score += 18;
+                    if (Number.isFinite(gap)) score += Math.max(0, 12 - gap * 4);
+                    return score;
+                }}
+
+                function buildingRiskForDam(attributes, distanceKm) {{
+                    const alert = attributes.alert_level || "Normal";
+                    const filling = Number(attributes.display_filling || 0);
+                    if (alert === "Critical" || distanceKm <= 0.45 || filling >= 95) return "High";
+                    if (alert === "Warning" || alert === "Watch" || distanceKm <= 1.1 || filling >= 85) return "Moderate";
+                    return "Low";
+                }}
+
+                function parseOsmBuildingHeight(tags = {{}}) {{
+                    const rawHeight = String(tags.height || tags["building:height"] || "").replace(",", ".").match(/[0-9.]+/);
+                    if (rawHeight) return Math.max(3, Math.min(90, Number(rawHeight[0])));
+                    const levels = Number(String(tags["building:levels"] || tags.levels || "").replace(",", "."));
+                    if (Number.isFinite(levels) && levels > 0) return Math.max(3, Math.min(90, levels * 3.2));
+                    return 10;
+                }}
+
+                async function addOsm3dBuildingsForDam(feature) {{
+                    const attrs = feature.attributes || {{}};
+                    const point = feature.geometry;
+                    if (!point?.latitude || !point?.longitude) return;
+                    const radiusMeters = Math.max(850, Math.min(2800, Math.round(850 + Number(attrs.display_filling || 0) * 18)));
+                    const query = `[out:json][timeout:18];way["building"](around:${{radiusMeters}},${{point.latitude}},${{point.longitude}});out tags geom 70;`;
+                    const endpoints = [
+                        "https://overpass-api.de/api/interpreter?data=",
+                        "https://overpass.kumi.systems/api/interpreter?data="
+                    ];
+                    let osm = null;
+                    for (const endpoint of endpoints) {{
+                        try {{
+                            const response = await fetch(endpoint + encodeURIComponent(query));
+                            if (response.ok) {{
+                                osm = await response.json();
+                                break;
+                            }}
+                        }} catch (error) {{
+                            console.warn("OSM 3D building request failed", error);
+                        }}
+                    }}
+                    if (!osm || !Array.isArray(osm.elements)) return;
+                    osm.elements.slice(0, 70).forEach((element) => {{
+                        if (!Array.isArray(element.geometry) || element.geometry.length < 4) return;
+                        const ring = element.geometry.map((coord) => [coord.lon, coord.lat]);
+                        const first = ring[0];
+                        const last = ring[ring.length - 1];
+                        if (first[0] !== last[0] || first[1] !== last[1]) ring.push(first);
+                        const footprint = new Polygon({{
+                            rings: [ring],
+                            spatialReference: {{ wkid: 4326 }}
+                        }});
+                        const center = footprint.extent?.center;
+                        const distanceKm = center
+                            ? geometryEngine.distance(point, center, "kilometers")
+                            : 0;
+                        const risk = buildingRiskForDam(attrs, distanceKm || 0);
+                        const height = parseOsmBuildingHeight(element.tags || {{}});
+                        buildingRiskLayer.add(new Graphic({{
+                            geometry: footprint,
+                            attributes: {{
+                                reservoir_name: attrs.reservoir_name || attrs.dam_name || "Dam",
+                                district: attrs.map_district || "-",
+                                risk,
+                                distance_km: Number(distanceKm || 0).toFixed(2),
+                                height_m: height.toFixed(1),
+                                osm_id: element.id,
+                                osm_building: (element.tags || {{}}).building || "yes",
+                                source: "OpenStreetMap"
+                            }},
+                            symbol: {{
+                                type: "polygon-3d",
+                                symbolLayers: [{{
+                                    type: "extrude",
+                                    size: height,
+                                    material: {{ color: buildingRiskColor(risk) }},
+                                    edges: {{ type: "solid", color: [15, 23, 42, 0.42], size: 0.45 }}
+                                }}]
+                            }},
+                            popupTemplate: {{
+                                title: "3D Building Risk Exposure",
+                                content: `
+                                    <b>Nearest dam:</b> ${{escapeHtml(attrs.reservoir_name || attrs.dam_name || "Dam")}}<br>
+                                    <b>Risk:</b> ${{risk}}<br>
+                                    <b>Distance:</b> ${{Number(distanceKm || 0).toFixed(2)}} km<br>
+                                    <b>Extruded height:</b> ${{height.toFixed(1)}} m<br>
+                                    <b>OSM building:</b> ${{escapeHtml((element.tags || {{}}).building || "yes")}}<br>
+                                    <span style="color:#64748b">Risk is screened from dam alert/filling and proximity. Replace with detailed flood depth rasters for engineering-grade exposure analysis.</span>
+                                `
+                            }}
+                        }}));
+                    }});
+                }}
+
+                async function loadOsm3dBuildingRiskLayer(graphics) {{
+                    buildingRiskLayer.removeAll();
+                    const priority = [...graphics]
+                        .sort((a, b) => damRiskScore(b.attributes || {{}}) - damRiskScore(a.attributes || {{}}))
+                        .slice(0, 6);
+                    for (const graphic of priority) {{
+                        await addOsm3dBuildingsForDam(graphic);
+                    }}
                 }}
 
                 function addZoomLevelControl() {{
@@ -2462,6 +2600,7 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                 if (graphics.length) {{
                     view.when(() => {{
                         view.goTo({{ center: [78.22922399768257, 23.48361289099537], zoom: 7 }}, {{ animate: false }}).catch(() => null);
+                        loadOsm3dBuildingRiskLayer(graphics);
                         const layerList = new LayerList({{
                             view,
                             listItemCreatedFunction: (event) => {{
