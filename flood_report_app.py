@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import math
@@ -6,6 +6,7 @@ import os
 import hmac
 import sys
 import re
+import subprocess
 import unicodedata
 import urllib.error
 import urllib.request
@@ -24,6 +25,7 @@ DAM_LOCATIONS_CSV = APP_DIR / "dam_locations.csv"
 DAM_SHAPEFILE = APP_DIR / "dam_shapefile" / "Dams_EinC_54_R2.shp"
 GLOFAS_PROJECT_JSON = APP_DIR / "data" / "glofas_mp_project.json"
 GRRR_PROJECT_JSON = APP_DIR / "data" / "grrr_mp_project.json"
+MP_TOWNS_CSV = APP_DIR / "data" / "mp_towns.csv"
 RESERVOIR_CAPACITY_ESTIMATES_CSV = APP_DIR / "data" / "reservoir_capacity_estimates.csv"
 RESERVOIR_CAPACITY_CURVES_CSV = APP_DIR / "data" / "reservoir_capacity_curves.csv"
 RESERVOIR_CAPACITY_CURVES_FABDEM_CSV = APP_DIR / "data" / "reservoir_capacity_curves_fabdem.csv"
@@ -672,6 +674,30 @@ def read_csv(path: Path) -> pd.DataFrame:
     if not path.exists() or path.stat().st_size == 0:
         return pd.DataFrame()
     return pd.read_csv(path)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_json_url(url: str) -> tuple[dict | list | None, str | None]:
+    try:
+        request = urllib.request.Request(url, headers={"User-Agent": "mpwrd-vbsr-dashboard/1.0"})
+        with urllib.request.urlopen(request, timeout=18) as response:
+            return json.loads(response.read().decode("utf-8")), None
+    except urllib.error.URLError as exc:
+        try:
+            result = subprocess.run(
+                ["curl.exe", "-s", "--max-time", "18", url],
+                capture_output=True,
+                check=True,
+                text=True,
+                timeout=22,
+            )
+            if not result.stdout.strip():
+                return None, f"Unable to reach weather API: {exc}"
+            return json.loads(result.stdout), None
+        except Exception:
+            return None, f"Unable to reach weather API: {exc}"
+    except Exception as exc:
+        return None, f"Unable to read weather API response: {exc}"
 
 
 def normalize_name(value: str | float | None) -> str:
@@ -2792,6 +2818,317 @@ def render_infographic_leaflet_map(map_frame: pd.DataFrame, district_geojson: di
     )
 
 
+def open_meteo_url(latitude: float, longitude: float, forecast_days: int = 7, past_days: int = 92) -> str:
+    daily_vars = ",".join(
+        [
+            "temperature_2m_max",
+            "temperature_2m_min",
+            "temperature_2m_mean",
+            "precipitation_sum",
+            "rain_sum",
+            "showers_sum",
+            "snowfall_sum",
+            "wind_speed_10m_max",
+            "uv_index_max",
+        ]
+    )
+    hourly_vars = ",".join(["temperature_2m", "precipitation", "wind_speed_10m", "uv_index"])
+    current_vars = ",".join(
+        [
+            "temperature_2m",
+            "relative_humidity_2m",
+            "apparent_temperature",
+            "precipitation",
+            "rain",
+            "showers",
+            "weather_code",
+            "cloud_cover",
+            "wind_speed_10m",
+            "wind_direction_10m",
+            "wind_gusts_10m",
+        ]
+    )
+    return (
+        "https://api.open-meteo.com/v1/forecast"
+        f"?latitude={latitude:.5f}&longitude={longitude:.5f}"
+        f"&daily={daily_vars}&hourly={hourly_vars}&current={current_vars}"
+        "&timezone=Asia%2FKolkata"
+        f"&forecast_days={forecast_days}&past_days={past_days}"
+        "&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm"
+    )
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_open_meteo_weather(latitude: float, longitude: float) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, str | None]:
+    payload, error = fetch_json_url(open_meteo_url(latitude, longitude))
+    if error or not isinstance(payload, dict):
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), error or "Weather API returned an empty response."
+    daily = pd.DataFrame(payload.get("daily") or {})
+    hourly = pd.DataFrame(payload.get("hourly") or {})
+    current = pd.DataFrame([payload.get("current") or {}])
+    if not daily.empty and "time" in daily:
+        daily["date"] = pd.to_datetime(daily["time"], errors="coerce")
+        today = pd.Timestamp.now(tz="Asia/Kolkata").normalize().tz_localize(None)
+        daily["period"] = daily["date"].apply(lambda value: "Forecast" if pd.notna(value) and value >= today else "Hindcast")
+    if not hourly.empty and "time" in hourly:
+        hourly["datetime"] = pd.to_datetime(hourly["time"], errors="coerce")
+    if not current.empty and "time" in current:
+        current["datetime"] = pd.to_datetime(current["time"], errors="coerce")
+    for frame in [daily, hourly, current]:
+        for column in frame.columns:
+            if column not in {"time", "date", "datetime", "period"}:
+                frame[column] = pd.to_numeric(frame[column], errors="coerce")
+    return daily, hourly, current, None
+
+
+def weather_risk_label(precipitation_mm: float | int | None, wind_kmh: float | int | None, uv_index: float | int | None) -> str:
+    rain = 0 if precipitation_mm is None or pd.isna(precipitation_mm) else float(precipitation_mm)
+    wind = 0 if wind_kmh is None or pd.isna(wind_kmh) else float(wind_kmh)
+    uv = 0 if uv_index is None or pd.isna(uv_index) else float(uv_index)
+    if rain >= 64.5 or wind >= 50 or uv >= 11:
+        return "Severe"
+    if rain >= 35.5 or wind >= 35 or uv >= 8:
+        return "High"
+    if rain >= 15.6 or wind >= 25 or uv >= 6:
+        return "Moderate"
+    return "Low"
+
+
+def weather_risk_color(risk: str) -> str:
+    return {"Severe": "#dc2626", "High": "#f97316", "Moderate": "#f59e0b", "Low": "#14b8a6"}.get(risk, "#2563eb")
+
+
+def render_weather_town_leaflet_map(
+    towns: pd.DataFrame,
+    selected_town: str,
+    weather_tile_api_key: str = "",
+    district_geojson: dict | None = None,
+) -> None:
+    if towns.empty:
+        return
+    records = []
+    for row in towns.dropna(subset=["latitude", "longitude"]).to_dict("records"):
+        risk = str(row.get("weather_risk") or "Low")
+        records.append(
+            {
+                "town": str(row.get("town_name") or "Town"),
+                "district": str(row.get("district") or ""),
+                "basin": str(row.get("basin") or ""),
+                "priority": str(row.get("priority_flag") or ""),
+                "lat": float(row["latitude"]),
+                "lon": float(row["longitude"]),
+                "risk": risk,
+                "color": weather_risk_color(risk),
+                "forecast_rain": round(float(row.get("forecast_rain_mm") or 0), 1),
+                "max_temp": round(float(row.get("forecast_temp_max_c") or 0), 1),
+                "max_wind": round(float(row.get("forecast_wind_max_kmh") or 0), 1),
+                "max_uv": round(float(row.get("forecast_uv_max") or 0), 1),
+                "selected": str(row.get("town_name") or "") == selected_town,
+            }
+        )
+    map_id = f"weather-town-map-{abs(hash(selected_town)) % 1000000}"
+    center = next((item for item in records if item["selected"]), records[0])
+    tile_key = weather_tile_api_key.strip()
+    districts_json = json.dumps(district_geojson or {"type": "FeatureCollection", "features": []})
+    layer_note = (
+        "Radar overlay is loaded from live radar tiles. Cloud and precipitation overlays require a configured weather-map API key."
+        if not tile_key
+        else "Satellite basemap, weather overlays, radar animation and MP administrative boundaries are enabled by default."
+    )
+    components.html(
+        f"""
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <style>
+            #{map_id} {{
+                height: 430px;
+                width: 100%;
+                border: 1px solid #dbe6f4;
+                border-radius: 8px;
+                overflow: hidden;
+                box-shadow: 0 14px 32px rgba(15,23,42,0.08);
+                background: #eef6ff;
+            }}
+            .weather-map-title {{
+                font: 800 13px Roboto, Inter, Segoe UI, sans-serif;
+                color: #172033;
+                margin: 0 0 5px;
+            }}
+            .weather-map-note {{
+                font: 11px Roboto, Inter, Segoe UI, sans-serif;
+                color: #64748b;
+                margin: 0 0 8px;
+            }}
+            .weather-legend {{
+                background: rgba(255,255,255,0.94);
+                border: 1px solid #dbe6f4;
+                border-radius: 8px;
+                padding: 8px 10px;
+                color: #334155;
+                font: 11px Roboto, Inter, Segoe UI, sans-serif;
+                line-height: 1.35;
+                box-shadow: 0 8px 20px rgba(15,23,42,0.12);
+            }}
+            .weather-legend b {{ display:block; color:#172033; margin-bottom:4px; }}
+            .weather-legend span {{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; }}
+        </style>
+        <div class="weather-map-title">Weather Forecast Map: MP Towns</div>
+        <div class="weather-map-note">Town markers are colored by 7-day rainfall, wind and UV risk. {escape(layer_note)}</div>
+        <div id="{map_id}"></div>
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script>
+        (() => {{
+            const towns = {json.dumps(records)};
+            const districts = {districts_json};
+            const weatherTileApiKey = {json.dumps(tile_key)};
+            const map = L.map("{map_id}", {{ zoomControl: true, preferCanvas: true, scrollWheelZoom: true }})
+                .setView([{center["lat"]:.5f}, {center["lon"]:.5f}], 7);
+            const topo = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{{z}}/{{y}}/{{x}}", {{
+                maxZoom: 16,
+                attribution: "Tiles &copy; Esri | Mouse wheel zoom enabled"
+            }});
+            const streets = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{{z}}/{{y}}/{{x}}", {{
+                maxZoom: 16,
+                attribution: "Tiles &copy; Esri"
+            }});
+            const imagery = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}", {{
+                maxZoom: 16,
+                attribution: "Tiles &copy; Esri"
+            }});
+            const lightGray = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{{z}}/{{y}}/{{x}}", {{
+                maxZoom: 16,
+                attribution: "Tiles &copy; Esri"
+            }});
+            imagery.addTo(map);
+            const overlays = {{}};
+            const adminBoundary = L.geoJSON(districts, {{
+                style: () => ({{
+                    color: "#111827",
+                    weight: 1.15,
+                    opacity: 0.78,
+                    fillColor: "#ffffff",
+                    fillOpacity: 0.02,
+                    dashArray: "4 3"
+                }}),
+                onEachFeature: (feature, layer) => {{
+                    const name = feature.properties && feature.properties.district ? feature.properties.district : "MP boundary";
+                    layer.bindTooltip(name, {{ sticky: true }});
+                }}
+            }}).addTo(map);
+            overlays["MP admin boundaries"] = adminBoundary;
+            if (weatherTileApiKey) {{
+                const cloudLayer = L.tileLayer(
+                    `https://tile.openweathermap.org/map/clouds_new/{{z}}/{{x}}/{{y}}.png?appid=${{weatherTileApiKey}}`,
+                    {{ opacity: 0.55, maxZoom: 16, attribution: "Weather tiles &copy; OpenWeather" }}
+                ).addTo(map);
+                const precipitationLayer = L.tileLayer(
+                    `https://tile.openweathermap.org/map/precipitation_new/{{z}}/{{x}}/{{y}}.png?appid=${{weatherTileApiKey}}`,
+                    {{ opacity: 0.62, maxZoom: 16, attribution: "Weather tiles &copy; OpenWeather" }}
+                ).addTo(map);
+                overlays["Cloud cover"] = cloudLayer;
+                overlays["Precipitation"] = precipitationLayer;
+            }}
+            const layerControl = L.control.layers(
+                {{
+                    "Satellite": imagery,
+                    "Topographic": topo,
+                    "Streets": streets,
+                    "Light Gray": lightGray
+                }},
+                overlays,
+                {{ collapsed: false, position: "topright" }}
+            ).addTo(map);
+            fetch("https://api.rainviewer.com/public/weather-maps.json")
+                .then((response) => response.json())
+                .then((payload) => {{
+                    const radarFrames = (payload.radar && payload.radar.past ? payload.radar.past : []);
+                    const latestRadar = radarFrames[radarFrames.length - 1];
+                    if (!latestRadar || !payload.host || !latestRadar.path) return;
+                    let radarIndex = radarFrames.length - 1;
+                    let radarLayer = L.tileLayer(
+                        `${{payload.host}}${{latestRadar.path}}/256/{{z}}/{{x}}/{{y}}/2/1_1.png`,
+                        {{
+                            opacity: 0.66,
+                            maxZoom: 16,
+                            attribution: 'Weather radar &copy; <a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer">RainViewer</a>'
+                        }}
+                    ).addTo(map);
+                    let radarTimer = null;
+                    const setRadarFrame = (index) => {{
+                        radarIndex = index;
+                        const frame = radarFrames[radarIndex];
+                        if (!frame) return;
+                        radarLayer.setUrl(`${{payload.host}}${{frame.path}}/256/{{z}}/{{x}}/{{y}}/2/1_1.png`);
+                    }};
+                    const radarControl = L.control({{ position: "bottomleft" }});
+                    radarControl.onAdd = () => {{
+                        const div = L.DomUtil.create("div", "weather-legend");
+                        div.innerHTML = '<b>Radar Animation</b><button type="button" style="margin-top:6px;padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;background:#ffffff;cursor:pointer;">Play</button><div style="margin-top:5px;color:#64748b">Latest radar is on by default</div>';
+                        const button = div.querySelector("button");
+                        L.DomEvent.disableClickPropagation(div);
+                        button.addEventListener("click", () => {{
+                            if (radarTimer) {{
+                                clearInterval(radarTimer);
+                                radarTimer = null;
+                                button.textContent = "Play";
+                                setRadarFrame(radarFrames.length - 1);
+                                return;
+                            }}
+                            button.textContent = "Pause";
+                            radarTimer = setInterval(() => {{
+                                setRadarFrame((radarIndex + 1) % radarFrames.length);
+                            }}, 750);
+                        }});
+                        return div;
+                    }};
+                    radarControl.addTo(map);
+                    layerControl.addOverlay(radarLayer, "Latest weather radar");
+                }})
+                .catch(() => {{}});
+            const bounds = [];
+            towns.forEach((town) => {{
+                bounds.push([town.lat, town.lon]);
+                const marker = L.circleMarker([town.lat, town.lon], {{
+                    radius: town.selected ? 8 : 5.6,
+                    color: town.selected ? "#0f172a" : "#ffffff",
+                    weight: town.selected ? 2.4 : 1.2,
+                    fillColor: town.color,
+                    fillOpacity: 0.94
+                }}).addTo(map);
+                marker.bindTooltip(`${{town.town}} | ${{town.risk}}`, {{ sticky: true }});
+                marker.bindPopup(`
+                    <b>${{town.town}}</b><br/>
+                    District: ${{town.district}}<br/>
+                    Basin: ${{town.basin}}<br/>
+                    Risk: <b style="color:${{town.color}}">${{town.risk}}</b><br/>
+                    7-day rain: ${{town.forecast_rain}} mm<br/>
+                    Max temp: ${{town.max_temp}} &deg;C<br/>
+                    Max wind: ${{town.max_wind}} km/h<br/>
+                    Max UV: ${{town.max_uv}}
+                `);
+            }});
+            const boundsObj = L.latLngBounds(bounds);
+            if (boundsObj.isValid()) map.fitBounds(boundsObj.pad(0.15), {{ maxZoom: 7 }});
+            const legend = L.control({{ position: "bottomright" }});
+            legend.onAdd = () => {{
+                const div = L.DomUtil.create("div", "weather-legend");
+                div.innerHTML = `
+                    <b>Weather Risk</b>
+                    <div><span style="background:#dc2626"></span>Severe</div>
+                    <div><span style="background:#f97316"></span>High</div>
+                    <div><span style="background:#f59e0b"></span>Moderate</div>
+                    <div><span style="background:#14b8a6"></span>Low</div>
+                `;
+                return div;
+            }};
+            legend.addTo(map);
+            setTimeout(() => map.invalidateSize(), 350);
+        }})();
+        </script>
+        """,
+        height=480,
+    )
+
+
 def speedometer_svg(percent: float | int | None, label: str = "", width: int = 180, height: int = 96) -> str:
     value = 0 if percent is None or pd.isna(percent) else max(0, min(100, float(percent)))
     angle = 180 - (180 * value / 100)
@@ -3248,12 +3585,82 @@ if not map_status.empty:
     if not alert_points.empty and not blink_on:
         alert_points["pulse_color"] = alert_points["pulse_color"].apply(lambda _: [255, 255, 255, 0])
 
+
+def build_dam_alert_rows(
+    dams: pd.DataFrame,
+    critical_gap_m: float,
+    warning_gap_m: float,
+    watch_filling_percent: float,
+    rapid_rise_m: float,
+) -> pd.DataFrame:
+    if dams.empty:
+        return pd.DataFrame()
+    rows = dams.dropna(subset=["reservoir_name"]).copy()
+    rows["frl_gap_m"] = pd.to_numeric(rows.get("frl_gap_m"), errors="coerce")
+    rows["display_filling"] = pd.to_numeric(rows.get("display_filling"), errors="coerce")
+    rows["water_level_m"] = pd.to_numeric(rows.get("water_level_m"), errors="coerce")
+
+    def classify(row: pd.Series) -> str:
+        gap = row.get("frl_gap_m")
+        filling = row.get("display_filling")
+        if pd.notna(gap) and gap <= critical_gap_m:
+            return "Critical"
+        if pd.notna(gap) and gap <= warning_gap_m:
+            return "Warning"
+        if pd.notna(filling) and filling >= watch_filling_percent:
+            return "Watch"
+        return "Normal"
+
+    rows["configured_alert"] = rows.apply(classify, axis=1)
+    if not reservoir_view.empty and {"reservoir_name", "observed_at", "water_level_m"}.issubset(reservoir_view.columns):
+        trend_rows = reservoir_view.sort_values(["reservoir_name", "observed_at"]).copy()
+        trend_rows["water_level_m"] = pd.to_numeric(trend_rows["water_level_m"], errors="coerce")
+        trend_rows["wl_delta_m"] = trend_rows.groupby("reservoir_name")["water_level_m"].diff()
+        latest_delta = trend_rows.groupby("reservoir_name", as_index=False).tail(1)[["reservoir_name", "wl_delta_m"]]
+        rows = rows.merge(latest_delta, on="reservoir_name", how="left")
+    else:
+        rows["wl_delta_m"] = math.nan
+    rows["rapid_rise_alert"] = pd.to_numeric(rows["wl_delta_m"], errors="coerce").fillna(0) >= rapid_rise_m
+    rows = rows[(rows["configured_alert"] != "Normal") | rows["rapid_rise_alert"]].copy()
+    if rows.empty:
+        return rows
+    rows["alert_reason"] = rows.apply(
+        lambda row: (
+            "Rapid rise"
+            if bool(row.get("rapid_rise_alert")) and row.get("configured_alert") == "Normal"
+            else (
+                f"FRL gap {fmt_number(row.get('frl_gap_m'), ' m')}"
+                if pd.notna(row.get("frl_gap_m"))
+                else f"Filling {fmt_number(row.get('display_filling'), '%')}"
+            )
+        ),
+        axis=1,
+    )
+    return rows.sort_values(
+        by=["configured_alert", "frl_gap_m", "display_filling"],
+        ascending=[True, True, False],
+    )
+
+
+def dam_alert_message(row: pd.Series) -> str:
+    return (
+        "MPWRD Dam Alert\n"
+        f"Reservoir: {row.get('reservoir_name') or row.get('dam_name')}\n"
+        f"District: {row.get('district') or row.get('map_district') or '-'}\n"
+        f"Basin: {row.get('sub_basin') or row.get('major_basin') or '-'}\n"
+        f"Current WL: {fmt_number(row.get('water_level_m'), ' m')}\n"
+        f"FRL Gap: {fmt_number(row.get('frl_gap_m'), ' m')}\n"
+        f"Filling: {fmt_number(row.get('display_filling'), '%')}\n"
+        f"Alert Level: {row.get('configured_alert')}\n"
+        "Action: Monitor inflow, gates, and downstream warning protocol."
+    )
+
 if "main_dashboard_page" not in st.session_state:
     st.session_state.main_dashboard_page = "Infographics"
 
-nav_pages = ["Infographics", "Dam DSS & Analytics", "Data & Timeseries"]
+nav_pages = ["Infographics", "Dam DSS & Analytics", "Weather Forecast", "Data & Timeseries"]
 st.markdown('<div class="dashboard-topnav-title">Dashboard Navigation</div>', unsafe_allow_html=True)
-nav_cols = st.columns(3)
+nav_cols = st.columns(4)
 for nav_col, page in zip(nav_cols, nav_pages):
     if nav_col.button(page, key=f"main_nav_{page}", type="primary" if page == st.session_state.main_dashboard_page else "secondary", use_container_width=True):
         st.session_state.main_dashboard_page = page
@@ -3326,6 +3733,180 @@ if main_page == "Dam DSS & Analytics":
                             '</div>'
                         )
                         st.markdown(selected_gauge_html, unsafe_allow_html=True)
+
+        st.subheader("Alert DSS Administration")
+        if "alert_test_log" not in st.session_state:
+            st.session_state.alert_test_log = []
+        if not is_admin:
+            st.info("Alert configuration is restricted to administration users. Sign in from the sidebar to manage SMS/WhatsApp alert rules and recipients.")
+        else:
+            st.markdown(
+                '<div class="panel-note">Configure operational thresholds and prepare SMS/WhatsApp alert messages. Sending remains in test/preview mode until a gateway provider is connected.</div>',
+                unsafe_allow_html=True,
+            )
+            alert_settings = st.columns(4)
+            with alert_settings[0]:
+                dam_critical_gap = st.number_input(
+                    "Critical FRL gap (m)",
+                    min_value=0.0,
+                    max_value=5.0,
+                    value=float(st.session_state.get("dam_critical_gap", 0.5)),
+                    step=0.1,
+                    key="dam_critical_gap",
+                    help="Dam alert becomes Critical when current water level is this close to FRL.",
+                )
+            with alert_settings[1]:
+                dam_warning_gap = st.number_input(
+                    "Warning FRL gap (m)",
+                    min_value=0.0,
+                    max_value=10.0,
+                    value=float(st.session_state.get("dam_warning_gap", 1.5)),
+                    step=0.1,
+                    key="dam_warning_gap",
+                )
+            with alert_settings[2]:
+                dam_watch_filling = st.number_input(
+                    "Watch filling (%)",
+                    min_value=0.0,
+                    max_value=100.0,
+                    value=float(st.session_state.get("dam_watch_filling", 90.0)),
+                    step=1.0,
+                    key="dam_watch_filling",
+                )
+            with alert_settings[3]:
+                rapid_rise_threshold = st.number_input(
+                    "Rapid rise trigger (m/slot)",
+                    min_value=0.0,
+                    max_value=5.0,
+                    value=float(st.session_state.get("rapid_rise_threshold", 0.30)),
+                    step=0.05,
+                    key="rapid_rise_threshold",
+                    help="Flags dams where the latest report slot rose by this many metres from the previous slot.",
+                )
+
+            weather_settings = st.columns(3)
+            with weather_settings[0]:
+                st.number_input(
+                    "Extreme 24h rainfall (mm)",
+                    min_value=0.0,
+                    max_value=500.0,
+                    value=float(st.session_state.get("weather_24h_extreme_mm", 100.0)),
+                    step=5.0,
+                    key="weather_24h_extreme_mm",
+                    help="Used by the Weather Forecast page for future automatic alert triggering.",
+                )
+            with weather_settings[1]:
+                st.number_input(
+                    "Extreme forecast rain (mm/day)",
+                    min_value=0.0,
+                    max_value=500.0,
+                    value=float(st.session_state.get("weather_forecast_extreme_mm", 120.0)),
+                    step=5.0,
+                    key="weather_forecast_extreme_mm",
+                )
+            with weather_settings[2]:
+                st.number_input(
+                    "Extreme wind speed (km/h)",
+                    min_value=0.0,
+                    max_value=200.0,
+                    value=float(st.session_state.get("weather_wind_extreme_kmh", 50.0)),
+                    step=5.0,
+                    key="weather_wind_extreme_kmh",
+                )
+
+            channel_cols = st.columns([0.32, 0.68])
+            with channel_cols[0]:
+                selected_channels = st.multiselect(
+                    "Alert channels",
+                    ["SMS", "WhatsApp"],
+                    default=st.session_state.get("alert_channels", ["SMS", "WhatsApp"]),
+                    key="alert_channels",
+                )
+                gateway_mode = st.selectbox(
+                    "Gateway mode",
+                    ["Preview only", "Provider ready"],
+                    index=0,
+                    key="alert_gateway_mode",
+                    help="Provider ready preserves configuration screens but does not send until gateway credentials are added in deployment secrets.",
+                )
+            with channel_cols[1]:
+                recipients_text = st.text_area(
+                    "Alert recipients",
+                    value=st.session_state.get("alert_recipients", "Control Room +91XXXXXXXXXX\nDam Safety Officer +91XXXXXXXXXX"),
+                    key="alert_recipients",
+                    height=86,
+                    help="One recipient per line. Use role/name and phone number. Real delivery will require an approved SMS/WhatsApp gateway.",
+                )
+
+            active_dam_alerts = build_dam_alert_rows(
+                map_status,
+                dam_critical_gap,
+                dam_warning_gap,
+                dam_watch_filling,
+                rapid_rise_threshold,
+            )
+            alert_kpis = st.columns(4)
+            alert_kpis[0].metric("Active Dam Alerts", len(active_dam_alerts))
+            alert_kpis[1].metric("Critical", int((active_dam_alerts.get("configured_alert", pd.Series(dtype=str)) == "Critical").sum()) if not active_dam_alerts.empty else 0)
+            alert_kpis[2].metric("Warning", int((active_dam_alerts.get("configured_alert", pd.Series(dtype=str)) == "Warning").sum()) if not active_dam_alerts.empty else 0)
+            alert_kpis[3].metric("Rapid Rise", int(active_dam_alerts.get("rapid_rise_alert", pd.Series(dtype=bool)).sum()) if not active_dam_alerts.empty else 0)
+
+            if active_dam_alerts.empty:
+                st.success("No dam alert exceeds the configured administration thresholds under the current dashboard filters.")
+            else:
+                alert_table_cols = [
+                    "reservoir_name",
+                    "district",
+                    "sub_basin",
+                    "observed_at",
+                    "water_level_m",
+                    "frl_m",
+                    "frl_gap_m",
+                    "display_filling",
+                    "wl_delta_m",
+                    "configured_alert",
+                    "alert_reason",
+                ]
+                display_alerts = active_dam_alerts[[col for col in alert_table_cols if col in active_dam_alerts.columns]].copy()
+                st.dataframe(display_alerts, use_container_width=True, hide_index=True, height=230)
+                alert_labels = [
+                    f"{row.reservoir_name} | {row.configured_alert}"
+                    for row in active_dam_alerts.itertuples(index=False)
+                ]
+                selected_alert_label = st.selectbox(
+                    "Message preview dam",
+                    alert_labels,
+                    key="alert_preview_dam",
+                )
+                selected_alert_row = active_dam_alerts.iloc[alert_labels.index(selected_alert_label)]
+                default_message = dam_alert_message(selected_alert_row)
+                alert_message = st.text_area(
+                    "SMS / WhatsApp alert message preview",
+                    value=default_message,
+                    key="alert_message_preview",
+                    height=190,
+                )
+                test_cols = st.columns([0.25, 0.75])
+                with test_cols[0]:
+                    if st.button("Record Test Alert", type="primary", use_container_width=True, key="record_test_alert"):
+                        st.session_state.alert_test_log.insert(
+                            0,
+                            {
+                                "time": pd.Timestamp.now(tz="Asia/Kolkata").strftime("%d %b %Y %I:%M %p"),
+                                "channels": ", ".join(selected_channels) if selected_channels else "None",
+                                "mode": gateway_mode,
+                                "reservoir": selected_alert_row.get("reservoir_name"),
+                                "alert": selected_alert_row.get("configured_alert"),
+                                "recipients": len([line for line in recipients_text.splitlines() if line.strip()]),
+                                "status": "Preview logged",
+                            },
+                        )
+                        st.success("Test alert recorded in local administration log.")
+                with test_cols[1]:
+                    st.caption("Real SMS/WhatsApp delivery will be enabled after gateway credentials, approved WhatsApp templates, and recipient governance are configured.")
+
+            if st.session_state.alert_test_log:
+                st.dataframe(pd.DataFrame(st.session_state.alert_test_log), use_container_width=True, hide_index=True, height=180)
 
         if show_district_accelerometers:
             strip_html = '<div class="district-strip">'
@@ -3596,6 +4177,263 @@ if main_page == "Dam DSS & Analytics":
                     unsafe_allow_html=True,
                 )
                 st.dataframe(grrr_rows, use_container_width=True, hide_index=True, height=285)
+
+
+if main_page == "Weather Forecast":
+    st.subheader("Weather Forecast")
+    towns = read_csv(MP_TOWNS_CSV)
+    if towns.empty:
+        st.info("No MP towns master data is available. Add data/mp_towns.csv to enable town-wise weather forecasting.")
+    else:
+        towns["latitude"] = pd.to_numeric(towns["latitude"], errors="coerce")
+        towns["longitude"] = pd.to_numeric(towns["longitude"], errors="coerce")
+        towns = towns.dropna(subset=["latitude", "longitude"]).sort_values(["district", "town_name"]).reset_index(drop=True)
+        weather_top = st.columns([0.42, 0.58])
+        with weather_top[0]:
+            district_filter_options = ["All districts"] + sorted(towns["district"].dropna().unique())
+            selected_weather_district = st.selectbox("Weather district", district_filter_options, key="weather_district_filter")
+        town_options_df = towns if selected_weather_district == "All districts" else towns[towns["district"] == selected_weather_district]
+        town_labels = [
+            f"{row.town_name} | {row.district}"
+            for row in town_options_df.itertuples(index=False)
+        ]
+        if not town_labels:
+            st.warning("No towns are available for the selected district.")
+        else:
+            with weather_top[1]:
+                selected_town_label = st.selectbox("Town weather point", town_labels, key="selected_weather_town")
+            selected_town_name = selected_town_label.split(" | ", 1)[0]
+            selected_town = town_options_df[town_options_df["town_name"] == selected_town_name].iloc[0]
+            daily_weather, hourly_weather, current_weather, weather_error = fetch_open_meteo_weather(
+                float(selected_town["latitude"]),
+                float(selected_town["longitude"]),
+            )
+            if weather_error:
+                st.error(weather_error)
+            elif daily_weather.empty:
+                st.warning("Weather service returned no daily weather rows for the selected town.")
+            else:
+                forecast_daily = daily_weather[daily_weather["period"] == "Forecast"].head(7).copy()
+                hindcast_daily = daily_weather[daily_weather["period"] == "Hindcast"].copy()
+                if forecast_daily.empty:
+                    forecast_daily = daily_weather.tail(7).copy()
+                latest_forecast = forecast_daily.iloc[0]
+                forecast_rain_total = pd.to_numeric(forecast_daily.get("precipitation_sum"), errors="coerce").sum()
+                hindcast_rain_total = pd.to_numeric(hindcast_daily.get("precipitation_sum"), errors="coerce").sum()
+                forecast_temp_max = pd.to_numeric(forecast_daily.get("temperature_2m_max"), errors="coerce").max()
+                forecast_temp_min = pd.to_numeric(forecast_daily.get("temperature_2m_min"), errors="coerce").min()
+                forecast_wind_max = pd.to_numeric(forecast_daily.get("wind_speed_10m_max"), errors="coerce").max()
+                forecast_uv_max = pd.to_numeric(forecast_daily.get("uv_index_max"), errors="coerce").max()
+                wettest_day = forecast_daily.sort_values("precipitation_sum", ascending=False).iloc[0]
+                selected_weather_risk = weather_risk_label(forecast_rain_total, forecast_wind_max, forecast_uv_max)
+                current_row = current_weather.iloc[0].to_dict() if not current_weather.empty else {}
+                current_time = current_row.get("datetime")
+                current_time_label = (
+                    pd.Timestamp(current_time).strftime("%d %b %Y, %I:%M %p")
+                    if pd.notna(current_time)
+                    else "Latest weather model step"
+                )
+                past_24h_rainfall = math.nan
+                past_24h_window_label = "Rolling hourly sum"
+                if not hourly_weather.empty and {"datetime", "precipitation"}.issubset(hourly_weather.columns):
+                    hourly_recent = hourly_weather[["datetime", "precipitation"]].copy()
+                    hourly_recent["datetime"] = pd.to_datetime(hourly_recent["datetime"], errors="coerce")
+                    hourly_recent["precipitation"] = pd.to_numeric(hourly_recent["precipitation"], errors="coerce")
+                    window_end = pd.Timestamp(current_time).tz_localize(None) if pd.notna(current_time) else hourly_recent["datetime"].dropna().max()
+                    if pd.notna(window_end):
+                        window_start = window_end - pd.Timedelta(hours=24)
+                        past_24h_rows = hourly_recent[
+                            (hourly_recent["datetime"] > window_start)
+                            & (hourly_recent["datetime"] <= window_end)
+                        ]
+                        past_24h_rainfall = past_24h_rows["precipitation"].sum()
+                        past_24h_window_label = f"{window_start.strftime('%d %b %I:%M %p')} to {window_end.strftime('%d %b %I:%M %p')}"
+
+                summary_towns = towns.copy()
+                summary_towns["forecast_rain_mm"] = 0.0
+                summary_towns["forecast_temp_max_c"] = 0.0
+                summary_towns["forecast_wind_max_kmh"] = 0.0
+                summary_towns["forecast_uv_max"] = 0.0
+                summary_towns["weather_risk"] = "Low"
+                selected_mask = summary_towns["town_name"] == selected_town_name
+                summary_towns.loc[selected_mask, "forecast_rain_mm"] = forecast_rain_total
+                summary_towns.loc[selected_mask, "forecast_temp_max_c"] = forecast_temp_max
+                summary_towns.loc[selected_mask, "forecast_wind_max_kmh"] = forecast_wind_max
+                summary_towns.loc[selected_mask, "forecast_uv_max"] = forecast_uv_max
+                summary_towns.loc[selected_mask, "weather_risk"] = selected_weather_risk
+
+                st.markdown(
+                    f"""
+                    <div class="infographic-frame">
+                        <div class="infographic-title">Weather Data: {escape(str(selected_town['town_name']))}</div>
+                        <div class="infographic-subtitle">7-day forecast and 3-month hindcast in SI units. Location: {float(selected_town['latitude']):.4f}, {float(selected_town['longitude']):.4f} | District: {escape(str(selected_town['district']))}</div>
+                        <div class="infographic-grid">
+                            <div class="infographic-card"><span>Forecast Temp Range</span><b>{fmt_number(forecast_temp_min, " deg C")} - {fmt_number(forecast_temp_max, " deg C")}</b><small>7-day min/max envelope</small></div>
+                            <div class="infographic-card"><span>7-Day Precipitation</span><b>{fmt_number(forecast_rain_total, " mm")}</b><small>Rain + showers + snow</small></div>
+                            <div class="infographic-card"><span>Max Wind Speed</span><b>{fmt_number(forecast_wind_max, " km/h")}</b><small>10 m wind, SI display</small></div>
+                            <div class="infographic-card"><span>Max UV Index</span><b>{fmt_number(forecast_uv_max, "")}</b><small>Daily maximum UV risk</small></div>
+                            <div class="infographic-card"><span>Wettest Forecast Day</span><b>{pd.Timestamp(wettest_day['date']).strftime('%d %b')}</b><small>{fmt_number(wettest_day.get('precipitation_sum'), ' mm')} expected</small></div>
+                            <div class="infographic-card"><span>92-Day Hindcast Rain</span><b>{fmt_number(hindcast_rain_total, " mm")}</b><small>Past daily weather sequence</small></div>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                st.markdown(
+                    f"""
+                    <div class="infographic-frame">
+                        <div class="infographic-title">Current Weather: {escape(str(selected_town['town_name']))}</div>
+                        <div class="infographic-subtitle">Current conditions from 15-minute model data. Updated: {escape(str(current_time_label))}</div>
+                        <div class="infographic-grid">
+                            <div class="infographic-card"><span>Temperature</span><b>{fmt_number(current_row.get('temperature_2m'), " deg C")}</b><small>2 m air temperature</small></div>
+                            <div class="infographic-card"><span>Feels Like</span><b>{fmt_number(current_row.get('apparent_temperature'), " deg C")}</b><small>Apparent temperature</small></div>
+                            <div class="infographic-card"><span>Humidity</span><b>{fmt_number(current_row.get('relative_humidity_2m'), "%")}</b><small>Relative humidity at 2 m</small></div>
+                            <div class="infographic-card"><span>Current Rainfall</span><b>{fmt_number(current_row.get('precipitation'), " mm")}</b><small>Rain + showers + snow</small></div>
+                            <div class="infographic-card"><span>Past 24h Rainfall</span><b>{fmt_number(past_24h_rainfall, " mm")}</b><small>{escape(past_24h_window_label)}</small></div>
+                            <div class="infographic-card"><span>Cloud Cover</span><b>{fmt_number(current_row.get('cloud_cover'), "%")}</b><small>Total cloud cover</small></div>
+                            <div class="infographic-card"><span>Wind</span><b>{fmt_number(current_row.get('wind_speed_10m'), " km/h")}</b><small>Gust {fmt_number(current_row.get('wind_gusts_10m'), " km/h")} | Direction {fmt_number(current_row.get('wind_direction_10m'), " deg")}</small></div>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                weather_tile_api_key = get_app_secret("openweather_api_key", "OPENWEATHER_API_KEY", "")
+                weather_district_geojson = load_light_district_geojson(str(MP_DISTRICTS_GEOJSON))
+                render_weather_town_leaflet_map(
+                    summary_towns,
+                    selected_town_name,
+                    weather_tile_api_key,
+                    weather_district_geojson,
+                )
+
+                weather_cols = st.columns([1.05, 0.95])
+                with weather_cols[0]:
+                    temp_long = forecast_daily.melt(
+                        id_vars=["date"],
+                        value_vars=["temperature_2m_min", "temperature_2m_mean", "temperature_2m_max"],
+                        var_name="series",
+                        value_name="temperature_c",
+                    )
+                    temp_chart = (
+                        alt.Chart(temp_long)
+                        .mark_line(point=True)
+                        .encode(
+                            x=alt.X("date:T", title="Forecast date"),
+                            y=alt.Y("temperature_c:Q", title="Temperature ( deg C)"),
+                            color=alt.Color(
+                                "series:N",
+                                title="Temperature",
+                                scale=alt.Scale(
+                                    domain=["temperature_2m_min", "temperature_2m_mean", "temperature_2m_max"],
+                                    range=["#2563eb", "#14b8a6", "#ef4444"],
+                                ),
+                            ),
+                            tooltip=["date", "series", "temperature_c"],
+                        )
+                        .properties(height=285, title="7-Day Temperature Forecast")
+                    )
+                    st.altair_chart(temp_chart, use_container_width=True)
+                with weather_cols[1]:
+                    precip_base = (
+                        alt.Chart(forecast_daily)
+                        .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
+                        .encode(
+                            x=alt.X("date:T", title="Forecast date"),
+                            y=alt.Y("precipitation_sum:Q", title="Precipitation (mm)"),
+                            color=alt.value("#2563eb"),
+                            tooltip=[
+                                alt.Tooltip("date:T", title="Forecast date"),
+                                alt.Tooltip("precipitation_sum:Q", title="Forecast rainfall (mm)", format=".2f"),
+                                alt.Tooltip("rain_sum:Q", title="Rain (mm)", format=".2f"),
+                                alt.Tooltip("showers_sum:Q", title="Showers (mm)", format=".2f"),
+                                alt.Tooltip("snowfall_sum:Q", title="Snowfall (mm)", format=".2f"),
+                            ],
+                        )
+                    )
+                    precip_layers = [precip_base]
+                    if pd.notna(past_24h_rainfall):
+                        past_24h_chart_df = pd.DataFrame(
+                            [{"rainfall_mm": past_24h_rainfall, "series": "Past 24h current rainfall"}]
+                        )
+                        precip_layers.append(
+                            alt.Chart(past_24h_chart_df)
+                            .mark_rule(color="#f97316", strokeDash=[7, 4], size=2.5)
+                            .encode(
+                                y=alt.Y("rainfall_mm:Q"),
+                                tooltip=[
+                                    alt.Tooltip("series:N", title="Series"),
+                                    alt.Tooltip("rainfall_mm:Q", title="Rainfall (mm)", format=".2f"),
+                                ],
+                            )
+                        )
+                    precip_chart = (
+                        alt.layer(*precip_layers)
+                        .properties(
+                            height=285,
+                            title="7-Day Precipitation Forecast with Past 24h Current Rainfall",
+                        )
+                    )
+                    st.altair_chart(precip_chart, use_container_width=True)
+
+                weather_cols_2 = st.columns([1.0, 1.0])
+                with weather_cols_2[0]:
+                    wind_uv = forecast_daily.melt(
+                        id_vars=["date"],
+                        value_vars=["wind_speed_10m_max", "uv_index_max"],
+                        var_name="metric",
+                        value_name="value",
+                    )
+                    wind_uv_chart = (
+                        alt.Chart(wind_uv)
+                        .mark_line(point=True)
+                        .encode(
+                            x=alt.X("date:T", title="Forecast date"),
+                            y=alt.Y("value:Q", title="Value"),
+                            color=alt.Color(
+                                "metric:N",
+                                title="Metric",
+                                scale=alt.Scale(domain=["wind_speed_10m_max", "uv_index_max"], range=["#0ea5e9", "#f59e0b"]),
+                            ),
+                            tooltip=["date", "metric", "value"],
+                        )
+                        .properties(height=255, title="Wind Speed and UV Index")
+                    )
+                    st.altair_chart(wind_uv_chart, use_container_width=True)
+                with weather_cols_2[1]:
+                    if not hindcast_daily.empty:
+                        hindcast_chart = (
+                            alt.Chart(hindcast_daily)
+                            .mark_area(line=True, opacity=0.3, color="#2563eb")
+                            .encode(
+                                x=alt.X("date:T", title="Hindcast date"),
+                                y=alt.Y("precipitation_sum:Q", title="Daily precipitation (mm)"),
+                                tooltip=["date", "precipitation_sum", "temperature_2m_mean", "wind_speed_10m_max"],
+                            )
+                            .properties(height=255, title="3-Month Hindcast Precipitation")
+                        )
+                        st.altair_chart(hindcast_chart, use_container_width=True)
+
+                st.dataframe(
+                    forecast_daily[
+                        [
+                            "date",
+                            "temperature_2m_min",
+                            "temperature_2m_mean",
+                            "temperature_2m_max",
+                            "precipitation_sum",
+                            "rain_sum",
+                            "showers_sum",
+                            "snowfall_sum",
+                            "wind_speed_10m_max",
+                            "uv_index_max",
+                        ]
+                    ],
+                    use_container_width=True,
+                    hide_index=True,
+                    height=260,
+                )
 
 
 if main_page == "Infographics":
@@ -4366,3 +5204,4 @@ if main_page == "Data & Timeseries":
         link_cols[1].link_button("Open Reservoir GeoJSON", f"{api_base_url}/api/geojson/reservoir-status")
         link_cols[2].link_button("Open Alert GeoJSON", f"{api_base_url}/api/geojson/alerts")
         st.caption("Use the GeoJSON URLs as external layers in ArcGIS Online, QGIS, web maps, Power BI, or the NITA AI platform.")
+
