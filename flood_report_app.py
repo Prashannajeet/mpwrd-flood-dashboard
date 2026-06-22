@@ -2935,6 +2935,22 @@ def render_weather_town_leaflet_map(
         if not tile_key
         else "Satellite basemap, weather overlays, radar animation and MP administrative boundaries are enabled by default."
     )
+    layer_badges_html = (
+        """
+        <span><i style="background:#0f172a"></i>Satellite default</span>
+        <span><i style="background:#94a3b8"></i>Cloud cover default on</span>
+        <span><i style="background:#2563eb"></i>Precipitation default on</span>
+        <span><i style="background:#22c55e"></i>Radar default on</span>
+        <span><i style="background:#111827"></i>MP admin boundary</span>
+        """
+        if tile_key
+        else """
+        <span><i style="background:#0f172a"></i>Satellite default</span>
+        <span><i style="background:#ef4444"></i>Cloud/precip key missing online</span>
+        <span><i style="background:#22c55e"></i>Radar default on</span>
+        <span><i style="background:#111827"></i>MP admin boundary</span>
+        """
+    )
     components.html(
         f"""
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -2999,11 +3015,7 @@ def render_weather_town_leaflet_map(
         <div class="weather-map-title">Weather Forecast Map: MP Towns</div>
         <div class="weather-map-note">Town markers are colored by 7-day rainfall, wind and UV risk. {escape(layer_note)}</div>
         <div class="weather-layer-badges">
-            <span><i style="background:#0f172a"></i>Satellite default</span>
-            <span><i style="background:#94a3b8"></i>Cloud cover default on</span>
-            <span><i style="background:#2563eb"></i>Precipitation default on</span>
-            <span><i style="background:#22c55e"></i>Radar default on</span>
-            <span><i style="background:#111827"></i>MP admin boundary</span>
+            {layer_badges_html}
         </div>
         <div id="{map_id}"></div>
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
