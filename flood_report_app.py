@@ -2958,6 +2958,31 @@ def render_weather_town_leaflet_map(
                 color: #64748b;
                 margin: 0 0 8px;
             }}
+            .weather-layer-badges {{
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                margin: 0 0 8px;
+            }}
+            .weather-layer-badges span {{
+                display: inline-flex;
+                align-items: center;
+                gap: 5px;
+                border: 1px solid #dbe6f4;
+                border-radius: 999px;
+                background: rgba(255,255,255,0.92);
+                color: #334155;
+                font: 700 10px Roboto, Inter, Segoe UI, sans-serif;
+                padding: 4px 8px;
+                letter-spacing: 0.02em;
+                text-transform: uppercase;
+            }}
+            .weather-layer-badges i {{
+                width: 7px;
+                height: 7px;
+                border-radius: 999px;
+                display: inline-block;
+            }}
             .weather-legend {{
                 background: rgba(255,255,255,0.94);
                 border: 1px solid #dbe6f4;
@@ -2973,6 +2998,13 @@ def render_weather_town_leaflet_map(
         </style>
         <div class="weather-map-title">Weather Forecast Map: MP Towns</div>
         <div class="weather-map-note">Town markers are colored by 7-day rainfall, wind and UV risk. {escape(layer_note)}</div>
+        <div class="weather-layer-badges">
+            <span><i style="background:#0f172a"></i>Satellite default</span>
+            <span><i style="background:#94a3b8"></i>Cloud cover default on</span>
+            <span><i style="background:#2563eb"></i>Precipitation default on</span>
+            <span><i style="background:#22c55e"></i>Radar default on</span>
+            <span><i style="background:#111827"></i>MP admin boundary</span>
+        </div>
         <div id="{map_id}"></div>
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <script>
