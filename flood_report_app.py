@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import hmac
 import sys
 import re
 import unicodedata
@@ -22,6 +24,14 @@ DAM_LOCATIONS_CSV = APP_DIR / "dam_locations.csv"
 DAM_SHAPEFILE = APP_DIR / "dam_shapefile" / "Dams_EinC_54_R2.shp"
 GLOFAS_PROJECT_JSON = APP_DIR / "data" / "glofas_mp_project.json"
 GRRR_PROJECT_JSON = APP_DIR / "data" / "grrr_mp_project.json"
+RESERVOIR_CAPACITY_ESTIMATES_CSV = APP_DIR / "data" / "reservoir_capacity_estimates.csv"
+RESERVOIR_CAPACITY_CURVES_CSV = APP_DIR / "data" / "reservoir_capacity_curves.csv"
+RESERVOIR_CAPACITY_CURVES_FABDEM_CSV = APP_DIR / "data" / "reservoir_capacity_curves_fabdem.csv"
+MP_DISTRICTS_GEOJSON = (
+    APP_DIR / "data" / "mp-districts.geojson"
+    if (APP_DIR / "data" / "mp-districts.geojson").exists()
+    else APP_DIR.parent / "nitageoai_platform" / "private_flood_dashboard" / "data" / "mpwrd" / "mp-districts.geojson"
+)
 ARCGIS_EMBED_ITEM_ID = "5f7c5ee24d104d31bc2f85ecba4bd17a"
 ARCGIS_PORTAL_URL = "https://prashannajeet.maps.arcgis.com"
 ARCGIS_EMBED_CENTER = "78.22922399768257,23.48361289099537"
@@ -68,9 +78,18 @@ st.markdown(
             linear-gradient(180deg, #fbfdff 0%, #f4f8ff 45%, #eef8ff 100%);
         font-family: "Roboto", "Inter", "Segoe UI", sans-serif;
     }
+    header[data-testid="stHeader"],
+    [data-testid="stToolbar"],
+    [data-testid="stDecoration"],
+    [data-testid="stStatusWidget"],
+    #MainMenu {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+    }
     .block-container {
         max-width: 1540px;
-        padding-top: 1.35rem;
+        padding-top: 0.35rem;
         padding-bottom: 2rem;
     }
     [data-testid="stSidebar"] {
@@ -244,6 +263,75 @@ st.markdown(
         font-weight: 700;
         margin-top: 0.1rem;
     }
+    .dashboard-topnav-title {
+        margin: 0.75rem 0 0;
+        padding: 0.72rem 0.95rem 0.15rem;
+        border: 1px solid var(--line);
+        border-bottom: 0;
+        border-radius: 8px 8px 0 0;
+        background:
+            linear-gradient(90deg, rgba(37,99,235,0.98), rgba(20,184,166,0.96), rgba(245,158,11,0.92));
+        color: #ffffff;
+        font-size: 0.74rem;
+        font-weight: 850;
+        letter-spacing: 0.08em !important;
+        text-transform: uppercase;
+        box-shadow: 0 14px 30px rgba(15, 23, 42, 0.08);
+    }
+    .dashboard-topnav-active {
+        margin: -0.2rem 0 0.85rem;
+        padding: 0.46rem 0.9rem;
+        border: 1px solid var(--line);
+        border-top: 0;
+        border-radius: 0 0 8px 8px;
+        background: rgba(255,255,255,0.92);
+        color: var(--muted);
+        font-size: 0.76rem;
+    }
+    .dashboard-topnav-active b {
+        color: #0f172a;
+    }
+    div[data-testid="stButton"] button {
+        border-radius: 8px;
+        min-height: 38px;
+        font-weight: 780;
+    }
+    div[data-testid="stButton"] button[kind="primary"],
+    div[data-testid="stButton"] button[data-testid="baseButton-primary"] {
+        background: linear-gradient(135deg, #14b8a6, #2563eb) !important;
+        border-color: transparent !important;
+        color: #ffffff !important;
+        box-shadow: 0 8px 18px rgba(37,99,235,0.20);
+    }
+    div[data-testid="stButton"] button[kind="primary"] p,
+    div[data-testid="stButton"] button[data-testid="baseButton-primary"] p {
+        color: #ffffff !important;
+        font-weight: 900 !important;
+    }
+    .main-nav-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.45rem;
+        background: #172033;
+        border: 1px solid #172033;
+        padding: 0.42rem;
+        margin-bottom: 0;
+    }
+    .main-nav-item {
+        display: block;
+        border-radius: 6px;
+        padding: 0.58rem 0.72rem;
+        color: #e5edf8;
+        font-size: 0.84rem;
+        font-weight: 780;
+        text-align: center;
+        background: rgba(255,255,255,0.06);
+    }
+    .main-nav-item.active {
+        color: #ffffff;
+        background: linear-gradient(135deg, #14b8a6, #2563eb);
+        box-shadow: 0 8px 18px rgba(37,99,235,0.22);
+    }
     @media (max-width: 900px) {
         .masthead-top {
             align-items: flex-start;
@@ -403,6 +491,63 @@ st.markdown(
         padding: 0.85rem;
         box-shadow: 0 16px 34px rgba(15, 23, 42, 0.07);
         margin-bottom: 0.7rem;
+    }
+    .infographic-frame {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background:
+            linear-gradient(135deg, rgba(255,255,255,0.98), rgba(239,246,255,0.94)),
+            linear-gradient(135deg, rgba(37,99,235,0.12), rgba(6,182,212,0.10), rgba(251,113,133,0.08));
+        padding: 1rem;
+        box-shadow: 0 18px 42px rgba(15, 23, 42, 0.07);
+        margin-bottom: 0.85rem;
+    }
+    .infographic-title {
+        color: var(--text);
+        font-size: 1.15rem;
+        font-weight: 820;
+        line-height: 1.2;
+        margin-bottom: 0.22rem;
+    }
+    .infographic-subtitle {
+        color: var(--muted);
+        font-size: 0.82rem;
+        line-height: 1.35;
+        margin-bottom: 0.82rem;
+    }
+    .infographic-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+        gap: 0.72rem;
+    }
+    .infographic-card {
+        border: 1px solid rgba(199, 210, 229, 0.9);
+        border-radius: 8px;
+        background: rgba(255,255,255,0.92);
+        padding: 0.72rem 0.78rem;
+        min-height: 96px;
+    }
+    .infographic-card span {
+        display: block;
+        color: var(--muted);
+        font-size: 0.66rem;
+        font-weight: 760;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    .infographic-card b {
+        display: block;
+        color: var(--text);
+        font-size: 1.45rem;
+        line-height: 1.15;
+        margin-top: 0.28rem;
+    }
+    .infographic-card small {
+        display: block;
+        color: var(--muted);
+        font-size: 0.7rem;
+        line-height: 1.25;
+        margin-top: 0.26rem;
     }
     .glofas-status-grid {
         display: grid;
@@ -2416,6 +2561,237 @@ def dam_status_geojson(frame: pd.DataFrame) -> dict:
     return {"type": "FeatureCollection", "features": features}
 
 
+def round_geojson_coordinates(value: object, places: int = 4) -> object:
+    if isinstance(value, list):
+        if len(value) >= 2 and all(isinstance(item, (int, float)) for item in value[:2]):
+            return [round(float(item), places) if isinstance(item, (int, float)) else item for item in value]
+        return [round_geojson_coordinates(item, places) for item in value]
+    return value
+
+
+@st.cache_data(show_spinner=False)
+def load_light_district_geojson(path: str) -> dict:
+    source = Path(path)
+    if not source.exists():
+        return {"type": "FeatureCollection", "features": []}
+    data = json.loads(source.read_text(encoding="utf-8"))
+    features = []
+    for feature in data.get("features", []):
+        props = feature.get("properties", {}) or {}
+        geometry = feature.get("geometry") or {}
+        features.append(
+            {
+                "type": "Feature",
+                "properties": {
+                    "district": props.get("dist_nm_e") or props.get("district") or props.get("name") or "",
+                    "area_sqkm": props.get("area_sqkm"),
+                },
+                "geometry": {
+                    "type": geometry.get("type"),
+                    "coordinates": round_geojson_coordinates(geometry.get("coordinates", []), places=4),
+                },
+            }
+        )
+    return {"type": "FeatureCollection", "features": features}
+
+
+def render_infographic_leaflet_map(map_frame: pd.DataFrame, district_geojson: dict) -> None:
+    if map_frame.empty or not {"latitude", "longitude"}.issubset(map_frame.columns):
+        return
+
+    alert_colors = {
+        "Critical": "#ef4444",
+        "Warning": "#f59e0b",
+        "Watch": "#eab308",
+        "Normal": "#2563eb",
+    }
+    records = []
+    for row in map_frame.dropna(subset=["latitude", "longitude"]).to_dict("records"):
+        area = pd.to_numeric(pd.Series([row.get("waterbody_area_sqkm")]), errors="coerce").iloc[0]
+        filling = pd.to_numeric(pd.Series([row.get("display_filling")]), errors="coerce").iloc[0]
+        water_level = pd.to_numeric(pd.Series([row.get("water_level_m")]), errors="coerce").iloc[0]
+        frl_gap = pd.to_numeric(pd.Series([row.get("frl_gap_m")]), errors="coerce").iloc[0]
+        alert_level = str(row.get("alert_level") or "Normal")
+        records.append(
+            {
+                "dam_name": str(row.get("dam_name") or row.get("reservoir_name") or "Dam"),
+                "reservoir_name": str(row.get("reservoir_name") or row.get("dam_name") or "Reservoir"),
+                "district": str(row.get("district_label") or row.get("map_district") or row.get("district") or "Unassigned"),
+                "lat": float(row["latitude"]),
+                "lon": float(row["longitude"]),
+                "alert": alert_level,
+                "color": alert_colors.get(alert_level, "#2563eb"),
+                "filling": None if pd.isna(filling) else round(float(filling), 2),
+                "water_level": None if pd.isna(water_level) else round(float(water_level), 2),
+                "frl_gap": None if pd.isna(frl_gap) else round(float(frl_gap), 2),
+                "waterbody_area": 0 if pd.isna(area) else round(float(area), 3),
+            }
+        )
+    if not records:
+        return
+
+    map_id = f"infographic-leaflet-{abs(hash(json.dumps(records[:5], sort_keys=True))) % 1000000}"
+    records_json = json.dumps(records)
+    districts_json = json.dumps(district_geojson)
+    center_lat = sum(item["lat"] for item in records) / len(records)
+    center_lon = sum(item["lon"] for item in records) / len(records)
+
+    components.html(
+        f"""
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <style>
+            #{map_id} {{
+                height: 420px;
+                width: 100%;
+                border: 1px solid #dbe6f4;
+                border-radius: 8px;
+                overflow: hidden;
+                box-shadow: 0 14px 32px rgba(15,23,42,0.08);
+                background: #eef6ff;
+            }}
+            .info-map-title {{
+                font-family: Roboto, Inter, Segoe UI, sans-serif;
+                font-size: 13px;
+                font-weight: 800;
+                color: #172033;
+                margin: 0 0 6px;
+            }}
+            .info-map-note {{
+                font-family: Roboto, Inter, Segoe UI, sans-serif;
+                font-size: 11px;
+                color: #64748b;
+                margin: 0 0 8px;
+            }}
+            .leaflet-tooltip.district-label {{
+                background: rgba(255,255,255,0.72);
+                border: 0;
+                box-shadow: none;
+                color: #334155;
+                font-size: 10px;
+                font-weight: 700;
+                padding: 1px 4px;
+            }}
+            .info-map-legend {{
+                background: rgba(255,255,255,0.94);
+                border: 1px solid #dbe6f4;
+                border-radius: 8px;
+                padding: 8px 10px;
+                color: #334155;
+                font: 11px Roboto, Inter, Segoe UI, sans-serif;
+                line-height: 1.35;
+                box-shadow: 0 8px 20px rgba(15,23,42,0.12);
+            }}
+            .info-map-legend b {{
+                display: block;
+                color: #172033;
+                font-size: 11px;
+                margin-bottom: 4px;
+            }}
+            .info-map-legend span {{
+                display: inline-block;
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                margin-right: 5px;
+            }}
+        </style>
+        <div class="info-map-title">Infographic Map: Dams, Districts and Waterbody Footprint</div>
+        <div class="info-map-note">Leaflet topographic basemap with MP district boundaries, dam FRL alerts, and waterbody-size circles.</div>
+        <div id="{map_id}"></div>
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script>
+        (() => {{
+            const dams = {records_json};
+            const districts = {districts_json};
+            const map = L.map("{map_id}", {{
+                zoomControl: true,
+                attributionControl: true,
+                preferCanvas: true,
+                scrollWheelZoom: false
+            }}).setView([{center_lat:.5f}, {center_lon:.5f}], 7);
+            L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{{z}}/{{y}}/{{x}}", {{
+                maxZoom: 16,
+                attribution: "Tiles &copy; Esri"
+            }}).addTo(map);
+
+            const districtLayer = L.geoJSON(districts, {{
+                style: () => ({{
+                    color: "#334155",
+                    weight: 0.85,
+                    opacity: 0.62,
+                    fillColor: "#dbeafe",
+                    fillOpacity: 0.08
+                }}),
+                onEachFeature: (feature, layer) => {{
+                    const name = feature.properties?.district || "District";
+                    layer.bindTooltip(name, {{ permanent: false, className: "district-label", sticky: true }});
+                }}
+            }}).addTo(map);
+
+            const waterbodyLayer = L.layerGroup().addTo(map);
+            const damLayer = L.layerGroup().addTo(map);
+            dams.forEach((dam) => {{
+                const area = Number(dam.waterbody_area || 0);
+                const waterRadius = Math.max(1300, Math.min(17000, Math.sqrt(area) * 620));
+                if (area > 0) {{
+                    L.circle([dam.lat, dam.lon], {{
+                        radius: waterRadius,
+                        color: "#3160f7",
+                        weight: 1,
+                        opacity: 0.42,
+                        fillColor: "#3160f7",
+                        fillOpacity: 0.13
+                    }}).addTo(waterbodyLayer);
+                }}
+                const marker = L.circleMarker([dam.lat, dam.lon], {{
+                    radius: dam.alert === "Critical" ? 7 : dam.alert === "Warning" ? 6.5 : 5.4,
+                    color: "#ffffff",
+                    weight: 1.4,
+                    fillColor: dam.color,
+                    fillOpacity: 0.95
+                }}).addTo(damLayer);
+                marker.bindTooltip(`${{dam.reservoir_name}} | ${{dam.alert}}`, {{ sticky: true }});
+                marker.bindPopup(`
+                    <b>${{dam.reservoir_name}}</b><br/>
+                    Dam: ${{dam.dam_name}}<br/>
+                    District: ${{dam.district}}<br/>
+                    Alert: <b style="color:${{dam.color}}">${{dam.alert}}</b><br/>
+                    Filling: ${{dam.filling ?? "-"}}%<br/>
+                    Water level: ${{dam.water_level ?? "-"}} m<br/>
+                    FRL gap: ${{dam.frl_gap ?? "-"}} m<br/>
+                    Waterbody: ${{dam.waterbody_area ?? 0}} sq.km
+                `);
+            }});
+
+            const bounds = L.latLngBounds(dams.map((dam) => [dam.lat, dam.lon]));
+            if (bounds.isValid()) map.fitBounds(bounds.pad(0.12), {{ maxZoom: 7 }});
+            L.control.layers(null, {{
+                "District boundary": districtLayer,
+                "Waterbody footprint": waterbodyLayer,
+                "Dam alert points": damLayer
+            }}, {{ collapsed: true }}).addTo(map);
+            const legend = L.control({{ position: "bottomright" }});
+            legend.onAdd = () => {{
+                const div = L.DomUtil.create("div", "info-map-legend");
+                div.innerHTML = `
+                    <b>FRL Alert</b>
+                    <div><span style="background:#ef4444"></span>Critical</div>
+                    <div><span style="background:#f59e0b"></span>Warning</div>
+                    <div><span style="background:#eab308"></span>Watch</div>
+                    <div><span style="background:#2563eb"></span>Normal</div>
+                    <div style="margin-top:5px;color:#64748b">Blue rings show waterbody area</div>
+                `;
+                return div;
+            }};
+            legend.addTo(map);
+            setTimeout(() => map.invalidateSize(), 350);
+        }})();
+        </script>
+        """,
+        height=470,
+    )
+
+
 def speedometer_svg(percent: float | int | None, label: str = "", width: int = 180, height: int = 96) -> str:
     value = 0 if percent is None or pd.isna(percent) else max(0, min(100, float(percent)))
     angle = 180 - (180 * value / 100)
@@ -2495,6 +2871,52 @@ def save_uploaded_pdf(uploaded_file) -> Path:
     return target
 
 
+def get_app_secret(name: str, env_name: str, default: str = "") -> str:
+    value = os.getenv(env_name, "")
+    if value:
+        return value
+    try:
+        return str(st.secrets.get(name, default))
+    except Exception:
+        return default
+
+
+ADMIN_USER = get_app_secret("admin_user", "MPWRD_ADMIN_USER", "admin_nitaai")
+ADMIN_PASSWORD = get_app_secret("admin_password", "MPWRD_ADMIN_PASSWORD", "")
+
+
+def admin_login_panel() -> bool:
+    if "admin_authenticated" not in st.session_state:
+        st.session_state.admin_authenticated = False
+
+    with st.expander("Administration", expanded=not st.session_state.admin_authenticated):
+        if st.session_state.admin_authenticated:
+            st.success(f"Signed in as {ADMIN_USER}")
+            if st.button("Sign out", key="admin_sign_out", use_container_width=True):
+                st.session_state.admin_authenticated = False
+                st.rerun()
+            return True
+
+        st.caption("Upload and data refresh are restricted to administration users.")
+        if not ADMIN_PASSWORD:
+            st.warning("Admin upload is disabled until MPWRD_ADMIN_PASSWORD or Streamlit secret admin_password is configured.")
+            return False
+
+        with st.form("admin_login_form"):
+            username = st.text_input("Admin user", value=ADMIN_USER)
+            password = st.text_input("Password", type="password")
+            submitted = st.form_submit_button("Unlock upload", use_container_width=True)
+        if submitted:
+            user_ok = hmac.compare_digest(username.strip(), ADMIN_USER)
+            password_ok = bool(password and ADMIN_PASSWORD) and hmac.compare_digest(password, ADMIN_PASSWORD)
+            if user_ok and password_ok:
+                st.session_state.admin_authenticated = True
+                st.rerun()
+            else:
+                st.error("Invalid admin credentials.")
+    return bool(st.session_state.admin_authenticated)
+
+
 with st.sidebar:
     st.markdown(
         """
@@ -2511,17 +2933,21 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.header("Report Source")
-    uploaded = st.file_uploader("Upload MP WRD flood report PDF", type=["pdf"])
-    if uploaded is not None:
-        saved_pdf = save_uploaded_pdf(uploaded)
-        output_dir = APP_DIR / f"parsed_{saved_pdf.stem.replace(' ', '_')}"
-        with st.spinner("Parsing uploaded report..."):
-            counts = parse_pdf(saved_pdf, output_dir)
-        st.success(
-            f"Captured {counts['river_observation_rows']} river, "
-            f"{counts['reservoir_observation_rows']} reservoir, "
-            f"{counts['gate_observation_rows']} gate rows."
-        )
+    is_admin = admin_login_panel()
+    if is_admin:
+        uploaded = st.file_uploader("Upload MP WRD flood report PDF", type=["pdf"])
+        if uploaded is not None:
+            saved_pdf = save_uploaded_pdf(uploaded)
+            output_dir = APP_DIR / f"parsed_{saved_pdf.stem.replace(' ', '_')}"
+            with st.spinner("Parsing uploaded report..."):
+                counts = parse_pdf(saved_pdf, output_dir)
+            st.success(
+                f"Captured {counts['river_observation_rows']} river, "
+                f"{counts['reservoir_observation_rows']} reservoir, "
+                f"{counts['gate_observation_rows']} gate rows."
+            )
+    else:
+        st.info("Dashboard is in read-only mode. Sign in as admin to upload PDFs and refresh captured data.")
 
     dirs = parsed_directories()
     if not dirs:
@@ -2538,6 +2964,9 @@ with st.sidebar:
 
 selected_paths = [APP_DIR / name for name in selected_names]
 meta_df, river_master, reservoir_master, rivers, reservoirs, gates = load_time_series(selected_paths)
+capacity_estimates = read_csv(RESERVOIR_CAPACITY_ESTIMATES_CSV)
+capacity_curves = read_csv(RESERVOIR_CAPACITY_CURVES_CSV)
+capacity_curves_fabdem = read_csv(RESERVOIR_CAPACITY_CURVES_FABDEM_CSV)
 
 if not reservoirs.empty:
     reservoirs["frl_gap_m"] = reservoirs["frl_m"] - reservoirs["water_level_m"]
@@ -2662,6 +3091,44 @@ if selected_basins and not dam_locations.empty:
 if selected_gauge_stations:
     river_view = river_view[river_view["gauge_station"].isin(selected_gauge_stations)]
 
+capacity_view = capacity_estimates.copy()
+capacity_curve_view = capacity_curves.copy()
+capacity_curve_fabdem_view = capacity_curves_fabdem.copy()
+if not capacity_view.empty:
+    if selected_districts and "district" in capacity_view:
+        capacity_view = capacity_view[capacity_view["district"].isin(selected_districts)]
+    if selected_districts and not capacity_curve_view.empty and "district" in capacity_curve_view:
+        capacity_curve_view = capacity_curve_view[capacity_curve_view["district"].isin(selected_districts)]
+    if selected_districts and not capacity_curve_fabdem_view.empty and "district" in capacity_curve_fabdem_view:
+        capacity_curve_fabdem_view = capacity_curve_fabdem_view[capacity_curve_fabdem_view["district"].isin(selected_districts)]
+    if effective_reservoir_names and "reservoir_name" in capacity_view:
+        capacity_view = capacity_view[capacity_view["reservoir_name"].isin(effective_reservoir_names)]
+    if effective_reservoir_names and not capacity_curve_view.empty and "reservoir_name" in capacity_curve_view:
+        capacity_curve_view = capacity_curve_view[capacity_curve_view["reservoir_name"].isin(effective_reservoir_names)]
+    if effective_reservoir_names and not capacity_curve_fabdem_view.empty and "reservoir_name" in capacity_curve_fabdem_view:
+        capacity_curve_fabdem_view = capacity_curve_fabdem_view[capacity_curve_fabdem_view["reservoir_name"].isin(effective_reservoir_names)]
+    if selected_basins:
+        basin_mask = pd.Series(False, index=capacity_view.index)
+        if "sub_basin" in capacity_view:
+            basin_mask = basin_mask | capacity_view["sub_basin"].isin(selected_basins)
+        if "major_basin" in capacity_view:
+            basin_mask = basin_mask | capacity_view["major_basin"].isin(selected_basins)
+        capacity_view = capacity_view[basin_mask]
+        if not capacity_curve_view.empty:
+            curve_basin_mask = pd.Series(False, index=capacity_curve_view.index)
+            if "sub_basin" in capacity_curve_view:
+                curve_basin_mask = curve_basin_mask | capacity_curve_view["sub_basin"].isin(selected_basins)
+            if "major_basin" in capacity_curve_view:
+                curve_basin_mask = curve_basin_mask | capacity_curve_view["major_basin"].isin(selected_basins)
+            capacity_curve_view = capacity_curve_view[curve_basin_mask]
+        if not capacity_curve_fabdem_view.empty:
+            curve_fabdem_basin_mask = pd.Series(False, index=capacity_curve_fabdem_view.index)
+            if "sub_basin" in capacity_curve_fabdem_view:
+                curve_fabdem_basin_mask = curve_fabdem_basin_mask | capacity_curve_fabdem_view["sub_basin"].isin(selected_basins)
+            if "major_basin" in capacity_curve_fabdem_view:
+                curve_fabdem_basin_mask = curve_fabdem_basin_mask | capacity_curve_fabdem_view["major_basin"].isin(selected_basins)
+            capacity_curve_fabdem_view = capacity_curve_fabdem_view[curve_fabdem_basin_mask]
+
 latest_rivers = latest_by_asset(river_view, "gauge_station")
 latest_reservoirs = latest_by_asset(reservoir_view, "reservoir_name")
 open_gates = (
@@ -2781,597 +3248,1121 @@ if not map_status.empty:
     if not alert_points.empty and not blink_on:
         alert_points["pulse_color"] = alert_points["pulse_color"].apply(lambda _: [255, 255, 255, 0])
 
-st.subheader("Dam Locations and District Status")
-if map_status.empty:
-    st.info("Dam location shapefile is not available or no dam points match the current filters.")
-else:
-    district_counts = (
-        map_status.assign(district_label=map_status["map_district"].where(map_status["map_district"].str.len() > 0, map_status.get("district", "")))
-        .groupby("district_label", as_index=False)
-        .agg(
-            dams=("dam_name", "nunique"),
-            avg_filling=("display_filling", "mean"),
-            alerts=("alert_level", lambda values: values.isin(["Critical", "Warning"]).sum()),
-        )
-        .sort_values(["dams", "avg_filling"], ascending=False)
-    )
-    latest_map_observed_at = map_status["observed_at"].dropna().max() if "observed_at" in map_status else pd.NaT
-    latest_map_label = time_label(latest_map_observed_at) if pd.notna(latest_map_observed_at) else "not available"
+if "main_dashboard_page" not in st.session_state:
+    st.session_state.main_dashboard_page = "Infographics"
 
-    render_arcgis_dam_timeseries_map(map_status, reservoir_view, latest_map_label)
-    alert_counts = map_status["alert_level"].value_counts().to_dict()
+nav_pages = ["Infographics", "Dam DSS", "Data & Timeseries"]
+st.markdown('<div class="dashboard-topnav-title">Dashboard Navigation</div>', unsafe_allow_html=True)
+nav_cols = st.columns(3)
+for nav_col, page in zip(nav_cols, nav_pages):
+    if nav_col.button(page, key=f"main_nav_{page}", type="primary" if page == st.session_state.main_dashboard_page else "secondary", use_container_width=True):
+        st.session_state.main_dashboard_page = page
+        st.rerun()
+main_page = st.session_state.main_dashboard_page
+st.markdown(f'<div class="dashboard-topnav-active">Active page: <b>{escape(main_page)}</b></div>', unsafe_allow_html=True)
 
-    controls_left, controls_right = st.columns([0.58, 0.42])
-    with controls_left:
-        alert_legend_html = f"""
-        <div class="alert-legend-panel">
-          <b>FRL Alert Legend</b>
-          <div><span class="legend-dot" style="background:#ef4444"></span>Critical: FRL gap <= 0.5 m</div>
-          <div><span class="legend-dot" style="background:#f59e0b"></span>Warning: <= 1.5 m</div>
-          <div><span class="legend-dot" style="background:#eab308"></span>Watch: >= 90% filling</div>
-          <div><span class="legend-dot" style="background:#2563eb"></span>Normal</div>
-          <div style="margin-top:0.35rem;color:#64748b">
-            Current: Critical {alert_counts.get('Critical', 0)}, Warning {alert_counts.get('Warning', 0)}, Watch {alert_counts.get('Watch', 0)}, Normal {alert_counts.get('Normal', 0)}
-          </div>
-        </div>
-        """
-        st.markdown(alert_legend_html, unsafe_allow_html=True)
-        st.markdown('<div class="panel-note">Hover a dam for water level, alert type, filling percent, and trend. Click a dam or map location to load the nearest GEOGLOWS forecast comparison below the map.</div>', unsafe_allow_html=True)
-    with controls_right:
-        selectable_dams = (
-            map_status.assign(select_label=map_status["reservoir_name"].fillna(map_status["dam_name"]))
-            .dropna(subset=["select_label"])
-            .sort_values("select_label")
-        )
-        if not selectable_dams.empty:
-            selected_dam_label = st.selectbox(
-                "Selected dam filling",
-                selectable_dams["select_label"].drop_duplicates().tolist(),
-                key="selected_dam_speedometer",
+if main_page == "Dam DSS":
+    st.subheader("Dam Locations and District Status")
+    if map_status.empty:
+        st.info("Dam location shapefile is not available or no dam points match the current filters.")
+    else:
+        district_counts = (
+            map_status.assign(district_label=map_status["map_district"].where(map_status["map_district"].str.len() > 0, map_status.get("district", "")))
+            .groupby("district_label", as_index=False)
+            .agg(
+                dams=("dam_name", "nunique"),
+                avg_filling=("display_filling", "mean"),
+                alerts=("alert_level", lambda values: values.isin(["Critical", "Warning"]).sum()),
             )
-            selected_dam = selectable_dams[selectable_dams["select_label"] == selected_dam_label].sort_values("observed_at").tail(1)
-            if not selected_dam.empty:
-                selected_row = selected_dam.iloc[0]
-                selected_gauge_html = (
-                    '<div class="selected-dam-panel">'
-                    f'<span class="district-gauge-title">{escape(str(selected_dam_label))}</span>'
-                    f'{speedometer_svg(selected_row.get("display_filling"), "filled")}'
-                    f'<span class="district-gauge-meta">WL {fmt_number(selected_row.get("water_level_m"), " m")} | '
-                    f'FRL gap {fmt_number(selected_row.get("frl_gap_m"), " m")} | '
-                    f'{escape(str(selected_row.get("alert_level", "Normal")))} alert</span>'
+            .sort_values(["dams", "avg_filling"], ascending=False)
+        )
+        latest_map_observed_at = map_status["observed_at"].dropna().max() if "observed_at" in map_status else pd.NaT
+        latest_map_label = time_label(latest_map_observed_at) if pd.notna(latest_map_observed_at) else "not available"
+
+        render_arcgis_dam_timeseries_map(map_status, reservoir_view, latest_map_label)
+        alert_counts = map_status["alert_level"].value_counts().to_dict()
+
+        controls_left, controls_right = st.columns([0.58, 0.42])
+        with controls_left:
+            alert_legend_html = f"""
+            <div class="alert-legend-panel">
+              <b>FRL Alert Legend</b>
+              <div><span class="legend-dot" style="background:#ef4444"></span>Critical: FRL gap <= 0.5 m</div>
+              <div><span class="legend-dot" style="background:#f59e0b"></span>Warning: <= 1.5 m</div>
+              <div><span class="legend-dot" style="background:#eab308"></span>Watch: >= 90% filling</div>
+              <div><span class="legend-dot" style="background:#2563eb"></span>Normal</div>
+              <div style="margin-top:0.35rem;color:#64748b">
+                Current: Critical {alert_counts.get('Critical', 0)}, Warning {alert_counts.get('Warning', 0)}, Watch {alert_counts.get('Watch', 0)}, Normal {alert_counts.get('Normal', 0)}
+              </div>
+            </div>
+            """
+            st.markdown(alert_legend_html, unsafe_allow_html=True)
+            st.markdown('<div class="panel-note">Hover a dam for water level, alert type, filling percent, and trend. Click a dam or map location to load the nearest GEOGLOWS forecast comparison below the map.</div>', unsafe_allow_html=True)
+        show_selected_dam_accelerometer = True
+        show_district_accelerometers = False
+        if show_selected_dam_accelerometer:
+            with controls_right:
+                selectable_dams = (
+                    map_status.assign(select_label=map_status["reservoir_name"].fillna(map_status["dam_name"]))
+                    .dropna(subset=["select_label"])
+                    .sort_values("select_label")
+                )
+                if not selectable_dams.empty:
+                    selected_dam_label = st.selectbox(
+                        "Selected dam filling",
+                        selectable_dams["select_label"].drop_duplicates().tolist(),
+                        key="selected_dam_speedometer",
+                    )
+                    selected_dam = selectable_dams[selectable_dams["select_label"] == selected_dam_label].sort_values("observed_at").tail(1)
+                    if not selected_dam.empty:
+                        selected_row = selected_dam.iloc[0]
+                        selected_gauge_html = (
+                            '<div class="selected-dam-panel">'
+                            f'<span class="district-gauge-title">{escape(str(selected_dam_label))}</span>'
+                            f'{speedometer_svg(selected_row.get("display_filling"), "filled")}'
+                            f'<span class="district-gauge-meta">WL {fmt_number(selected_row.get("water_level_m"), " m")} | '
+                            f'FRL gap {fmt_number(selected_row.get("frl_gap_m"), " m")} | '
+                            f'{escape(str(selected_row.get("alert_level", "Normal")))} alert</span>'
+                            '</div>'
+                        )
+                        st.markdown(selected_gauge_html, unsafe_allow_html=True)
+
+        if show_district_accelerometers:
+            strip_html = '<div class="district-strip">'
+            for row in district_counts.head(10).itertuples(index=False):
+                gauge_label = f"{int(row.dams)} dams"
+                strip_html += (
+                    '<div class="district-gauge-card">'
+                    f'<span class="district-gauge-title">{escape(str(row.district_label))}</span>'
+                    f'{speedometer_svg(row.avg_filling, gauge_label)}'
+                    f'<span class="district-gauge-meta">Avg filling {row.avg_filling:,.1f}% | alerts {int(row.alerts)}</span>'
                     '</div>'
                 )
-                st.markdown(selected_gauge_html, unsafe_allow_html=True)
+            strip_html += "</div>"
+            st.markdown(strip_html, unsafe_allow_html=True)
 
-    strip_html = '<div class="district-strip">'
-    for row in district_counts.head(10).itertuples(index=False):
-        gauge_label = f"{int(row.dams)} dams"
-        strip_html += (
-            '<div class="district-gauge-card">'
-            f'<span class="district-gauge-title">{escape(str(row.district_label))}</span>'
-            f'{speedometer_svg(row.avg_filling, gauge_label)}'
-            f'<span class="district-gauge-meta">Avg filling {row.avg_filling:,.1f}% | alerts {int(row.alerts)}</span>'
-            '</div>'
-        )
-    strip_html += "</div>"
-    st.markdown(strip_html, unsafe_allow_html=True)
-
-    gauge_districts = sorted(map_status["map_district"].dropna().unique())
-    selected_gauge_district = st.selectbox(
-        "Dam filling gauges by district",
-        ["Top filled dams"] + gauge_districts,
-        key="dam_gauge_district",
-    )
-    gauge_base = map_status.dropna(subset=["reservoir_name"]).copy()
-    if selected_gauge_district != "Top filled dams":
-        gauge_base = gauge_base[gauge_base["map_district"] == selected_gauge_district]
-    gauge_source = gauge_base.sort_values("display_filling", ascending=False).head(16)[
-        ["dam_name", "reservoir_name", "map_district", "display_filling", "frl_gap_m", "alert_level"]
-    ]
-    if not gauge_source.empty:
-        gauge_chart = (
-            alt.Chart(gauge_source)
-            .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
-            .encode(
-                x=alt.X("display_filling:Q", title="Filling %", scale=alt.Scale(domain=[0, 100])),
-                y=alt.Y("dam_name:N", sort="-x", title="Dam"),
-                color=alt.Color(
-                    "display_filling:Q",
-                    scale=alt.Scale(domain=[0, 45, 75, 100], range=["#2563eb", "#06b6d4", "#f59e0b", "#ef4444"]),
-                    legend=None,
-                ),
-                tooltip=["dam_name", "reservoir_name", "map_district", "display_filling", "frl_gap_m", "alert_level"],
+        show_dam_filling_gauge_chart = False
+        if show_dam_filling_gauge_chart:
+            gauge_districts = sorted(map_status["map_district"].dropna().unique())
+            selected_gauge_district = st.selectbox(
+                "Dam filling gauges by district",
+                ["Top filled dams"] + gauge_districts,
+                key="dam_gauge_district",
             )
-            .properties(height=220)
-        )
-        st.altair_chart(gauge_chart, use_container_width=True)
-
-    st.subheader("GloFAS Forecast Context for Madhya Pradesh")
-    dynamic_mode = forecast_data_mode == "Full dynamic mode"
-    if dynamic_mode:
-        glofas_nodes, glofas_error = fetch_dynamic_nodes(glofas_endpoint, "GloFAS")
-    else:
-        glofas_nodes, glofas_error = build_mp_glofas_nodes(map_status, reservoir_view, forecast_days=10), None
-    if not glofas_nodes:
-        if dynamic_mode and glofas_error == "endpoint_not_configured":
-            st.warning("Full dynamic GloFAS mode is active. Configure a live/preprocessed GloFAS endpoint in the sidebar to show forecast nodes.")
-        elif dynamic_mode and glofas_error:
-            st.error(glofas_error)
-        else:
-            st.info("No mapped MP basin locations are available for GloFAS context under the current filters.")
-    else:
-        live_mode = dynamic_mode
-        risk_counts = pd.Series([node["risk_band"] for node in glofas_nodes]).value_counts().to_dict()
-        highest_node = sorted(
-            glofas_nodes,
-            key=lambda item: {"Danger": 0, "Flood": 1, "Watch": 2, "Normal": 3}.get(item["risk_band"], 4),
-        )[0]
-        st.markdown(
-            f"""
-            <div class="glofas-status-grid">
-              <div class="glofas-card"><span>Source Mode</span><b>{'Full dynamic endpoint' if live_mode else 'Fallback/demo mode'}</b></div>
-              <div class="glofas-card"><span>MP Basin Nodes</span><b>{len(glofas_nodes)}</b></div>
-              <div class="glofas-card"><span>Highest Risk</span><b style="color:{risk_color(highest_node['risk_band'])}">{escape(highest_node['risk_band'])}</b></div>
-              <div class="glofas-card"><span>Forecast Lead</span><b>10 days</b></div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        if live_mode:
-            st.caption("Full dynamic GloFAS mode is active. Rows are read from the configured endpoint and normalized into the dashboard schema.")
-        else:
-            st.caption("Fallback/demo mode is active. Switch Forecast Mode to Full dynamic mode and configure an endpoint to disable fallback data.")
-
-        glofas_labels = [f"{node['basin']} | {node['risk_band']}" for node in glofas_nodes]
-        selected_glofas_label = st.selectbox("GloFAS MP basin node", glofas_labels, key="selected_glofas_node")
-        selected_glofas = glofas_nodes[glofas_labels.index(selected_glofas_label)]
-        glofas_rows = pd.DataFrame(selected_glofas["series"])
-        for column in ["chirps_hindcast_cms", "glofas_p10_cms", "glofas_p50_cms", "glofas_p90_cms", "reservoir_attenuated_cms", "return_period"]:
-            if column in glofas_rows:
-                glofas_rows[column] = pd.to_numeric(glofas_rows[column], errors="coerce")
-        glofas_rows["date"] = pd.to_datetime(glofas_rows["date"], errors="coerce")
-        thresholds = selected_glofas["thresholds"]
-        threshold_df = pd.DataFrame(
-            [
-                {"level": "Watch", "flow_cms": thresholds["watch_cms"]},
-                {"level": "Flood", "flow_cms": thresholds["flood_cms"]},
-                {"level": "Danger", "flow_cms": thresholds["danger_cms"]},
+            gauge_base = map_status.dropna(subset=["reservoir_name"]).copy()
+            if selected_gauge_district != "Top filled dams":
+                gauge_base = gauge_base[gauge_base["map_district"] == selected_gauge_district]
+            gauge_source = gauge_base.sort_values("display_filling", ascending=False).head(16)[
+                ["dam_name", "reservoir_name", "map_district", "display_filling", "frl_gap_m", "alert_level"]
             ]
-        )
-        glofas_left, glofas_right = st.columns([1.2, 0.8])
-        with glofas_left:
-            ensemble_base = glofas_rows.melt(
-                id_vars=["date", "period"],
-                value_vars=["glofas_p10_cms", "glofas_p50_cms", "glofas_p90_cms", "reservoir_attenuated_cms"],
-                var_name="series",
-                value_name="flow_cms",
-            ).dropna(subset=["flow_cms"])
-            line_chart = (
-                alt.Chart(ensemble_base)
-                .mark_line(point=True)
-                .encode(
-                    x=alt.X("date:T", title="Forecast date"),
-                    y=alt.Y("flow_cms:Q", title="Discharge (cumecs)"),
-                    color=alt.Color(
-                        "series:N",
-                        title="GloFAS series",
-                        scale=alt.Scale(
-                            domain=["glofas_p10_cms", "glofas_p50_cms", "glofas_p90_cms", "reservoir_attenuated_cms"],
-                            range=["#60a5fa", "#dc2626", "#7c3aed", "#0f766e"],
+            if not gauge_source.empty:
+                gauge_chart = (
+                    alt.Chart(gauge_source)
+                    .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
+                    .encode(
+                        x=alt.X("display_filling:Q", title="Filling %", scale=alt.Scale(domain=[0, 100])),
+                        y=alt.Y("dam_name:N", sort="-x", title="Dam"),
+                        color=alt.Color(
+                            "display_filling:Q",
+                            scale=alt.Scale(domain=[0, 45, 75, 100], range=["#2563eb", "#06b6d4", "#f59e0b", "#ef4444"]),
+                            legend=None,
                         ),
-                    ),
-                    strokeDash=alt.StrokeDash("period:N", title="Period"),
-                    tooltip=["date", "period", "series", "flow_cms"],
+                        tooltip=["dam_name", "reservoir_name", "map_district", "display_filling", "frl_gap_m", "alert_level"],
+                    )
+                    .properties(height=220)
                 )
-                .properties(height=285)
-            )
-            rules = (
-                alt.Chart(threshold_df)
-                .mark_rule(strokeDash=[6, 4])
-                .encode(
-                    y="flow_cms:Q",
-                    color=alt.Color(
-                        "level:N",
-                        scale=alt.Scale(domain=["Watch", "Flood", "Danger"], range=["#f59e0b", "#f97316", "#dc2626"]),
-                        title="Threshold",
-                    ),
-                    tooltip=["level", "flow_cms"],
-                )
-            )
-            st.altair_chart(line_chart + rules, use_container_width=True)
-        with glofas_right:
+                st.altair_chart(gauge_chart, use_container_width=True)
+
+        st.subheader("GloFAS Forecast")
+        dynamic_mode = forecast_data_mode == "Full dynamic mode"
+        if dynamic_mode:
+            glofas_nodes, glofas_error = fetch_dynamic_nodes(glofas_endpoint, "GloFAS")
+        else:
+            glofas_nodes, glofas_error = build_mp_glofas_nodes(map_status, reservoir_view, forecast_days=10), None
+        if not glofas_nodes:
+            if dynamic_mode and glofas_error == "endpoint_not_configured":
+                st.warning("Full dynamic GloFAS mode is active. Configure a live/preprocessed GloFAS endpoint in the sidebar to show forecast nodes.")
+            elif dynamic_mode and glofas_error:
+                st.error(glofas_error)
+            else:
+                st.info("No mapped MP basin locations are available for GloFAS context under the current filters.")
+        else:
+            live_mode = dynamic_mode
+            risk_counts = pd.Series([node["risk_band"] for node in glofas_nodes]).value_counts().to_dict()
+            highest_node = sorted(
+                glofas_nodes,
+                key=lambda item: {"Danger": 0, "Flood": 1, "Watch": 2, "Normal": 3}.get(item["risk_band"], 4),
+            )[0]
             st.markdown(
                 f"""
-                <div class="selected-dam-panel">
-                    <span class="district-gauge-title">{escape(selected_glofas['basin'])}</span>
-                    <span class="district-gauge-meta">Risk band: <b style="color:{risk_color(selected_glofas['risk_band'])}">{escape(selected_glofas['risk_band'])}</b></span>
-                    <span class="district-gauge-meta">Dams represented: {selected_glofas['dam_count']} | Avg filling {selected_glofas['avg_filling']:.1f}%</span>
-                    <span class="district-gauge-meta">Storage context: {selected_glofas['storage_mcm']:,.0f} MCM | Location {selected_glofas['latitude']:.3f}, {selected_glofas['longitude']:.3f}</span>
-                    <span class="district-gauge-meta">Watch {thresholds['watch_cms']:,.0f}, Flood {thresholds['flood_cms']:,.0f}, Danger {thresholds['danger_cms']:,.0f} cumecs</span>
+                <div class="glofas-status-grid">
+                  <div class="glofas-card"><span>Source Mode</span><b>{'Full dynamic endpoint' if live_mode else 'Fallback/demo mode'}</b></div>
+                  <div class="glofas-card"><span>MP Basin Nodes</span><b>{len(glofas_nodes)}</b></div>
+                  <div class="glofas-card"><span>Highest Risk</span><b style="color:{risk_color(highest_node['risk_band'])}">{escape(highest_node['risk_band'])}</b></div>
+                  <div class="glofas-card"><span>Forecast Lead</span><b>10 days</b></div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-            display_cols = [
-                "date",
-                "period",
-                "glofas_p10_cms",
-                "glofas_p50_cms",
-                "glofas_p90_cms",
-                "reservoir_attenuated_cms",
-                "return_period",
-            ]
-            display_rows = glofas_rows[display_cols].copy()
-            display_rows["return_period"] = display_rows["return_period"].apply(return_period_label)
-            st.dataframe(display_rows, use_container_width=True, hide_index=True, height=285)
+            if live_mode:
+                st.caption("Full dynamic GloFAS mode is active. Rows are read from the configured endpoint and normalized into the dashboard schema.")
+            else:
+                st.caption("Fallback/demo mode is active. Switch Forecast Mode to Full dynamic mode and configure an endpoint to disable fallback data.")
 
-    st.subheader("Google Runoff Reanalysis & Reforecast for Madhya Pradesh")
-    if dynamic_mode:
-        grrr_nodes, grrr_error = fetch_dynamic_nodes(grrr_endpoint, "GRRR")
-    else:
-        grrr_nodes, grrr_error = build_mp_grrr_nodes(map_status, reservoir_view, forecast_days=7), None
-    if not grrr_nodes:
-        if dynamic_mode and grrr_error == "endpoint_not_configured":
-            st.warning("Full dynamic GRRR mode is active. Configure a published GRRR JSON/API endpoint in the sidebar to show runoff nodes.")
-        elif dynamic_mode and grrr_error:
-            st.error(grrr_error)
-        else:
-            st.info("No mapped MP basin locations are available for GRRR runoff context under the current filters.")
-    else:
-        grrr_live_mode = dynamic_mode
-        grrr_highest = sorted(
-            grrr_nodes,
-            key=lambda item: {"Danger": 0, "Flood": 1, "Watch": 2, "Normal": 3}.get(item["risk_band"], 4),
-        )[0]
-        st.markdown(
-            f"""
-            <div class="glofas-status-grid">
-              <div class="glofas-card"><span>Source Mode</span><b>{'Full dynamic endpoint' if grrr_live_mode else 'Fallback/demo mode'}</b></div>
-              <div class="glofas-card"><span>MP Runoff Nodes</span><b>{len(grrr_nodes)}</b></div>
-              <div class="glofas-card"><span>Highest Risk</span><b style="color:{risk_color(grrr_highest['risk_band'])}">{escape(grrr_highest['risk_band'])}</b></div>
-              <div class="glofas-card"><span>Reforecast Lead</span><b>7 days</b></div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        if grrr_live_mode:
-            st.caption("Full dynamic GRRR mode is active. Rows are read from the configured endpoint and normalized into the dashboard schema.")
-        else:
-            st.caption("Fallback/demo mode is active. Switch Forecast Mode to Full dynamic mode and configure an endpoint to disable fallback data.")
-
-        grrr_labels = [f"{node['basin']} | {node['risk_band']}" for node in grrr_nodes]
-        selected_grrr_label = st.selectbox("GRRR MP runoff node", grrr_labels, key="selected_grrr_node")
-        selected_grrr = grrr_nodes[grrr_labels.index(selected_grrr_label)]
-        grrr_rows = pd.DataFrame(selected_grrr["series"])
-        for column in ["runoff_mm", "reanalysis_discharge_cms", "reforecast_p50_cms", "reforecast_p90_cms", "reservoir_adjusted_cms"]:
-            grrr_rows[column] = pd.to_numeric(grrr_rows[column], errors="coerce")
-        grrr_rows["date"] = pd.to_datetime(grrr_rows["date"], errors="coerce")
-        grrr_thresholds = selected_grrr["thresholds"]
-        grrr_threshold_df = pd.DataFrame(
-            [
-                {"level": "Watch", "flow_cms": grrr_thresholds["watch_cms"]},
-                {"level": "Flood", "flow_cms": grrr_thresholds["flood_cms"]},
-                {"level": "Danger", "flow_cms": grrr_thresholds["danger_cms"]},
-            ]
-        )
-        grrr_left, grrr_right = st.columns([1.2, 0.8])
-        with grrr_left:
-            grrr_long = grrr_rows.melt(
-                id_vars=["date", "period"],
-                value_vars=["reanalysis_discharge_cms", "reforecast_p50_cms", "reforecast_p90_cms", "reservoir_adjusted_cms"],
-                var_name="series",
-                value_name="flow_cms",
-            ).dropna(subset=["flow_cms"])
-            grrr_chart = (
-                alt.Chart(grrr_long)
-                .mark_line(point=True)
-                .encode(
-                    x=alt.X("date:T", title="Date"),
-                    y=alt.Y("flow_cms:Q", title="Runoff-derived discharge (cumecs)"),
-                    color=alt.Color(
-                        "series:N",
-                        title="GRRR series",
-                        scale=alt.Scale(
-                            domain=["reanalysis_discharge_cms", "reforecast_p50_cms", "reforecast_p90_cms", "reservoir_adjusted_cms"],
-                            range=["#0ea5e9", "#111827", "#dc2626", "#0f766e"],
+            glofas_labels = [f"{node['basin']} | {node['risk_band']}" for node in glofas_nodes]
+            selected_glofas_label = st.selectbox("GloFAS MP basin node", glofas_labels, key="selected_glofas_node")
+            selected_glofas = glofas_nodes[glofas_labels.index(selected_glofas_label)]
+            glofas_rows = pd.DataFrame(selected_glofas["series"])
+            for column in ["chirps_hindcast_cms", "glofas_p10_cms", "glofas_p50_cms", "glofas_p90_cms", "reservoir_attenuated_cms", "return_period"]:
+                if column in glofas_rows:
+                    glofas_rows[column] = pd.to_numeric(glofas_rows[column], errors="coerce")
+            glofas_rows["date"] = pd.to_datetime(glofas_rows["date"], errors="coerce")
+            thresholds = selected_glofas["thresholds"]
+            threshold_df = pd.DataFrame(
+                [
+                    {"level": "Watch", "flow_cms": thresholds["watch_cms"]},
+                    {"level": "Flood", "flow_cms": thresholds["flood_cms"]},
+                    {"level": "Danger", "flow_cms": thresholds["danger_cms"]},
+                ]
+            )
+            glofas_left, glofas_right = st.columns([1.2, 0.8])
+            with glofas_left:
+                ensemble_base = glofas_rows.melt(
+                    id_vars=["date", "period"],
+                    value_vars=["glofas_p10_cms", "glofas_p50_cms", "glofas_p90_cms", "reservoir_attenuated_cms"],
+                    var_name="series",
+                    value_name="flow_cms",
+                ).dropna(subset=["flow_cms"])
+                line_chart = (
+                    alt.Chart(ensemble_base)
+                    .mark_line(point=True)
+                    .encode(
+                        x=alt.X("date:T", title="Forecast date"),
+                        y=alt.Y("flow_cms:Q", title="Discharge (cumecs)"),
+                        color=alt.Color(
+                            "series:N",
+                            title="GloFAS series",
+                            scale=alt.Scale(
+                                domain=["glofas_p10_cms", "glofas_p50_cms", "glofas_p90_cms", "reservoir_attenuated_cms"],
+                                range=["#60a5fa", "#dc2626", "#7c3aed", "#0f766e"],
+                            ),
                         ),
-                    ),
-                    strokeDash=alt.StrokeDash("period:N", title="Mode"),
-                    tooltip=["date", "period", "series", "flow_cms"],
+                        strokeDash=alt.StrokeDash("period:N", title="Period"),
+                        tooltip=["date", "period", "series", "flow_cms"],
+                    )
+                    .properties(height=285)
                 )
-                .properties(height=285)
-            )
-            grrr_rules = (
-                alt.Chart(grrr_threshold_df)
-                .mark_rule(strokeDash=[6, 4])
-                .encode(
-                    y="flow_cms:Q",
-                    color=alt.Color(
-                        "level:N",
-                        scale=alt.Scale(domain=["Watch", "Flood", "Danger"], range=["#f59e0b", "#f97316", "#dc2626"]),
-                        title="Threshold",
-                    ),
-                    tooltip=["level", "flow_cms"],
+                rules = (
+                    alt.Chart(threshold_df)
+                    .mark_rule(strokeDash=[6, 4])
+                    .encode(
+                        y="flow_cms:Q",
+                        color=alt.Color(
+                            "level:N",
+                            scale=alt.Scale(domain=["Watch", "Flood", "Danger"], range=["#f59e0b", "#f97316", "#dc2626"]),
+                            title="Threshold",
+                        ),
+                        tooltip=["level", "flow_cms"],
+                    )
                 )
-            )
-            st.altair_chart(grrr_chart + grrr_rules, use_container_width=True)
-        with grrr_right:
+                st.altair_chart(line_chart + rules, use_container_width=True)
+            with glofas_right:
+                st.markdown(
+                    f"""
+                    <div class="selected-dam-panel">
+                        <span class="district-gauge-title">{escape(selected_glofas['basin'])}</span>
+                        <span class="district-gauge-meta">Risk band: <b style="color:{risk_color(selected_glofas['risk_band'])}">{escape(selected_glofas['risk_band'])}</b></span>
+                        <span class="district-gauge-meta">Dams represented: {selected_glofas['dam_count']} | Avg filling {selected_glofas['avg_filling']:.1f}%</span>
+                        <span class="district-gauge-meta">Storage context: {selected_glofas['storage_mcm']:,.0f} MCM | Location {selected_glofas['latitude']:.3f}, {selected_glofas['longitude']:.3f}</span>
+                        <span class="district-gauge-meta">Watch {thresholds['watch_cms']:,.0f}, Flood {thresholds['flood_cms']:,.0f}, Danger {thresholds['danger_cms']:,.0f} cumecs</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                display_cols = [
+                    "date",
+                    "period",
+                    "glofas_p10_cms",
+                    "glofas_p50_cms",
+                    "glofas_p90_cms",
+                    "reservoir_attenuated_cms",
+                    "return_period",
+                ]
+                display_rows = glofas_rows[display_cols].copy()
+                display_rows["return_period"] = display_rows["return_period"].apply(return_period_label)
+                st.dataframe(display_rows, use_container_width=True, hide_index=True, height=285)
+
+        st.subheader("GRRR for Basins")
+        if dynamic_mode:
+            grrr_nodes, grrr_error = fetch_dynamic_nodes(grrr_endpoint, "GRRR")
+        else:
+            grrr_nodes, grrr_error = build_mp_grrr_nodes(map_status, reservoir_view, forecast_days=7), None
+        if not grrr_nodes:
+            if dynamic_mode and grrr_error == "endpoint_not_configured":
+                st.warning("Full dynamic GRRR mode is active. Configure a published GRRR JSON/API endpoint in the sidebar to show runoff nodes.")
+            elif dynamic_mode and grrr_error:
+                st.error(grrr_error)
+            else:
+                st.info("No mapped MP basin locations are available for GRRR runoff context under the current filters.")
+        else:
+            grrr_live_mode = dynamic_mode
+            grrr_highest = sorted(
+                grrr_nodes,
+                key=lambda item: {"Danger": 0, "Flood": 1, "Watch": 2, "Normal": 3}.get(item["risk_band"], 4),
+            )[0]
             st.markdown(
                 f"""
-                <div class="selected-dam-panel">
-                    <span class="district-gauge-title">{escape(selected_grrr['basin'])}</span>
-                    <span class="district-gauge-meta">Risk band: <b style="color:{risk_color(selected_grrr['risk_band'])}">{escape(selected_grrr['risk_band'])}</b></span>
-                    <span class="district-gauge-meta">Dams represented: {selected_grrr['dam_count']} | Rainfall signal {selected_grrr['avg_rainfall_mm']:.1f} mm</span>
-                    <span class="district-gauge-meta">Catchment proxy: {selected_grrr['catchment_proxy_sq_km']:,.0f} sq.km | Location {selected_grrr['latitude']:.3f}, {selected_grrr['longitude']:.3f}</span>
-                    <span class="district-gauge-meta">Watch {grrr_thresholds['watch_cms']:,.0f}, Flood {grrr_thresholds['flood_cms']:,.0f}, Danger {grrr_thresholds['danger_cms']:,.0f} cumecs</span>
+                <div class="glofas-status-grid">
+                  <div class="glofas-card"><span>Source Mode</span><b>{'Full dynamic endpoint' if grrr_live_mode else 'Fallback/demo mode'}</b></div>
+                  <div class="glofas-card"><span>MP Runoff Nodes</span><b>{len(grrr_nodes)}</b></div>
+                  <div class="glofas-card"><span>Highest Risk</span><b style="color:{risk_color(grrr_highest['risk_band'])}">{escape(grrr_highest['risk_band'])}</b></div>
+                  <div class="glofas-card"><span>Reforecast Lead</span><b>7 days</b></div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-            st.dataframe(grrr_rows, use_container_width=True, hide_index=True, height=285)
+            if grrr_live_mode:
+                st.caption("Full dynamic GRRR mode is active. Rows are read from the configured endpoint and normalized into the dashboard schema.")
+            else:
+                st.caption("Fallback/demo mode is active. Switch Forecast Mode to Full dynamic mode and configure an endpoint to disable fallback data.")
 
-st.subheader("Reservoir Trends and Latest Ranking")
-if reservoir_view.empty:
-    st.info("No reservoir observations match the current filters.")
-else:
-    metric_label = st.selectbox("Reservoir metric", list(RESERVOIR_METRICS), index=0)
-    metric_col, metric_unit = RESERVOIR_METRICS[metric_label]
-    reservoir_options = sorted(reservoir_view["reservoir_name"].dropna().unique())
-    default_reservoirs = [name for name in ["Bansagar", "Gandhisagar", "Kolar", "Tawa"] if name in reservoir_options]
-    selected_reservoirs = st.multiselect(
-        "Reservoirs",
-        reservoir_options,
-        default=default_reservoirs or reservoir_options[: min(6, len(reservoir_options))],
-    )
-    trend_df = reservoir_view[reservoir_view["reservoir_name"].isin(selected_reservoirs)].dropna(subset=[metric_col])
-    latest_time = max(reservoir_view["observed_at"].dropna())
-    snapshot = reservoir_view[reservoir_view["observed_at"] == latest_time].dropna(subset=[metric_col])
-    rank_count = st.slider("Reservoirs in latest ranking", min_value=8, max_value=30, value=16, step=4)
-    rank_df = snapshot.nlargest(rank_count, metric_col)
-    res_left, res_right = st.columns([1.2, 0.8])
-    with res_left:
-        trend_chart = (
-            alt.Chart(trend_df)
-            .mark_line(point=True)
-            .encode(
-                x=alt.X("observed_at:T", title="Observation time"),
-                y=alt.Y(f"{metric_col}:Q", title=f"{metric_label} ({metric_unit})"),
-                color=alt.Color("reservoir_name:N", title="Reservoir"),
-                tooltip=["reservoir_name", "district", "observed_at", metric_col, "report_id"],
+            grrr_labels = [f"{node['basin']} | {node['risk_band']}" for node in grrr_nodes]
+            selected_grrr_label = st.selectbox("GRRR MP runoff node", grrr_labels, key="selected_grrr_node")
+            selected_grrr = grrr_nodes[grrr_labels.index(selected_grrr_label)]
+            grrr_rows = pd.DataFrame(selected_grrr["series"])
+            for column in ["runoff_mm", "reanalysis_discharge_cms", "reforecast_p50_cms", "reforecast_p90_cms", "reservoir_adjusted_cms"]:
+                grrr_rows[column] = pd.to_numeric(grrr_rows[column], errors="coerce")
+            grrr_rows["date"] = pd.to_datetime(grrr_rows["date"], errors="coerce")
+            grrr_thresholds = selected_grrr["thresholds"]
+            grrr_threshold_df = pd.DataFrame(
+                [
+                    {"level": "Watch", "flow_cms": grrr_thresholds["watch_cms"]},
+                    {"level": "Flood", "flow_cms": grrr_thresholds["flood_cms"]},
+                    {"level": "Danger", "flow_cms": grrr_thresholds["danger_cms"]},
+                ]
             )
-            .properties(height=300)
-        )
-        st.altair_chart(trend_chart, use_container_width=True)
-    with res_right:
-        st.caption(f"Latest Time Slot Ranking: {time_label(latest_time)}")
-        rank_chart = reservoir_snapshot_chart(
-            rank_df,
-            metric_col,
-            metric_label,
-            metric_unit,
-            "Bar",
-            max(280, rank_count * 17),
-        )
-        st.altair_chart(rank_chart, use_container_width=True)
+            grrr_left, grrr_right = st.columns([1.2, 0.8])
+            with grrr_left:
+                grrr_long = grrr_rows.melt(
+                    id_vars=["date", "period"],
+                    value_vars=["reanalysis_discharge_cms", "reforecast_p50_cms", "reforecast_p90_cms", "reservoir_adjusted_cms"],
+                    var_name="series",
+                    value_name="flow_cms",
+                ).dropna(subset=["flow_cms"])
+                grrr_chart = (
+                    alt.Chart(grrr_long)
+                    .mark_line(point=True)
+                    .encode(
+                        x=alt.X("date:T", title="Date"),
+                        y=alt.Y("flow_cms:Q", title="Runoff-derived discharge (cumecs)"),
+                        color=alt.Color(
+                            "series:N",
+                            title="GRRR series",
+                            scale=alt.Scale(
+                                domain=["reanalysis_discharge_cms", "reforecast_p50_cms", "reforecast_p90_cms", "reservoir_adjusted_cms"],
+                                range=["#0ea5e9", "#111827", "#dc2626", "#0f766e"],
+                            ),
+                        ),
+                        strokeDash=alt.StrokeDash("period:N", title="Mode"),
+                        tooltip=["date", "period", "series", "flow_cms"],
+                    )
+                    .properties(height=285)
+                )
+                grrr_rules = (
+                    alt.Chart(grrr_threshold_df)
+                    .mark_rule(strokeDash=[6, 4])
+                    .encode(
+                        y="flow_cms:Q",
+                        color=alt.Color(
+                            "level:N",
+                            scale=alt.Scale(domain=["Watch", "Flood", "Danger"], range=["#f59e0b", "#f97316", "#dc2626"]),
+                            title="Threshold",
+                        ),
+                        tooltip=["level", "flow_cms"],
+                    )
+                )
+                st.altair_chart(grrr_chart + grrr_rules, use_container_width=True)
+            with grrr_right:
+                st.markdown(
+                    f"""
+                    <div class="selected-dam-panel">
+                        <span class="district-gauge-title">{escape(selected_grrr['basin'])}</span>
+                        <span class="district-gauge-meta">Risk band: <b style="color:{risk_color(selected_grrr['risk_band'])}">{escape(selected_grrr['risk_band'])}</b></span>
+                        <span class="district-gauge-meta">Dams represented: {selected_grrr['dam_count']} | Rainfall signal {selected_grrr['avg_rainfall_mm']:.1f} mm</span>
+                        <span class="district-gauge-meta">Catchment proxy: {selected_grrr['catchment_proxy_sq_km']:,.0f} sq.km | Location {selected_grrr['latitude']:.3f}, {selected_grrr['longitude']:.3f}</span>
+                        <span class="district-gauge-meta">Watch {grrr_thresholds['watch_cms']:,.0f}, Flood {grrr_thresholds['flood_cms']:,.0f}, Danger {grrr_thresholds['danger_cms']:,.0f} cumecs</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                st.dataframe(grrr_rows, use_container_width=True, hide_index=True, height=285)
 
-tab_time, tab_rivers, tab_gates, tab_data, tab_exports = st.tabs(
-    ["Time Series", "River Trends", "Gate Timeline", "Data Explorer", "Exports"]
-)
 
-with tab_time:
-    st.subheader("Observation Timeline")
+if main_page == "Infographics":
+    st.subheader("Infographics")
+    if reservoir_view.empty and map_status.empty:
+        st.info("No data is available for infographic generation under the current filters.")
+    else:
+        latest_label = time_label(latest_reservoirs["observed_at"].dropna().max()) if not latest_reservoirs.empty else "Current filter"
+        infographic_alert_counts = (
+            map_status["alert_level"].value_counts().to_dict()
+            if not map_status.empty and "alert_level" in map_status
+            else {}
+        )
+        latest_avg_filling = pd.to_numeric(latest_reservoirs.get("filling_percent"), errors="coerce").mean() if not latest_reservoirs.empty else math.nan
+        latest_storage = pd.to_numeric(latest_reservoirs.get("current_live_capacity_mcm"), errors="coerce").sum() if not latest_reservoirs.empty else math.nan
+        monitored_dams = int(map_status["reservoir_name"].dropna().nunique()) if not map_status.empty and "reservoir_name" in map_status else 0
+        river_station_count = int(river_view["gauge_station"].dropna().nunique()) if not river_view.empty else 0
+        active_alerts = int(infographic_alert_counts.get("Critical", 0) + infographic_alert_counts.get("Warning", 0))
+
+        st.markdown(
+            f"""
+            <div class="infographic-frame">
+                <div class="infographic-title">MPWRD VBSR Water Level Situation Board</div>
+                <div class="infographic-subtitle">Presentation-ready snapshot from the selected report window. Values update with the sidebar date, time, district, basin, reservoir, and gauge filters.</div>
+                <div class="infographic-grid">
+                    <div class="infographic-card"><span>Latest Slot</span><b>{escape(str(latest_label))}</b><small>Current observation context</small></div>
+                    <div class="infographic-card"><span>Monitored Dams</span><b>{monitored_dams}</b><small>Mapped reservoirs in view</small></div>
+                    <div class="infographic-card"><span>Avg Filling</span><b>{fmt_number(latest_avg_filling, "%")}</b><small>Latest reservoir average</small></div>
+                    <div class="infographic-card"><span>Live Storage</span><b>{fmt_number(latest_storage, " MCM")}</b><small>Latest summed storage</small></div>
+                    <div class="infographic-card"><span>Active FRL Alerts</span><b>{active_alerts}</b><small>Critical + warning reservoirs</small></div>
+                    <div class="infographic-card"><span>River Gauges</span><b>{river_station_count}</b><small>Gauge stations in selected data</small></div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        if not map_status.empty and {"latitude", "longitude"}.issubset(map_status.columns):
+            infographic_map = map_status.copy()
+            infographic_map["latitude"] = pd.to_numeric(infographic_map["latitude"], errors="coerce")
+            infographic_map["longitude"] = pd.to_numeric(infographic_map["longitude"], errors="coerce")
+            infographic_map = infographic_map.dropna(subset=["latitude", "longitude"])
+            if not infographic_map.empty:
+                if not capacity_view.empty and {"reservoir_name", "waterbody_area_sqkm"}.issubset(capacity_view.columns):
+                    infographic_map = infographic_map.merge(
+                        capacity_view[["reservoir_name", "waterbody_area_sqkm"]].drop_duplicates("reservoir_name"),
+                        on="reservoir_name",
+                        how="left",
+                    )
+                else:
+                    infographic_map["waterbody_area_sqkm"] = 0
+                infographic_map["waterbody_area_sqkm"] = pd.to_numeric(
+                    infographic_map.get("waterbody_area_sqkm"), errors="coerce"
+                ).fillna(0)
+                map_district_series = infographic_map.get("map_district", pd.Series("", index=infographic_map.index)).fillna("").astype(str)
+                infographic_map["district_label"] = map_district_series.where(
+                    map_district_series.str.len() > 0,
+                    infographic_map.get("district", pd.Series("Unassigned", index=infographic_map.index)).fillna("Unassigned").astype(str),
+                )
+                render_infographic_leaflet_map(
+                    infographic_map,
+                    load_light_district_geojson(str(MP_DISTRICTS_GEOJSON)),
+                )
+
+        info_cols = st.columns([0.92, 1.08])
+        with info_cols[0]:
+            alert_summary = pd.DataFrame(
+                [
+                    {"alert_level": "Critical", "reservoirs": infographic_alert_counts.get("Critical", 0), "color": "#ef4444"},
+                    {"alert_level": "Warning", "reservoirs": infographic_alert_counts.get("Warning", 0), "color": "#f59e0b"},
+                    {"alert_level": "Watch", "reservoirs": infographic_alert_counts.get("Watch", 0), "color": "#eab308"},
+                    {"alert_level": "Normal", "reservoirs": infographic_alert_counts.get("Normal", 0), "color": "#2563eb"},
+                ]
+            )
+            alert_chart = (
+                alt.Chart(alert_summary)
+                .mark_arc(innerRadius=62, outerRadius=112)
+                .encode(
+                    theta=alt.Theta("reservoirs:Q"),
+                    color=alt.Color(
+                        "alert_level:N",
+                        scale=alt.Scale(
+                            domain=["Critical", "Warning", "Watch", "Normal"],
+                            range=["#ef4444", "#f59e0b", "#eab308", "#2563eb"],
+                        ),
+                        title="FRL alert",
+                    ),
+                    tooltip=["alert_level", "reservoirs"],
+                )
+                .properties(height=280, title="FRL Alert Composition")
+            )
+            st.altair_chart(alert_chart, use_container_width=True)
+        with info_cols[1]:
+            if not latest_reservoirs.empty:
+                district_infographic = (
+                    latest_reservoirs.assign(
+                        district_label=latest_reservoirs["district"].fillna("Unassigned"),
+                        filling_percent=pd.to_numeric(latest_reservoirs["filling_percent"], errors="coerce"),
+                    )
+                    .groupby("district_label", as_index=False)
+                    .agg(
+                        reservoirs=("reservoir_name", "nunique"),
+                        avg_filling=("filling_percent", "mean"),
+                        max_filling=("filling_percent", "max"),
+                    )
+                    .sort_values("avg_filling", ascending=False)
+                    .head(14)
+                )
+                district_chart = (
+                    alt.Chart(district_infographic)
+                    .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
+                    .encode(
+                        y=alt.Y("district_label:N", sort="-x", title="District"),
+                        x=alt.X("avg_filling:Q", title="Average filling (%)"),
+                        color=alt.Color("max_filling:Q", scale=alt.Scale(scheme="turbo"), title="Max filling"),
+                        tooltip=["district_label", "reservoirs", "avg_filling", "max_filling"],
+                    )
+                    .properties(height=280, title="District Reservoir Filling Snapshot")
+                )
+                st.altair_chart(district_chart, use_container_width=True)
+            else:
+                st.info("No latest reservoir rows are available for district infographic.")
+
+        info_cols_2 = st.columns(2)
+        with info_cols_2[0]:
+            if not reservoir_view.empty:
+                storage_timeline = (
+                    reservoir_view.assign(
+                        current_live_capacity_mcm=pd.to_numeric(reservoir_view["current_live_capacity_mcm"], errors="coerce"),
+                        filling_percent=pd.to_numeric(reservoir_view["filling_percent"], errors="coerce"),
+                    )
+                    .groupby("observed_at", as_index=False)
+                    .agg(total_storage_mcm=("current_live_capacity_mcm", "sum"), avg_filling=("filling_percent", "mean"))
+                    .dropna(subset=["observed_at"])
+                )
+                storage_chart = (
+                    alt.Chart(storage_timeline)
+                    .mark_area(line=True, opacity=0.28, color="#06b6d4")
+                    .encode(
+                        x=alt.X("observed_at:T", title="Observation time"),
+                        y=alt.Y("total_storage_mcm:Q", title="Total live storage (MCM)"),
+                        tooltip=["observed_at", "total_storage_mcm", "avg_filling"],
+                    )
+                    .properties(height=260, title="Storage Timeline")
+                )
+                st.altair_chart(storage_chart, use_container_width=True)
+        with info_cols_2[1]:
+            if not latest_reservoirs.empty:
+                top_filling = latest_reservoirs.assign(
+                    filling_percent=pd.to_numeric(latest_reservoirs["filling_percent"], errors="coerce")
+                ).nlargest(10, "filling_percent")
+                top_filling_chart = (
+                    alt.Chart(top_filling)
+                    .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
+                    .encode(
+                        x=alt.X("reservoir_name:N", sort="-y", title="Reservoir", axis=alt.Axis(labelAngle=-35)),
+                        y=alt.Y("filling_percent:Q", title="Filling (%)"),
+                        color=alt.Color("filling_percent:Q", scale=alt.Scale(scheme="plasma"), legend=None),
+                        tooltip=["reservoir_name", "district", "water_level_m", "frl_gap_m", "filling_percent"],
+                    )
+                    .properties(height=260, title="Top Filled Reservoirs")
+                )
+                st.altair_chart(top_filling_chart, use_container_width=True)
+
+        st.markdown(
+            '<div class="panel-note">This tab is intended for visual briefings, screenshots, and report exports. It does not change the source observations; it summarizes the active dashboard filters.</div>',
+            unsafe_allow_html=True,
+        )
+
+
+if main_page == "Data & Timeseries":
+    st.subheader("Reservoir Trends and Latest Ranking")
     if reservoir_view.empty:
         st.info("No reservoir observations match the current filters.")
     else:
-        timeline = (
-            reservoir_view.groupby("observed_at", as_index=False)
-            .agg(
-                reservoirs=("reservoir_name", "nunique"),
-                avg_filling_percent=("filling_percent", "mean"),
-                max_filling_percent=("filling_percent", "max"),
-                total_storage_mcm=("current_live_capacity_mcm", "sum"),
-                daily_rainfall_mm=("rainfall_daily_mm", "sum"),
-            )
-            .sort_values("observed_at")
+        metric_label = st.selectbox("Reservoir metric", list(RESERVOIR_METRICS), index=0)
+        metric_col, metric_unit = RESERVOIR_METRICS[metric_label]
+        reservoir_options = sorted(reservoir_view["reservoir_name"].dropna().unique())
+        default_reservoirs = [name for name in ["Bansagar", "Gandhisagar", "Kolar", "Tawa"] if name in reservoir_options]
+        selected_reservoirs = st.multiselect(
+            "Reservoirs",
+            reservoir_options,
+            default=default_reservoirs or reservoir_options[: min(6, len(reservoir_options))],
         )
-        left, mid, right = st.columns([1, 1, 0.78])
-        with left:
-            filling_chart = (
-                alt.Chart(timeline)
+        trend_df = reservoir_view[reservoir_view["reservoir_name"].isin(selected_reservoirs)].dropna(subset=[metric_col])
+        latest_time = max(reservoir_view["observed_at"].dropna())
+        snapshot = reservoir_view[reservoir_view["observed_at"] == latest_time].dropna(subset=[metric_col])
+        rank_count = st.slider("Reservoirs in latest ranking", min_value=8, max_value=30, value=16, step=4)
+        rank_df = snapshot.nlargest(rank_count, metric_col)
+        res_left, res_right = st.columns([1.2, 0.8])
+        with res_left:
+            trend_chart = (
+                alt.Chart(trend_df)
                 .mark_line(point=True)
                 .encode(
                     x=alt.X("observed_at:T", title="Observation time"),
-                    y=alt.Y("avg_filling_percent:Q", title="Average filling (%)"),
-                    tooltip=["observed_at", "reservoirs", "avg_filling_percent", "max_filling_percent"],
+                    y=alt.Y(f"{metric_col}:Q", title=f"{metric_label} ({metric_unit})"),
+                    color=alt.Color("reservoir_name:N", title="Reservoir"),
+                    tooltip=["reservoir_name", "district", "observed_at", metric_col, "report_id"],
                 )
-                .properties(height=260)
+                .properties(height=300)
             )
-            st.altair_chart(filling_chart, use_container_width=True)
-        with mid:
-            rainfall_chart = (
-                alt.Chart(timeline)
-                .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
-                .encode(
-                    x=alt.X("observed_at:T", title="Observation time"),
-                    y=alt.Y("daily_rainfall_mm:Q", title="Total daily rainfall (mm)"),
-                    tooltip=["observed_at", "daily_rainfall_mm", "total_storage_mcm"],
-                )
-                .properties(height=260)
+            st.altair_chart(trend_chart, use_container_width=True)
+        with res_right:
+            st.caption(f"Latest Time Slot Ranking: {time_label(latest_time)}")
+            rank_chart = reservoir_snapshot_chart(
+                rank_df,
+                metric_col,
+                metric_label,
+                metric_unit,
+                "Bar",
+                max(280, rank_count * 17),
             )
-            st.altair_chart(rainfall_chart, use_container_width=True)
-        with right:
-            st.dataframe(timeline, use_container_width=True, hide_index=True, height=260)
+            st.altair_chart(rank_chart, use_container_width=True)
 
-        if not river_view.empty:
-            river_timeline = (
-                river_view.groupby("observed_at", as_index=False)
+    tab_time, tab_rivers, tab_gates, tab_capacity, tab_data, tab_exports = st.tabs(
+        ["Time Series", "River Trends", "Gate Timeline", "Capacity DSS", "Data Explorer", "Exports"]
+    )
+
+    with tab_time:
+        st.subheader("Observation Timeline")
+        if reservoir_view.empty:
+            st.info("No reservoir observations match the current filters.")
+        else:
+            timeline = (
+                reservoir_view.groupby("observed_at", as_index=False)
                 .agg(
-                    river_stations=("gauge_station", "nunique"),
-                    avg_water_level_m=("water_level_m", "mean"),
-                    min_danger_gap_m=("danger_gap_m", "min"),
+                    reservoirs=("reservoir_name", "nunique"),
+                    avg_filling_percent=("filling_percent", "mean"),
+                    max_filling_percent=("filling_percent", "max"),
+                    total_storage_mcm=("current_live_capacity_mcm", "sum"),
+                    daily_rainfall_mm=("rainfall_daily_mm", "sum"),
                 )
                 .sort_values("observed_at")
             )
+            left, mid, right = st.columns([1, 1, 0.78])
+            with left:
+                filling_chart = (
+                    alt.Chart(timeline)
+                    .mark_line(point=True)
+                    .encode(
+                        x=alt.X("observed_at:T", title="Observation time"),
+                        y=alt.Y("avg_filling_percent:Q", title="Average filling (%)"),
+                        tooltip=["observed_at", "reservoirs", "avg_filling_percent", "max_filling_percent"],
+                    )
+                    .properties(height=260)
+                )
+                st.altair_chart(filling_chart, use_container_width=True)
+            with mid:
+                rainfall_chart = (
+                    alt.Chart(timeline)
+                    .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
+                    .encode(
+                        x=alt.X("observed_at:T", title="Observation time"),
+                        y=alt.Y("daily_rainfall_mm:Q", title="Total daily rainfall (mm)"),
+                        tooltip=["observed_at", "daily_rainfall_mm", "total_storage_mcm"],
+                    )
+                    .properties(height=260)
+                )
+                st.altair_chart(rainfall_chart, use_container_width=True)
+            with right:
+                st.dataframe(timeline, use_container_width=True, hide_index=True, height=260)
+
+            if not river_view.empty:
+                river_timeline = (
+                    river_view.groupby("observed_at", as_index=False)
+                    .agg(
+                        river_stations=("gauge_station", "nunique"),
+                        avg_water_level_m=("water_level_m", "mean"),
+                        min_danger_gap_m=("danger_gap_m", "min"),
+                    )
+                    .sort_values("observed_at")
+                )
+                river_chart = (
+                    alt.Chart(river_timeline)
+                    .mark_line(point=True)
+                    .encode(
+                        x=alt.X("observed_at:T", title="Observation time"),
+                        y=alt.Y("min_danger_gap_m:Q", title="Minimum gap to danger level (m)"),
+                        tooltip=["observed_at", "river_stations", "avg_water_level_m", "min_danger_gap_m"],
+                    )
+                    .properties(height=220)
+                )
+                st.altair_chart(river_chart, use_container_width=True)
+
+    with tab_rivers:
+        st.subheader("River Gauge Trends Over Time")
+        if river_view.empty:
+            st.info("No river observations match the current filters.")
+        else:
+            metric_label = st.selectbox("River metric", list(RIVER_METRICS), index=0)
+            metric_col, metric_unit = RIVER_METRICS[metric_label]
+            station_options = sorted(river_view["gauge_station"].dropna().unique())
+            selected_stations = st.multiselect(
+                "Gauge stations",
+                station_options,
+                default=station_options[: min(6, len(station_options))],
+            )
+            trend_df = river_view[river_view["gauge_station"].isin(selected_stations)].dropna(subset=[metric_col])
             river_chart = (
-                alt.Chart(river_timeline)
+                alt.Chart(trend_df)
                 .mark_line(point=True)
                 .encode(
                     x=alt.X("observed_at:T", title="Observation time"),
-                    y=alt.Y("min_danger_gap_m:Q", title="Minimum gap to danger level (m)"),
-                    tooltip=["observed_at", "river_stations", "avg_water_level_m", "min_danger_gap_m"],
+                    y=alt.Y(f"{metric_col}:Q", title=f"{metric_label} ({metric_unit})"),
+                    color=alt.Color("gauge_station:N", title="Gauge station"),
+                    tooltip=["river_name", "gauge_station", "district", "observed_at", metric_col, "danger_or_max_water_level_m"],
                 )
-                .properties(height=220)
+                .properties(height=300)
             )
             st.altair_chart(river_chart, use_container_width=True)
 
-with tab_rivers:
-    st.subheader("River Gauge Trends Over Time")
-    if river_view.empty:
-        st.info("No river observations match the current filters.")
-    else:
-        metric_label = st.selectbox("River metric", list(RIVER_METRICS), index=0)
-        metric_col, metric_unit = RIVER_METRICS[metric_label]
-        station_options = sorted(river_view["gauge_station"].dropna().unique())
-        selected_stations = st.multiselect(
-            "Gauge stations",
-            station_options,
-            default=station_options[: min(6, len(station_options))],
-        )
-        trend_df = river_view[river_view["gauge_station"].isin(selected_stations)].dropna(subset=[metric_col])
-        river_chart = (
-            alt.Chart(trend_df)
-            .mark_line(point=True)
-            .encode(
-                x=alt.X("observed_at:T", title="Observation time"),
-                y=alt.Y(f"{metric_col}:Q", title=f"{metric_label} ({metric_unit})"),
-                color=alt.Color("gauge_station:N", title="Gauge station"),
-                tooltip=["river_name", "gauge_station", "district", "observed_at", metric_col, "danger_or_max_water_level_m"],
+            st.dataframe(
+                latest_rivers.sort_values("danger_gap_m", na_position="last"),
+                use_container_width=True,
+                hide_index=True,
+                height=220,
             )
-            .properties(height=300)
-        )
-        st.altair_chart(river_chart, use_container_width=True)
 
-        st.dataframe(
-            latest_rivers.sort_values("danger_gap_m", na_position="last"),
-            use_container_width=True,
-            hide_index=True,
-            height=220,
-        )
-
-with tab_gates:
-    st.subheader("Gate Operations Timeline")
-    if gate_view_all.empty:
-        st.info("No gate rows are available.")
-    else:
-        gate_view = gate_view_all.copy()
-        show_open_only = st.toggle("Show only open gate rows", value=False)
-        if show_open_only:
-            gate_view = gate_view[gate_view["gate_opened_count"].fillna(0).astype(float) > 0]
-        gate_timeline = (
-            gate_view.groupby("report_at", as_index=False)
-            .agg(
-                reservoirs=("reservoir_name", "nunique"),
-                open_sites=("gate_opened_count", lambda values: (values.fillna(0).astype(float) > 0).sum()),
-                discharge_cumecs=("discharge_cumecs", "sum"),
+    with tab_gates:
+        st.subheader("Gate Operations Timeline")
+        if gate_view_all.empty:
+            st.info("No gate rows are available.")
+        else:
+            gate_view = gate_view_all.copy()
+            show_open_only = st.toggle("Show only open gate rows", value=False)
+            if show_open_only:
+                gate_view = gate_view[gate_view["gate_opened_count"].fillna(0).astype(float) > 0]
+            gate_timeline = (
+                gate_view.groupby("report_at", as_index=False)
+                .agg(
+                    reservoirs=("reservoir_name", "nunique"),
+                    open_sites=("gate_opened_count", lambda values: (values.fillna(0).astype(float) > 0).sum()),
+                    discharge_cumecs=("discharge_cumecs", "sum"),
+                )
+                .sort_values("report_at")
             )
-            .sort_values("report_at")
-        )
-        gate_chart = (
-            alt.Chart(gate_timeline)
-            .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
-            .encode(
-                x=alt.X("report_at:T", title="Report time"),
-                y=alt.Y("open_sites:Q", title="Open gate sites"),
-                tooltip=["report_at", "reservoirs", "open_sites", "discharge_cumecs"],
+            gate_chart = (
+                alt.Chart(gate_timeline)
+                .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
+                .encode(
+                    x=alt.X("report_at:T", title="Report time"),
+                    y=alt.Y("open_sites:Q", title="Open gate sites"),
+                    tooltip=["report_at", "reservoirs", "open_sites", "discharge_cumecs"],
+                )
+                .properties(height=260)
             )
-            .properties(height=260)
+            st.altair_chart(gate_chart, use_container_width=True)
+            st.dataframe(gate_view.sort_values(["report_at", "reservoir_name"]), use_container_width=True, hide_index=True, height=230)
+
+    with tab_capacity:
+        st.subheader("Reservoir Capacity DSS")
+        st.markdown(
+            '<div class="panel-note">First-stage remote-sensing capacity layer matching MPWRD dams to waterbody area, then calibrating storage with official FRL/LSL/live capacity. FABDEM/altimetry curves can replace the screening geometry estimate as the next processing stage.</div>',
+            unsafe_allow_html=True,
         )
-        st.altair_chart(gate_chart, use_container_width=True)
-        st.dataframe(gate_view.sort_values(["report_at", "reservoir_name"]), use_container_width=True, hide_index=True, height=230)
+        if capacity_view.empty:
+            st.info("No reservoir capacity estimates are available for the current filters. Run generate_reservoir_capacity_estimates.py to refresh the layer.")
+        else:
+            total_capacity = pd.to_numeric(capacity_view["calibrated_capacity_mcm"], errors="coerce").sum()
+            matched_count = capacity_view["matched_waterbody_name"].notna().sum() if "matched_waterbody_name" in capacity_view else 0
+            high_count = capacity_view["capacity_confidence"].astype(str).str.startswith("High").sum()
+            cap_cols = st.columns(4)
+            cap_cols[0].metric("Reservoirs", f"{len(capacity_view):,}")
+            cap_cols[1].metric("Matched Waterbodies", f"{matched_count:,}")
+            cap_cols[2].metric("High Confidence", f"{high_count:,}")
+            cap_cols[3].metric("Calibrated Capacity", f"{total_capacity:,.0f} MCM")
 
-with tab_data:
-    st.subheader("Time-Aware Data Explorer")
-    data_choice = st.radio(
-        "Dataset",
-        ["Reservoir observations", "River observations", "Gate observations", "Reservoir master", "River master", "Reports"],
-        horizontal=True,
-    )
-    if data_choice == "Reservoir observations":
-        st.dataframe(reservoir_view.sort_values(["observed_at", "reservoir_name"]), use_container_width=True, hide_index=True, height=360)
-    elif data_choice == "River observations":
-        st.dataframe(river_view.sort_values(["observed_at", "river_name", "gauge_station"]), use_container_width=True, hide_index=True, height=360)
-    elif data_choice == "Gate observations":
-        st.dataframe(gate_view_all.sort_values(["report_at", "reservoir_name"]), use_container_width=True, hide_index=True, height=360)
-    elif data_choice == "Reservoir master":
-        st.dataframe(reservoir_master.sort_values(["district", "reservoir_name"]), use_container_width=True, hide_index=True, height=360)
-    elif data_choice == "River master":
-        st.dataframe(river_master.sort_values(["district", "river_name", "gauge_station"]), use_container_width=True, hide_index=True, height=360)
-    else:
-        st.dataframe(meta_df, use_container_width=True, hide_index=True, height=260)
+            chart_cols = st.columns([1.15, 0.85])
+            with chart_cols[0]:
+                top_capacity = capacity_view.sort_values("calibrated_capacity_mcm", ascending=False).head(18)
+                capacity_chart = (
+                    alt.Chart(top_capacity)
+                    .mark_bar(cornerRadiusTopRight=3, cornerRadiusBottomRight=3)
+                    .encode(
+                        y=alt.Y("reservoir_name:N", sort="-x", title="Reservoir"),
+                        x=alt.X("calibrated_capacity_mcm:Q", title="Calibrated capacity (MCM)"),
+                        color=alt.Color("capacity_confidence:N", title="Confidence"),
+                        tooltip=[
+                            "reservoir_name",
+                            "district",
+                            "official_live_capacity_mcm",
+                            "waterbody_area_sqkm",
+                            "matched_waterbody_name",
+                            "capacity_confidence",
+                        ],
+                    )
+                    .properties(height=360)
+                )
+                st.altair_chart(capacity_chart, use_container_width=True)
+            with chart_cols[1]:
+                confidence_df = capacity_view["capacity_confidence"].value_counts().rename_axis("confidence").reset_index(name="reservoirs")
+                confidence_chart = (
+                    alt.Chart(confidence_df)
+                    .mark_arc(innerRadius=58, outerRadius=118)
+                    .encode(
+                        theta=alt.Theta("reservoirs:Q"),
+                        color=alt.Color("confidence:N", title="Capacity confidence"),
+                        tooltip=["confidence", "reservoirs"],
+                    )
+                    .properties(height=260)
+                )
+                st.altair_chart(confidence_chart, use_container_width=True)
+                st.dataframe(
+                    confidence_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    height=120,
+                )
 
-with tab_exports:
-    st.subheader("Captured Data Files")
-    st.markdown('<div class="panel-note">Downloads reflect the current report and sidebar time/district filters.</div>', unsafe_allow_html=True)
-    export_cols = st.columns(3)
-    export_cols[0].download_button(
-        "Download river time series",
-        data=river_view.to_csv(index=False).encode("utf-8"),
-        file_name="river_water_level_observations.csv",
-        mime="text/csv",
-    )
-    export_cols[1].download_button(
-        "Download reservoir time series",
-        data=reservoir_view.to_csv(index=False).encode("utf-8"),
-        file_name="reservoir_status_observations.csv",
-        mime="text/csv",
-    )
-    export_cols[2].download_button(
-        "Download gates time series",
-        data=gate_view_all.to_csv(index=False).encode("utf-8"),
-        file_name="reservoir_gate_observations.csv",
-        mime="text/csv",
-    )
-    master_cols = st.columns(2)
-    master_cols[0].download_button(
-        "Download river master",
-        data=river_master.to_csv(index=False).encode("utf-8"),
-        file_name="river_gauge_stations.csv",
-        mime="text/csv",
-    )
-    master_cols[1].download_button(
-        "Download reservoir master",
-        data=reservoir_master.to_csv(index=False).encode("utf-8"),
-        file_name="reservoirs.csv",
-        mime="text/csv",
-    )
+            curve_source_options: dict[str, pd.DataFrame] = {}
+            if not capacity_curve_fabdem_view.empty:
+                curve_source_options["Stage 2B FABDEM hypsometry"] = capacity_curve_fabdem_view
+            if not capacity_curve_view.empty:
+                curve_source_options["Stage 2A calibrated screening"] = capacity_curve_view
 
-api_base_url = "http://127.0.0.1:8600"
-api_status = api_is_available(api_base_url)
-with st.expander("External Data API / GeoJSON Sources", expanded=False):
-    status_cols = st.columns([0.78, 2.2])
-    status_cols[0].metric("API Status", "Online" if api_status else "Offline")
-    if api_status:
-        status_cols[1].success(f"REST and GeoJSON services are available at {api_base_url}")
-    else:
-        status_cols[1].warning("API server is not responding. Start it with Flood Reports\\run_api.ps1.")
+            if curve_source_options:
+                selected_curve_source = st.radio(
+                    "Curve source",
+                    list(curve_source_options),
+                    horizontal=True,
+                    help="Stage 2B samples FABDEM within the matched waterbody polygon and calibrates the curve to official LSL, FRL, and live capacity. Stage 2A is the earlier calibrated screening curve.",
+                )
+                selected_capacity_curve_view = curve_source_options[selected_curve_source].copy()
+                curve_options = sorted(selected_capacity_curve_view["reservoir_name"].dropna().unique())
+                default_curve = curve_options[0] if curve_options else None
+                if "calibrated_capacity_mcm" in capacity_view and not capacity_view.empty:
+                    largest = capacity_view.sort_values("calibrated_capacity_mcm", ascending=False)["reservoir_name"].dropna()
+                    if not largest.empty and largest.iloc[0] in curve_options:
+                        default_curve = largest.iloc[0]
+                selected_curve_reservoir = st.selectbox(
+                    "Area-elevation-storage curve",
+                    curve_options,
+                    index=curve_options.index(default_curve) if default_curve in curve_options else 0,
+                )
+                curve_df = selected_capacity_curve_view[selected_capacity_curve_view["reservoir_name"] == selected_curve_reservoir].copy()
+                curve_df["cumulative_storage_mcm"] = pd.to_numeric(curve_df["cumulative_storage_mcm"], errors="coerce")
+                curve_df["water_spread_area_sqkm"] = pd.to_numeric(curve_df["water_spread_area_sqkm"], errors="coerce")
+                curve_df["elevation_m"] = pd.to_numeric(curve_df["elevation_m"], errors="coerce")
+                selected_curve_meta = curve_df.iloc[0] if not curve_df.empty else pd.Series(dtype=object)
+                curve_method_label = str(selected_curve_meta.get("curve_method", "")).replace("_", " ").strip().title()
+                sample_count = pd.to_numeric(pd.Series([selected_curve_meta.get("fabdem_sample_count")]), errors="coerce").iloc[0]
+                p05 = pd.to_numeric(pd.Series([selected_curve_meta.get("fabdem_p05_m")]), errors="coerce").iloc[0]
+                p95 = pd.to_numeric(pd.Series([selected_curve_meta.get("fabdem_p95_m")]), errors="coerce").iloc[0]
+                if pd.notna(sample_count) and sample_count > 0:
+                    st.caption(
+                        f"{curve_method_label}. FABDEM samples: {int(sample_count):,}; DEM p05-p95: {p05:,.2f} m to {p95:,.2f} m."
+                    )
+                elif curve_method_label:
+                    st.caption(f"{curve_method_label}.")
 
-    api_cards = [
-        ("Reports", f"{api_base_url}/api/reports"),
-        ("Reservoir Observations", f"{api_base_url}/api/reservoir-observations"),
-        ("District Summary", f"{api_base_url}/api/district-summary"),
-        ("Basin Summary", f"{api_base_url}/api/basin-summary"),
-        ("Dam GeoJSON", f"{api_base_url}/api/geojson/dams"),
-        ("Reservoir Status GeoJSON", f"{api_base_url}/api/geojson/reservoir-status"),
-        ("Alert GeoJSON", f"{api_base_url}/api/geojson/alerts"),
-        ("Bansagar Filter Example", f"{api_base_url}/api/reservoir-observations?reservoir=Bansagar"),
-    ]
-    cards_html = '<div class="api-grid">'
-    for label, url in api_cards:
-        cards_html += f'<div class="api-card"><b>{label}</b><code>{url}</code></div>'
-    cards_html += "</div>"
-    st.markdown(cards_html, unsafe_allow_html=True)
-    link_cols = st.columns(3)
-    link_cols[0].link_button("Open API Home", api_base_url)
-    link_cols[1].link_button("Open Reservoir GeoJSON", f"{api_base_url}/api/geojson/reservoir-status")
-    link_cols[2].link_button("Open Alert GeoJSON", f"{api_base_url}/api/geojson/alerts")
-    st.caption("Use the GeoJSON URLs as external layers in ArcGIS Online, QGIS, web maps, Power BI, or the NITA AI platform.")
+                selected_capacity_row = capacity_view[capacity_view["reservoir_name"] == selected_curve_reservoir]
+                reference_rows = []
+                datum_label = "LSL datum"
+                datum_elevation = pd.to_numeric(curve_df["elevation_m"], errors="coerce").min()
+                active_depth_domain = None
+                if not selected_capacity_row.empty:
+                    selected_capacity_record = selected_capacity_row.iloc[0]
+                    lsl_value = pd.to_numeric(pd.Series([selected_capacity_record.get("lsl_m")]), errors="coerce").iloc[0]
+                    frl_value = pd.to_numeric(pd.Series([selected_capacity_record.get("frl_m")]), errors="coerce").iloc[0]
+                    if pd.notna(lsl_value):
+                        datum_elevation = float(lsl_value)
+                        datum_label = f"LSL datum ({datum_elevation:,.2f} m)"
+                    if pd.notna(lsl_value) and pd.notna(frl_value) and frl_value > lsl_value:
+                        active_depth_domain = [0, float(frl_value - lsl_value)]
+                    for label, column, color in [
+                        ("LSL", "lsl_m", "#64748b"),
+                        ("FRL", "frl_m", "#ef4444"),
+                        ("Current WL", "latest_water_level_m", "#0f766e"),
+                    ]:
+                        value = pd.to_numeric(pd.Series([selected_capacity_record.get(column)]), errors="coerce").iloc[0]
+                        if pd.notna(value):
+                            adjusted_value = float(value - datum_elevation)
+                            if label == "Current WL" and active_depth_domain and not (-0.05 <= adjusted_value <= active_depth_domain[1] + 0.05):
+                                continue
+                            reference_rows.append(
+                                {
+                                    "level": label,
+                                    "elevation_m": float(value),
+                                    "datum_adjusted_elevation_m": adjusted_value,
+                                    "color": color,
+                                }
+                            )
+                curve_df["datum_adjusted_elevation_m"] = curve_df["elevation_m"] - datum_elevation
+                curve_df = curve_df[
+                    curve_df["datum_adjusted_elevation_m"].notna()
+                    & (curve_df["datum_adjusted_elevation_m"] >= -0.001)
+                ].copy()
+                curve_df = curve_df.sort_values("elevation_m").reset_index(drop=True)
+                curve_df["water_spread_area_msqm"] = curve_df["water_spread_area_sqkm"]
+                curve_df["segmental_live_capacity_mcm"] = curve_df["cumulative_storage_mcm"].diff().fillna(0).clip(lower=0)
+                curve_df["srs_level_label"] = ""
+                if not curve_df.empty:
+                    curve_df.loc[curve_df.index[0], "srs_level_label"] = "MDDL"
+                    curve_df.loc[curve_df.index[-1], "srs_level_label"] = "FRL"
+                reference_df = pd.DataFrame(reference_rows)
+
+                base_curve = alt.Chart(curve_df).encode(
+                    y=alt.Y(
+                        "datum_adjusted_elevation_m:Q",
+                        title=f"Elevation (m) above {datum_label}",
+                        scale=alt.Scale(domain=active_depth_domain, nice=False) if active_depth_domain else alt.Scale(nice=True),
+                        axis=alt.Axis(grid=True, tickCount=8, titleColor="#0f172a", labelColor="#0f172a", tickColor="#0f172a"),
+                    )
+                )
+                area_curve = (
+                    base_curve.mark_line(point=alt.OverlayMarkDef(filled=True, size=58, shape="square"), strokeWidth=2.8, color="#c2413c")
+                    .encode(
+                        x=alt.X(
+                            "water_spread_area_msqm:Q",
+                            title="Water spread area (M.Sqm) - bottom axis",
+                            scale=alt.Scale(reverse=True, nice=True, zero=True),
+                            axis=alt.Axis(
+                                orient="bottom",
+                                titleColor="#c2413c",
+                                labelColor="#7f1d1d",
+                                tickColor="#c2413c",
+                                domainColor="#c2413c",
+                                grid=True,
+                            ),
+                        ),
+                        tooltip=[
+                            "reservoir_name",
+                            alt.Tooltip("datum_adjusted_elevation_m:Q", title="Elev. above datum (m)", format=",.2f"),
+                            alt.Tooltip("elevation_m:Q", title="Elevation (m)", format=",.2f"),
+                            alt.Tooltip("water_spread_area_msqm:Q", title="Water spread area (M.Sqm)", format=",.3f"),
+                            "curve_method",
+                            "capacity_confidence",
+                        ],
+                    )
+                )
+                volume_curve = (
+                    base_curve.mark_line(point=alt.OverlayMarkDef(filled=True, size=52), strokeWidth=2.8, color="#3b6ea8")
+                    .encode(
+                        x=alt.X(
+                            "cumulative_storage_mcm:Q",
+                            title="Cumulative live capacity (M.Cum / MCM) - top axis",
+                            scale=alt.Scale(nice=True, zero=True),
+                            axis=alt.Axis(
+                                orient="top",
+                                titleColor="#3b6ea8",
+                                labelColor="#1e3a8a",
+                                tickColor="#3b6ea8",
+                                domainColor="#3b6ea8",
+                                grid=True,
+                            ),
+                        ),
+                        tooltip=[
+                            "reservoir_name",
+                            alt.Tooltip("datum_adjusted_elevation_m:Q", title="Elev. above datum (m)", format=",.2f"),
+                            alt.Tooltip("elevation_m:Q", title="Elevation (m)", format=",.2f"),
+                            alt.Tooltip("cumulative_storage_mcm:Q", title="Storage (MCM)", format=",.2f"),
+                            "curve_method",
+                            "capacity_confidence",
+                        ],
+                    )
+                )
+                curve_layers = [area_curve, volume_curve]
+                if not reference_df.empty:
+                    reference_rules = (
+                        alt.Chart(reference_df)
+                        .mark_rule(strokeDash=[6, 4], strokeWidth=1.5)
+                        .encode(
+                            y="datum_adjusted_elevation_m:Q",
+                            color=alt.Color("level:N", scale=alt.Scale(domain=["LSL", "FRL", "Current WL"], range=["#64748b", "#ef4444", "#0f766e"]), legend=alt.Legend(title="Reference")),
+                            tooltip=[
+                                "level",
+                                alt.Tooltip("datum_adjusted_elevation_m:Q", title="Elev. above datum (m)", format=",.2f"),
+                                alt.Tooltip("elevation_m:Q", title="Elevation (m)", format=",.2f"),
+                            ],
+                        )
+                    )
+                    curve_layers.append(reference_rules)
+                curve_chart = (
+                    alt.layer(*curve_layers)
+                    .resolve_scale(x="independent")
+                    .properties(
+                        height=430,
+                        title=alt.TitleParams(
+                            text=f"Elevation - Water Spread Area - Capacity Curve (SRS Technique): {selected_curve_reservoir}",
+                            anchor="middle",
+                            fontSize=14,
+                            fontWeight=700,
+                        ),
+                    )
+                )
+                st.altair_chart(curve_chart, use_container_width=True)
+                st.caption(
+                    "Red square curve: water spread area by trend line on the bottom axis. Blue curve: cumulative live capacity by SRS technique on the top axis. The supporting table below follows the SRS capacity format with segmental and cumulative live capacity."
+                )
+                st.markdown("**SRS Elevation-Area-Capacity Table**")
+                srs_table = curve_df[
+                    [
+                        "srs_level_label",
+                        "elevation_m",
+                        "water_spread_area_msqm",
+                        "segmental_live_capacity_mcm",
+                        "cumulative_storage_mcm",
+                    ]
+                ].rename(
+                    columns={
+                        "srs_level_label": "",
+                        "elevation_m": "Reservoir water level in Metre",
+                        "water_spread_area_msqm": "Water spread area by trend line (M.Sqm)",
+                        "segmental_live_capacity_mcm": "Segmental Live Capacity (Mcm) by SRS technique",
+                        "cumulative_storage_mcm": "Cumulative Live Capacity (Mcm) by SRS technique",
+                    }
+                )
+                st.dataframe(
+                    srs_table,
+                    use_container_width=True,
+                    hide_index=True,
+                    height=320,
+                )
+
+            review_cols = [
+                "reservoir_name",
+                "district",
+                "sub_basin",
+                "official_live_capacity_mcm",
+                "waterbody_area_sqkm",
+                "matched_waterbody_name",
+                "waterbody_distance_km",
+                "rs_geometry_capacity_mcm",
+                "calibrated_capacity_mcm",
+                "latest_water_level_m",
+                "latest_reported_storage_mcm",
+                "model_storage_from_level_mcm",
+                "model_vs_reported_storage_pct_of_capacity",
+                "capacity_confidence",
+            ]
+            available_review_cols = [column for column in review_cols if column in capacity_view.columns]
+            st.dataframe(
+                capacity_view[available_review_cols].sort_values(["capacity_confidence", "reservoir_name"]),
+                use_container_width=True,
+                hide_index=True,
+                height=360,
+            )
+            st.download_button(
+                "Download reservoir capacity estimates",
+                data=capacity_view.to_csv(index=False).encode("utf-8"),
+                file_name="reservoir_capacity_estimates.csv",
+                mime="text/csv",
+                key="download_capacity_estimates_capacity_tab",
+            )
+
+    with tab_data:
+        st.subheader("Time-Aware Data Explorer")
+        data_choice = st.radio(
+            "Dataset",
+            [
+                "Reservoir observations",
+                "River observations",
+                "Gate observations",
+                "Reservoir capacity estimates",
+                "Reservoir capacity curves",
+                "FABDEM capacity curves",
+                "Reservoir master",
+                "River master",
+                "Reports",
+            ],
+            horizontal=True,
+        )
+        if data_choice == "Reservoir observations":
+            st.dataframe(reservoir_view.sort_values(["observed_at", "reservoir_name"]), use_container_width=True, hide_index=True, height=360)
+        elif data_choice == "River observations":
+            st.dataframe(river_view.sort_values(["observed_at", "river_name", "gauge_station"]), use_container_width=True, hide_index=True, height=360)
+        elif data_choice == "Gate observations":
+            st.dataframe(gate_view_all.sort_values(["report_at", "reservoir_name"]), use_container_width=True, hide_index=True, height=360)
+        elif data_choice == "Reservoir capacity estimates":
+            st.dataframe(capacity_view.sort_values(["district", "reservoir_name"]), use_container_width=True, hide_index=True, height=360)
+        elif data_choice == "Reservoir capacity curves":
+            st.dataframe(capacity_curve_view.sort_values(["reservoir_name", "elevation_m"]), use_container_width=True, hide_index=True, height=360)
+        elif data_choice == "FABDEM capacity curves":
+            st.dataframe(capacity_curve_fabdem_view.sort_values(["reservoir_name", "elevation_m"]), use_container_width=True, hide_index=True, height=360)
+        elif data_choice == "Reservoir master":
+            st.dataframe(reservoir_master.sort_values(["district", "reservoir_name"]), use_container_width=True, hide_index=True, height=360)
+        elif data_choice == "River master":
+            st.dataframe(river_master.sort_values(["district", "river_name", "gauge_station"]), use_container_width=True, hide_index=True, height=360)
+        else:
+            st.dataframe(meta_df, use_container_width=True, hide_index=True, height=260)
+
+    with tab_exports:
+        st.subheader("Captured Data Files")
+        st.markdown('<div class="panel-note">Downloads reflect the current report and sidebar time/district filters.</div>', unsafe_allow_html=True)
+        export_cols = st.columns(3)
+        export_cols[0].download_button(
+            "Download river time series",
+            data=river_view.to_csv(index=False).encode("utf-8"),
+            file_name="river_water_level_observations.csv",
+            mime="text/csv",
+        )
+        export_cols[1].download_button(
+            "Download reservoir time series",
+            data=reservoir_view.to_csv(index=False).encode("utf-8"),
+            file_name="reservoir_status_observations.csv",
+            mime="text/csv",
+        )
+        export_cols[2].download_button(
+            "Download gates time series",
+            data=gate_view_all.to_csv(index=False).encode("utf-8"),
+            file_name="reservoir_gate_observations.csv",
+            mime="text/csv",
+        )
+        st.download_button(
+            "Download reservoir capacity estimates",
+            data=capacity_view.to_csv(index=False).encode("utf-8"),
+            file_name="reservoir_capacity_estimates.csv",
+            mime="text/csv",
+            key="download_capacity_estimates_exports_tab",
+        )
+        st.download_button(
+            "Download reservoir capacity curves",
+            data=capacity_curve_view.to_csv(index=False).encode("utf-8"),
+            file_name="reservoir_capacity_curves.csv",
+            mime="text/csv",
+            key="download_capacity_curves_exports_tab",
+        )
+        if not capacity_curve_fabdem_view.empty:
+            st.download_button(
+                "Download FABDEM capacity curves",
+                data=capacity_curve_fabdem_view.to_csv(index=False).encode("utf-8"),
+                file_name="reservoir_capacity_curves_fabdem.csv",
+                mime="text/csv",
+                key="download_capacity_curves_fabdem_exports_tab",
+            )
+        master_cols = st.columns(2)
+        master_cols[0].download_button(
+            "Download river master",
+            data=river_master.to_csv(index=False).encode("utf-8"),
+            file_name="river_gauge_stations.csv",
+            mime="text/csv",
+        )
+        master_cols[1].download_button(
+            "Download reservoir master",
+            data=reservoir_master.to_csv(index=False).encode("utf-8"),
+            file_name="reservoirs.csv",
+            mime="text/csv",
+        )
+
+    api_base_url = "http://127.0.0.1:8600"
+    api_status = api_is_available(api_base_url)
+    with st.expander("External Data API / GeoJSON Sources", expanded=False):
+        status_cols = st.columns([0.78, 2.2])
+        status_cols[0].metric("API Status", "Online" if api_status else "Offline")
+        if api_status:
+            status_cols[1].success(f"REST and GeoJSON services are available at {api_base_url}")
+        else:
+            status_cols[1].warning("API server is not responding. Start it with Flood Reports\\run_api.ps1.")
+
+        api_cards = [
+            ("Reports", f"{api_base_url}/api/reports"),
+            ("Reservoir Observations", f"{api_base_url}/api/reservoir-observations"),
+            ("District Summary", f"{api_base_url}/api/district-summary"),
+            ("Basin Summary", f"{api_base_url}/api/basin-summary"),
+            ("Dam GeoJSON", f"{api_base_url}/api/geojson/dams"),
+            ("Reservoir Status GeoJSON", f"{api_base_url}/api/geojson/reservoir-status"),
+            ("Alert GeoJSON", f"{api_base_url}/api/geojson/alerts"),
+            ("Bansagar Filter Example", f"{api_base_url}/api/reservoir-observations?reservoir=Bansagar"),
+        ]
+        cards_html = '<div class="api-grid">'
+        for label, url in api_cards:
+            cards_html += f'<div class="api-card"><b>{label}</b><code>{url}</code></div>'
+        cards_html += "</div>"
+        st.markdown(cards_html, unsafe_allow_html=True)
+        link_cols = st.columns(3)
+        link_cols[0].link_button("Open API Home", api_base_url)
+        link_cols[1].link_button("Open Reservoir GeoJSON", f"{api_base_url}/api/geojson/reservoir-status")
+        link_cols[2].link_button("Open Alert GeoJSON", f"{api_base_url}/api/geojson/alerts")
+        st.caption("Use the GeoJSON URLs as external layers in ArcGIS Online, QGIS, web maps, Power BI, or the NITA AI platform.")
