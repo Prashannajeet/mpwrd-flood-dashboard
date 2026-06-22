@@ -91,9 +91,9 @@ st.markdown(
             linear-gradient(135deg, rgba(255,255,255,0.96), rgba(239,246,255,0.96)),
             linear-gradient(120deg, rgba(37,99,235,0.14), rgba(20,184,166,0.13), rgba(245,158,11,0.10));
         border-radius: 8px;
-        padding: 0.95rem 1.05rem;
-        margin: 0.45rem 0 0.85rem;
-        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.07);
+        padding: 0.86rem 1.05rem 0.86rem 1.12rem;
+        margin: 0.35rem 0 0.78rem;
+        box-shadow: 0 16px 34px rgba(15, 23, 42, 0.065);
         position: relative;
         z-index: 1;
         overflow: hidden;
@@ -108,7 +108,7 @@ st.markdown(
     .masthead-top {
         display: flex;
         justify-content: space-between;
-        gap: 1rem;
+        gap: 1.2rem;
         align-items: center;
     }
     .brand-lockup {
@@ -162,7 +162,7 @@ st.markdown(
         min-width: 0;
     }
     .title {
-        font-size: 1.42rem;
+        font-size: 1.34rem;
         line-height: 1.15;
         font-weight: 850;
     }
@@ -177,15 +177,35 @@ st.markdown(
         flex-wrap: wrap;
         gap: 0.45rem;
         justify-content: flex-end;
+        flex: 0 0 auto;
     }
     .meta {
-        border: 1px solid var(--line);
-        background: rgba(255,255,255,0.82);
-        border-radius: 6px;
-        padding: 0.35rem 0.48rem;
-        color: #334155;
-        font-size: 0.74rem;
+        border: 1px solid #c7d2fe;
+        background: rgba(255,255,255,0.9);
+        border-radius: 8px;
+        padding: 0.48rem 0.58rem;
+        color: #1e3a8a;
+        font-size: 0.72rem;
+        font-weight: 800;
         white-space: nowrap;
+        box-shadow: 0 10px 22px rgba(37, 99, 235, 0.08);
+    }
+    .meta-label {
+        color: #64748b;
+        display: block;
+        font-size: 0.58rem;
+        font-weight: 850;
+        letter-spacing: 0.06em !important;
+        line-height: 1;
+        margin-bottom: 0.18rem;
+        text-transform: uppercase;
+    }
+    .meta-value {
+        color: #0f172a;
+        display: block;
+        font-size: 0.78rem;
+        font-weight: 850;
+        line-height: 1.15;
     }
     .sidebar-brand {
         border: 1px solid var(--line);
@@ -455,6 +475,38 @@ st.markdown(
     </style>
     """,
     unsafe_allow_html=True,
+)
+
+components.html(
+    """
+    <script>
+    (() => {
+        const collapseSidebar = () => {
+            try {
+                const doc = window.parent.document;
+                const sidebar = doc.querySelector('[data-testid="stSidebar"]');
+                if (!sidebar || sidebar.getAttribute("aria-expanded") !== "true") return;
+                const buttons = Array.from(doc.querySelectorAll("button"));
+                const collapseButton = buttons.find((button) => {
+                    const testId = button.getAttribute("data-testid") || "";
+                    const label = button.getAttribute("aria-label") || "";
+                    const text = button.innerText || "";
+                    return testId.includes("CollapseSidebar")
+                        || label.toLowerCase().includes("collapse")
+                        || text.includes("keyboard_double_arrow_left");
+                });
+                if (collapseButton) collapseButton.click();
+            } catch (error) {
+                // Parent access can be blocked in some Streamlit hosts; page_config still sets the default.
+            }
+        };
+        collapseSidebar();
+        window.setTimeout(collapseSidebar, 250);
+        window.setTimeout(collapseSidebar, 900);
+    })();
+    </script>
+    """,
+    height=0,
 )
 
 
@@ -1053,6 +1105,17 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
 
     features_json = json.dumps(features, ensure_ascii=False).replace("</", "<\\/")
     history_json = json.dumps(history, ensure_ascii=False).replace("</", "<\\/")
+    dss_nodes = {"glofas": [], "grrr": []}
+    for key, path in [("glofas", GLOFAS_PROJECT_JSON), ("grrr", GRRR_PROJECT_JSON)]:
+        if path.exists():
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                nodes = payload.get("nodes", []) if isinstance(payload, dict) else payload
+                if isinstance(nodes, list):
+                    dss_nodes[key] = nodes
+            except (OSError, json.JSONDecodeError):
+                dss_nodes[key] = []
+    dss_nodes_json = json.dumps(dss_nodes, ensure_ascii=False).replace("</", "<\\/")
     geoglows_url = json.dumps(GEOGLOWS_MEDIUM_URL)
 
     components.html(
@@ -1234,6 +1297,71 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                 position: sticky;
                 top: 0;
             }}
+            .dss-link-panel {{
+                margin-top: 10px;
+                border: 1px solid #c7d2fe;
+                border-radius: 8px;
+                background:
+                    linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,251,255,0.98)),
+                    linear-gradient(135deg, rgba(37,99,235,0.10), rgba(20,184,166,0.08));
+                padding: 10px;
+                box-shadow: 0 12px 26px rgba(15, 23, 42, 0.06);
+            }}
+            .dss-link-head {{
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                margin-bottom: 8px;
+            }}
+            .dss-link-head span {{
+                color: #2563eb;
+                display: block;
+                font-size: 10px;
+                font-weight: 800;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+            }}
+            .dss-link-head strong {{
+                color: #0f172a;
+                display: block;
+                font-size: 12px;
+                margin-top: 2px;
+            }}
+            .dss-card-grid {{
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(260px, 1.05fr);
+                gap: 8px;
+                align-items: stretch;
+            }}
+            .dss-card {{
+                border: 1px solid #e5eaf3;
+                border-radius: 8px;
+                background: #ffffff;
+                min-height: 92px;
+                padding: 9px 10px;
+            }}
+            .dss-card span {{
+                color: #64748b;
+                display: block;
+                font-size: 9px;
+                font-weight: 800;
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
+            }}
+            .dss-card strong {{
+                color: #0f172a;
+                display: block;
+                font-size: 12px;
+                line-height: 1.2;
+                margin: 3px 0 5px;
+            }}
+            .dss-card small {{
+                color: #475569;
+                display: block;
+                font-size: 10.5px;
+                line-height: 1.35;
+            }}
             .zoom-level-control {{
                 width: 46px;
                 max-height: 250px;
@@ -1258,29 +1386,27 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                 background: #2563eb;
                 color: #ffffff;
             }}
-            .hand-panel {{
-                margin-top: 10px;
-                border: 1px solid #bfdbfe;
-                border-radius: 8px;
+            .hand-card {{
+                border-color: #bfdbfe;
                 background:
                     linear-gradient(180deg, rgba(255,255,255,0.99), rgba(239,246,255,0.98)),
-                    linear-gradient(135deg, rgba(14,165,233,0.12), rgba(37,99,235,0.10), rgba(20,184,166,0.08));
-                padding: 10px 12px 12px;
-                box-shadow: 0 14px 28px rgba(15, 23, 42, 0.07);
+                    linear-gradient(135deg, rgba(14,165,233,0.10), rgba(37,99,235,0.08), rgba(20,184,166,0.08));
+            }}
+            .hand-card strong {{
+                margin-bottom: 7px;
             }}
             .hand-controls {{
                 display: grid;
-                grid-template-columns: minmax(120px, 1fr) minmax(130px, 0.7fr) minmax(120px, 0.65fr) auto;
-                gap: 8px;
+                grid-template-columns: minmax(110px, 1fr) minmax(96px, 0.75fr) minmax(96px, 0.75fr);
+                gap: 6px;
                 align-items: end;
-                margin-top: 8px;
             }}
             .hand-controls label {{
                 display: grid;
                 gap: 3px;
                 color: #64748b;
-                font-size: 10px;
-                font-weight: 700;
+                font-size: 9px;
+                font-weight: 800;
                 text-transform: uppercase;
             }}
             .hand-controls input,
@@ -1291,30 +1417,34 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                 border-radius: 6px;
                 background: #ffffff;
                 color: #0f172a;
-                font: 600 12px/1.2 Roboto, Inter, Segoe UI, sans-serif;
-                padding: 8px 9px;
+                font: 700 11px/1.2 Roboto, Inter, Segoe UI, sans-serif;
+                padding: 7px 8px;
             }}
             .hand-controls button {{
+                grid-column: 1 / -1;
                 border: 0;
                 border-radius: 6px;
                 background: #2563eb;
                 color: #ffffff;
                 cursor: pointer;
                 font: 700 12px/1 Roboto, Inter, Segoe UI, sans-serif;
-                padding: 10px 12px;
-                min-height: 35px;
+                padding: 9px 12px;
+                min-height: 32px;
             }}
             .hand-controls button:hover {{
                 background: #1d4ed8;
             }}
             .hand-status {{
                 color: #475569;
-                font-size: 11px;
-                margin-top: 7px;
+                font-size: 10.5px;
+                margin-top: 6px;
                 line-height: 1.4;
             }}
             @media (max-width: 760px) {{
                 .geoglows-grid {{
+                    grid-template-columns: 1fr;
+                }}
+                .dss-card-grid {{
                     grid-template-columns: 1fr;
                 }}
                 .hand-controls {{
@@ -1345,45 +1475,54 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                 </div>
             </div>
         </div>
-        <div class="hand-panel">
-            <div class="geoglows-head">
+        <div class="dss-link-panel">
+            <div class="dss-link-head">
                 <div>
-                    <span>HAND Inundation Screening</span>
-                    <strong id="handTitle">Generate inundation layer for a GEOGLOWS stream ID</strong>
-                    <small id="handStatus">Select a dam/stream first or enter a GEOGLOWS COMID. This screening layer uses return-period stage until a true HAND raster is connected.</small>
+                    <span>GD Site Forecast Linkage</span>
+                    <strong id="dssLinkTitle">Click a GD site, dam, GEOGLOWS stream, or map point to build linked DSS context.</strong>
                 </div>
             </div>
-            <div class="hand-controls">
-                <label>GEOGLOWS COMID
-                    <input id="handComid" type="text" placeholder="Click stream/dam or enter COMID">
-                </label>
-                <label>Return period
-                    <select id="handReturnPeriod">
-                        <option value="2">2 year</option>
-                        <option value="5">5 year</option>
-                        <option value="10" selected>10 year</option>
-                        <option value="25">25 year</option>
-                        <option value="50">50 year</option>
-                        <option value="100">100 year</option>
-                    </select>
-                </label>
-                <label>HAND stage
-                    <select id="handStage">
-                        <option value="1.0">1.0 m</option>
-                        <option value="2.0">2.0 m</option>
-                        <option value="3.5" selected>3.5 m</option>
-                        <option value="5.0">5.0 m</option>
-                        <option value="7.0">7.0 m</option>
-                    </select>
-                </label>
-                <button id="handGenerate" type="button">Generate Layer</button>
+            <div id="dssLinkCards" class="dss-card-grid">
+                <div id="dssGeoglowsCard" class="dss-card"><span>GEOGLOWS</span><strong>Waiting for selection</strong><small>Nearest stream reach will drive downstream DSS context.</small></div>
+                <div id="dssGlofasCard" class="dss-card"><span>GloFAS</span><strong>Waiting for selection</strong><small>Nearest project forecast node will be linked by location.</small></div>
+                <div id="dssGrrrCard" class="dss-card"><span>GRRR</span><strong>Waiting for selection</strong><small>Nearest runoff reanalysis/reforecast node will be linked by location.</small></div>
+                <div class="dss-card hand-card">
+                    <span>HAND Scenario</span>
+                    <strong id="handTitle">Inundation screening from selected GEOGLOWS reach</strong>
+                    <div class="hand-controls">
+                        <label>COMID
+                            <input id="handComid" type="text" placeholder="Select site or enter COMID">
+                        </label>
+                        <label>Return
+                            <select id="handReturnPeriod">
+                                <option value="2">2 yr</option>
+                                <option value="5">5 yr</option>
+                                <option value="10" selected>10 yr</option>
+                                <option value="25">25 yr</option>
+                                <option value="50">50 yr</option>
+                                <option value="100">100 yr</option>
+                            </select>
+                        </label>
+                        <label>Stage
+                            <select id="handStage">
+                                <option value="1.0">1.0 m</option>
+                                <option value="2.0">2.0 m</option>
+                                <option value="3.5" selected>3.5 m</option>
+                                <option value="5.0">5.0 m</option>
+                                <option value="7.0">7.0 m</option>
+                            </select>
+                        </label>
+                        <button id="handGenerate" type="button">Generate HAND Layer</button>
+                    </div>
+                    <div id="handNote" class="hand-status">Select a GD site, dam, stream, or enter COMID.</div>
+                </div>
             </div>
-            <div id="handNote" class="hand-status">No HAND screening layer generated yet.</div>
         </div>
         <script src="https://js.arcgis.com/4.30/"></script>
         <script>
             const damFeatures = {features_json};
             const damHistory = {history_json};
+            const dssForecastNodes = {dss_nodes_json};
             const geoglowsServiceUrl = {geoglows_url};
             let geoglowsTimeExtent = null;
             let geoglowsRequestId = 0;
@@ -1452,6 +1591,106 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                 if (rp >= 10) return "#ff813d";
                 if (rp >= 2) return "#f5d140";
                 return "#4baecc";
+            }}
+
+            function haversineKm(lat1, lon1, lat2, lon2) {{
+                const toRad = (value) => Number(value) * Math.PI / 180;
+                const aLat = Number(lat1);
+                const aLon = Number(lon1);
+                const bLat = Number(lat2);
+                const bLon = Number(lon2);
+                if (![aLat, aLon, bLat, bLon].every(Number.isFinite)) return Infinity;
+                const dLat = toRad(bLat - aLat);
+                const dLon = toRad(bLon - aLon);
+                const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLon / 2) ** 2;
+                return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            }}
+
+            function nearestForecastNode(nodes, latitude, longitude) {{
+                return (nodes || [])
+                    .filter((node) => Number.isFinite(Number(node.latitude)) && Number.isFinite(Number(node.longitude)))
+                    .map((node) => ({{ ...node, distance_km: haversineKm(latitude, longitude, node.latitude, node.longitude) }}))
+                    .sort((a, b) => a.distance_km - b.distance_km)[0] || null;
+            }}
+
+            function latestNodeFlow(node, keys) {{
+                const rows = Array.isArray(node?.series) ? node.series : [];
+                for (let index = rows.length - 1; index >= 0; index -= 1) {{
+                    for (const key of keys) {{
+                        const value = Number(rows[index]?.[key]);
+                        if (Number.isFinite(value)) return value;
+                    }}
+                }}
+                return null;
+            }}
+
+            function dssCard(id, type, title, lines, color = "#2563eb") {{
+                return `
+                    <div id="${{id}}" class="dss-card">
+                        <span style="color:${{color}}">${{type}}</span>
+                        <strong>${{escapeHtml(title || "Not linked")}}</strong>
+                        <small>${{lines.map(escapeHtml).join("<br>")}}</small>
+                    </div>
+                `;
+            }}
+
+            function replaceDssCard(id, html) {{
+                const current = document.getElementById(id);
+                if (current) current.outerHTML = html;
+            }}
+
+            function renderDssLinkage(context) {{
+                const title = document.getElementById("dssLinkTitle");
+                if (title) title.textContent = context?.label || "Linked forecast DSS context";
+                if (context?.loading) {{
+                    replaceDssCard("dssGeoglowsCard", dssCard("dssGeoglowsCard", "GEOGLOWS", "Loading nearest reach", ["Querying live medium-flow service..."]));
+                    replaceDssCard("dssGlofasCard", dssCard("dssGlofasCard", "GloFAS", "Preparing linkage", ["Nearest project forecast node will be matched."]));
+                    replaceDssCard("dssGrrrCard", dssCard("dssGrrrCard", "GRRR", "Preparing linkage", ["Nearest runoff node will be matched."]));
+                    return;
+                }}
+                const lat = Number(context?.latitude);
+                const lon = Number(context?.longitude);
+                const attrs = context?.feature?.properties || context?.feature?.attributes || {{}};
+                const glofasNode = nearestForecastNode(dssForecastNodes.glofas, lat, lon);
+                const grrrNode = nearestForecastNode(dssForecastNodes.grrr, lat, lon);
+                const geoglowsLines = attrs.comid
+                    ? [
+                        `COMID ${{attrs.comid}} | Stream order ${{attrs.streamorder ?? "n/a"}}`,
+                        `${{fmt(attrs.meanflow, " cumecs")}} mean flow | ${{returnPeriodLabel(attrs.returnperiod)}}`
+                    ]
+                    : [context?.error || "No linked GEOGLOWS reach found near this selection."];
+                const glofasFlow = latestNodeFlow(glofasNode, ["glofas_p50_cms", "reservoir_attenuated_cms", "chirps_hindcast_cms"]);
+                const grrrFlow = latestNodeFlow(grrrNode, ["reforecast_p50_cms", "reservoir_adjusted_cms", "reanalysis_discharge_cms"]);
+                replaceDssCard(
+                    "dssGeoglowsCard",
+                    dssCard("dssGeoglowsCard", "GEOGLOWS", attrs.comid ? "Live river forecast reach" : "No reach linked", geoglowsLines, returnPeriodColor(attrs.returnperiod))
+                );
+                replaceDssCard(
+                    "dssGlofasCard",
+                    dssCard(
+                        "dssGlofasCard",
+                        "GloFAS",
+                        glofasNode?.name || "No GloFAS node",
+                        glofasNode ? [
+                            `${{glofasNode.basin || "Project basin"}} | ${{fmt(glofasNode.distance_km, " km away")}}`,
+                            `Risk ${{glofasNode.risk_band || "Normal"}} | Flow ${{fmt(glofasFlow, " cumecs")}}`
+                        ] : ["Project GloFAS JSON has no node with coordinates."],
+                        "#7c3aed"
+                    )
+                );
+                replaceDssCard(
+                    "dssGrrrCard",
+                    dssCard(
+                        "dssGrrrCard",
+                        "GRRR",
+                        grrrNode?.name || "No GRRR node",
+                        grrrNode ? [
+                            `${{grrrNode.basin || "Project basin"}} | ${{fmt(grrrNode.distance_km, " km away")}}`,
+                            `Risk ${{grrrNode.risk_band || "Normal"}} | Runoff flow ${{fmt(grrrFlow, " cumecs")}}`
+                        ] : ["Project GRRR JSON has no node with coordinates."],
+                        "#0f766e"
+                    )
+                );
             }}
 
             async function fetchJson(url) {{
@@ -1661,22 +1900,27 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
             async function loadGeoglowsForPoint(latitude, longitude, label = "Selected map point") {{
                 const requestId = ++geoglowsRequestId;
                 renderGeoglowsPanel({{ loading: true, label }});
+                renderDssLinkage({{ loading: true, latitude, longitude, label }});
                 try {{
                     let feature = await queryGeoglowsNearby(latitude, longitude, 50000);
                     if (!feature) feature = await queryGeoglowsNearby(latitude, longitude, 150000);
                     if (requestId !== geoglowsRequestId) return null;
                     const attrs = feature?.properties || feature?.attributes || {{}};
                     if (!attrs.comid) {{
-                        renderGeoglowsPanel({{ label, error: "No GEOGLOWS forecast reach found within 150 km of this point.", series: [] }});
+                        const error = "No GEOGLOWS forecast reach found within 150 km of this point.";
+                        renderGeoglowsPanel({{ label, error, series: [] }});
+                        renderDssLinkage({{ label, latitude, longitude, error, series: [] }});
                         return null;
                     }}
                     const series = await queryGeoglowsSeries(attrs.comid);
                     if (requestId !== geoglowsRequestId) return null;
                     renderGeoglowsPanel({{ label, feature, series }});
+                    renderDssLinkage({{ label, latitude, longitude, feature, series }});
                     return feature;
                 }} catch (error) {{
                     if (requestId === geoglowsRequestId) {{
                         renderGeoglowsPanel({{ label, error: `GEOGLOWS query failed: ${{error.message}}`, series: [] }});
+                        renderDssLinkage({{ label, latitude, longitude, error: `GEOGLOWS query failed: ${{error.message}}`, series: [] }});
                     }}
                     return null;
                 }}
@@ -2101,8 +2345,16 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                             const point = hit.graphic.geometry;
                             const name = attrs.reservoir_name || attrs.dam_name || "Selected dam";
                             selectGeoglows(point.latitude, point.longitude, `${{name}} nearest GEOGLOWS reach`);
-                        }} else if (event.mapPoint) {{
-                            selectGeoglows(event.mapPoint.latitude, event.mapPoint.longitude, "Map clicked GEOGLOWS reach");
+                        }} else {{
+                            const linkedHit = response.results.find((item) => item.graphic && item.graphic.layer !== layer);
+                            const linkedAttrs = linkedHit?.graphic?.attributes || {{}};
+                            const layerTitle = linkedHit?.graphic?.layer?.title || "Map layer";
+                            const siteName = linkedAttrs.name || linkedAttrs.Name || linkedAttrs.NAME || linkedAttrs.station_name || linkedAttrs.Station || linkedAttrs.site_name || linkedAttrs.Site_Name || linkedAttrs.gauge_station || linkedAttrs.Gauge || layerTitle;
+                            const isGdLike = /gd|gauge|site|river|cwc|station/i.test(`${{layerTitle}} ${{siteName}}`);
+                            const label = isGdLike ? `${{siteName}} GD/Gauge DSS linkage` : `${{siteName}} map DSS linkage`;
+                            if (event.mapPoint) {{
+                                selectGeoglows(event.mapPoint.latitude, event.mapPoint.longitude, label);
+                            }}
                         }}
                     }}).catch(() => null);
                 }});
@@ -2118,7 +2370,7 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
             }});
         </script>
         """,
-        height=980,
+        height=1040,
     )
 
 
@@ -2437,9 +2689,10 @@ st.markdown(
           </div>
         </div>
         <div class="meta-row">
-          <div class="meta">{len(selected_names)} reports selected</div>
-          <div class="meta">{time_label(time_min)} to {time_label(time_max)}</div>
-          <div class="meta">{len(reservoir_view) + len(river_view) + len(gate_view_all)} rows in view</div>
+          <div class="meta">
+            <span class="meta-label">Observation Window</span>
+            <span class="meta-value">{time_label(time_min)} to {time_label(time_max)}</span>
+          </div>
         </div>
       </div>
     </div>
