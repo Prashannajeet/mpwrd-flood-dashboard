@@ -37,7 +37,7 @@ from flood_report_parser import parse_pdf  # noqa: E402
 
 
 st.set_page_config(
-    page_title="MPWRD VBSR Dam Water Level Intelligent Dashboard",
+    page_title="Nita AI & Geo-Analytics | MPWRD VBSR Dashboard",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -88,29 +88,87 @@ st.markdown(
     .masthead {
         border: 1px solid var(--line);
         background:
-            linear-gradient(135deg, rgba(255,255,255,0.92), rgba(238,248,255,0.94)),
-            linear-gradient(120deg, rgba(191,219,254,0.62), rgba(204,251,241,0.46), rgba(253,230,138,0.30));
+            linear-gradient(135deg, rgba(255,255,255,0.96), rgba(239,246,255,0.96)),
+            linear-gradient(120deg, rgba(37,99,235,0.14), rgba(20,184,166,0.13), rgba(245,158,11,0.10));
         border-radius: 8px;
-        padding: 0.95rem 1.1rem;
+        padding: 0.95rem 1.05rem;
         margin: 0.45rem 0 0.85rem;
         box-shadow: 0 18px 40px rgba(15, 23, 42, 0.07);
         position: relative;
         z-index: 1;
+        overflow: hidden;
+    }
+    .masthead::before {
+        content: "";
+        position: absolute;
+        inset: 0 auto 0 0;
+        width: 5px;
+        background: linear-gradient(180deg, #2563eb, #14b8a6, #f59e0b);
     }
     .masthead-top {
         display: flex;
         justify-content: space-between;
         gap: 1rem;
-        align-items: flex-start;
+        align-items: center;
+    }
+    .brand-lockup {
+        display: flex;
+        align-items: center;
+        gap: 0.78rem;
+        min-width: 0;
+    }
+    .brand-logo {
+        width: 54px;
+        height: 54px;
+        border-radius: 16px;
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+        background:
+            radial-gradient(circle at 25% 20%, rgba(255,255,255,0.95), transparent 28%),
+            linear-gradient(135deg, #2563eb 0%, #14b8a6 58%, #f59e0b 100%);
+        box-shadow: 0 14px 30px rgba(37, 99, 235, 0.20);
+        color: #ffffff;
+        font-size: 1.45rem;
+        font-weight: 900;
+        letter-spacing: 0 !important;
+    }
+    .brand-kicker {
+        color: #2563eb;
+        font-size: 0.72rem;
+        font-weight: 800;
+        line-height: 1;
+        text-transform: uppercase;
+        letter-spacing: 0.08em !important;
+        margin-bottom: 0.28rem;
+    }
+    .brand-name {
+        color: #0f172a;
+        font-size: 0.98rem;
+        font-weight: 850;
+        line-height: 1.15;
+    }
+    .brand-domain {
+        color: #0f766e;
+        font-size: 0.76rem;
+        font-weight: 700;
+        line-height: 1.2;
+        margin-top: 0.12rem;
+    }
+    .title-group {
+        border-left: 1px solid #dbe5f3;
+        margin-left: 0.18rem;
+        padding-left: 0.9rem;
+        min-width: 0;
     }
     .title {
-        font-size: 1.58rem;
+        font-size: 1.42rem;
         line-height: 1.15;
-        font-weight: 700;
+        font-weight: 850;
     }
     .subtitle {
         color: var(--muted);
-        font-size: 0.88rem;
+        font-size: 0.82rem;
         margin-top: 0.24rem;
         max-width: 760px;
     }
@@ -122,12 +180,66 @@ st.markdown(
     }
     .meta {
         border: 1px solid var(--line);
-        background: #f8fafc;
+        background: rgba(255,255,255,0.82);
         border-radius: 6px;
         padding: 0.35rem 0.48rem;
         color: #334155;
         font-size: 0.74rem;
         white-space: nowrap;
+    }
+    .sidebar-brand {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: linear-gradient(135deg, #ffffff 0%, #eef8ff 100%);
+        padding: 0.82rem 0.78rem;
+        margin: 0.25rem 0 0.9rem;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+    }
+    .sidebar-brand-row {
+        display: flex;
+        align-items: center;
+        gap: 0.58rem;
+    }
+    .sidebar-logo {
+        width: 38px;
+        height: 38px;
+        border-radius: 12px;
+        display: grid;
+        place-items: center;
+        color: #fff;
+        background: linear-gradient(135deg, #2563eb, #14b8a6 62%, #f59e0b);
+        font-size: 1.05rem;
+        font-weight: 900;
+        box-shadow: 0 10px 22px rgba(37, 99, 235, 0.18);
+    }
+    .sidebar-brand-title {
+        color: #0f172a;
+        font-size: 0.88rem;
+        font-weight: 850;
+        line-height: 1.15;
+    }
+    .sidebar-brand-subtitle {
+        color: #0f766e;
+        font-size: 0.72rem;
+        font-weight: 700;
+        margin-top: 0.1rem;
+    }
+    @media (max-width: 900px) {
+        .masthead-top {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+        .title-group {
+            border-left: 0;
+            margin-left: 0;
+            padding-left: 0;
+        }
+        .brand-lockup {
+            align-items: flex-start;
+        }
+        .meta-row {
+            justify-content: flex-start;
+        }
     }
     div[data-testid="stMetric"] {
         background:
@@ -2132,6 +2244,20 @@ def save_uploaded_pdf(uploaded_file) -> Path:
 
 
 with st.sidebar:
+    st.markdown(
+        """
+        <div class="sidebar-brand">
+          <div class="sidebar-brand-row">
+            <div class="sidebar-logo">N</div>
+            <div>
+              <div class="sidebar-brand-title">Nita AI</div>
+              <div class="sidebar-brand-subtitle">Geo-Analytics Platform</div>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     st.header("Report Source")
     uploaded = st.file_uploader("Upload MP WRD flood report PDF", type=["pdf"])
     if uploaded is not None:
@@ -2298,9 +2424,17 @@ st.markdown(
     f"""
     <div class="masthead">
       <div class="masthead-top">
-        <div>
-          <div class="title">MPWRD VBSR Dam Water Level Intelligent Dashboard and Analytics</div>
-          <div class="subtitle">MPWRD VBSR Dam Water Level Status Monitoring and AI Analytics for DSS</div>
+        <div class="brand-lockup">
+          <div class="brand-logo">N</div>
+          <div>
+            <div class="brand-kicker">Nita AI &amp; Geo-Analytics</div>
+            <div class="brand-name">Decision Intelligence for Water Resources</div>
+            <div class="brand-domain">Flood, dam safety, geospatial analytics, and AI-enabled DSS</div>
+          </div>
+          <div class="title-group">
+            <div class="title">MPWRD VBSR Dam Water Level Intelligent Dashboard and Analytics</div>
+            <div class="subtitle">MPWRD VBSR Dam Water Level Status Monitoring and AI Analytics for DSS</div>
+          </div>
         </div>
         <div class="meta-row">
           <div class="meta">{len(selected_names)} reports selected</div>
