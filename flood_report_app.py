@@ -14,6 +14,7 @@ import urllib.request
 from difflib import SequenceMatcher
 from html import escape
 from pathlib import Path
+from datetime import date, time
 
 import altair as alt
 import pandas as pd
@@ -59,6 +60,99 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+
+COLUMN_LABEL_OVERRIDES = {
+    "lsl_m": "LSL (m)",
+    "frl_m": "FRL (m)",
+    "frl_gap_m": "FRL Gap (m)",
+    "water_level_m": "Water Level (m)",
+    "current_live_capacity_mcm": "Current Live Capacity (MCM)",
+    "live_capacity_frl_mcm": "Live Capacity at FRL (MCM)",
+    "filling_percent": "Filling (%)",
+    "display_filling": "Filling (%)",
+    "rainfall_daily_mm": "Daily Rainfall (mm)",
+    "rainfall_total_mm": "Total Rainfall (mm)",
+    "danger_or_max_water_level_m": "Danger / Max Water Level (m)",
+    "gate_opened_count": "Opened Gates",
+    "total_no_of_gates": "Total Gates",
+    "opening_m": "Opening (m)",
+    "discharge_cumecs": "Discharge (cumecs)",
+    "discharge_cusec": "Discharge (cusecs)",
+    "wl_delta_m": "Water Level Change (m)",
+    "elevation_m": "Elevation (m)",
+    "area_sqkm": "Area (sq.km)",
+    "volume_mcm": "Volume (MCM)",
+    "waterbody_area_sqkm": "Waterbody Area (sq.km)",
+    "alert_level": "Alert Level",
+    "configured_alert": "Configured Alert",
+    "alert_reason": "Alert Reason",
+    "rapid_rise_alert": "Rapid Rise Alert",
+    "reservoir_name": "Reservoir",
+    "dam_name": "Dam",
+    "gauge_station": "Gauge Station",
+    "river_name": "River",
+    "map_district": "Map District",
+    "sub_basin": "Sub Basin",
+    "major_basin": "Major Basin",
+    "observed_at": "Observed At",
+    "report_at": "Report At",
+    "report_folder": "Report Folder",
+    "source_filename": "Source File",
+    "source_file_hash": "Source File Hash",
+    "extraction_method": "Extraction Method",
+    "season_year": "Season Year",
+}
+
+
+def column_display_label(column: object) -> str:
+    raw = str(column)
+    if raw in COLUMN_LABEL_OVERRIDES:
+        return COLUMN_LABEL_OVERRIDES[raw]
+    label = raw.replace("_", " ").strip().title()
+    replacements = {
+        " Id": " ID",
+        " Api": " API",
+        " Url": " URL",
+        " Sms": "SMS",
+        " Pdf": "PDF",
+        " Ocr": "OCR",
+        " Frl": "FRL",
+        " Lsl": "LSL",
+        " Mcm": "MCM",
+        " Wse": "WSE",
+        " Dss": "DSS",
+        " Glofas": "GloFAS",
+        " Grrr": "GRRR",
+        " Geoglows": "GEOGLOWS",
+    }
+    for old, new in replacements.items():
+        label = label.replace(old, new)
+    return label
+
+
+def prettify_dataframe_columns(data: object) -> object:
+    if isinstance(data, pd.DataFrame):
+        return data.rename(columns={column: column_display_label(column) for column in data.columns})
+    return data
+
+
+def friendly_column_config(data: pd.DataFrame, existing: dict | None = None) -> dict:
+    config = dict(existing or {})
+    for column in data.columns:
+        if column not in config:
+            config[column] = st.column_config.Column(column_display_label(column))
+    return config
+
+
+_ORIGINAL_ST_DATAFRAME = st.dataframe
+
+
+def _dataframe_with_friendly_headers(data=None, *args, **kwargs):
+    return _ORIGINAL_ST_DATAFRAME(prettify_dataframe_columns(data), *args, **kwargs)
+
+
+st.dataframe = _dataframe_with_friendly_headers
 
 st.markdown(
     """
@@ -4361,30 +4455,44 @@ def parse_alert_recipients(recipients_text: str) -> list[dict[str, str]]:
         raw = line.strip()
         if not raw:
             continue
+        email_match = re.search(r"[\w.\-+%]+@[\w.\-]+\.[A-Za-z]{2,}", raw)
         phone_match = re.search(r"(\+?\d[\d\s\-()]{7,}\d)", raw)
-        if not phone_match:
-            recipients.append({"label": raw, "phone": "", "status": "Missing phone"})
-            continue
-        phone = re.sub(r"\D+", "", phone_match.group(1))
-        if len(phone) == 10:
-            phone = f"91{phone}"
-        label = raw.replace(phone_match.group(1), "").strip(" -:,") or raw
-        recipients.append({"label": label, "phone": phone, "status": "Ready" if len(phone) >= 11 else "Check phone"})
+        phone = ""
+        if phone_match:
+            phone = re.sub(r"\D+", "", phone_match.group(1))
+            if len(phone) == 10:
+                phone = f"91{phone}"
+        email = email_match.group(0) if email_match else ""
+        label = raw
+        if phone_match:
+            label = label.replace(phone_match.group(1), "")
+        if email:
+            label = label.replace(email, "")
+        label = label.strip(" -:,") or raw
+        has_phone = bool(phone and len(phone) >= 11)
+        has_email = bool(email)
+        status = "Ready" if has_phone or has_email else "Missing phone/email"
+        if phone and len(phone) < 11:
+            status = "Check phone"
+        recipients.append({"label": label, "phone": phone, "email": email, "status": status})
     return recipients
 
 
 def build_alert_test_links(recipients: list[dict[str, str]], message: str, channels: list[str]) -> pd.DataFrame:
     rows = []
     encoded = urllib.parse.quote(message)
+    subject = urllib.parse.quote("MPWRD Dam Alert")
     for recipient in recipients:
         phone = recipient.get("phone", "")
-        if not phone:
-            rows.append({**recipient, "channel": "None", "test_link": "", "status": recipient.get("status", "Missing phone")})
-            continue
+        email = recipient.get("email", "")
         if "WhatsApp" in channels:
-            rows.append({**recipient, "channel": "WhatsApp", "test_link": f"https://wa.me/{phone}?text={encoded}", "status": recipient.get("status", "Ready")})
+            rows.append({**recipient, "channel": "WhatsApp", "test_link": f"https://wa.me/{phone}?text={encoded}" if phone else "", "status": recipient.get("status", "Ready") if phone else "Missing phone"})
         if "SMS" in channels:
-            rows.append({**recipient, "channel": "SMS", "test_link": f"sms:+{phone}?&body={encoded}", "status": recipient.get("status", "Ready")})
+            rows.append({**recipient, "channel": "SMS", "test_link": f"sms:+{phone}?&body={encoded}" if phone else "", "status": recipient.get("status", "Ready") if phone else "Missing phone"})
+        if "Email" in channels:
+            rows.append({**recipient, "channel": "Email", "test_link": f"mailto:{email}?subject={subject}&body={encoded}" if email else "", "status": recipient.get("status", "Ready") if email else "Missing email"})
+        if not any(channel in channels for channel in ["WhatsApp", "SMS", "Email"]):
+            rows.append({**recipient, "channel": "None", "test_link": "", "status": "No channel selected"})
     return pd.DataFrame(rows)
 
 
@@ -4395,6 +4503,65 @@ def save_alert_outbox_record(payload: dict) -> Path:
     target = outbox_dir / f"alert_test_{timestamp}.json"
     target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return target
+
+
+def write_manual_entry_report(
+    report_date: date,
+    report_time: time,
+    reservoirs_rows: list[dict],
+    river_rows: list[dict],
+    gate_rows: list[dict],
+) -> tuple[Path, dict[str, int]]:
+    observed_at = pd.Timestamp.combine(report_date, report_time)
+    folder_name = f"manual_entry_{observed_at.strftime('%Y%m%d_%H%M')}"
+    output_dir = APP_DIR / folder_name
+    output_dir.mkdir(exist_ok=True)
+    meta = {
+        "report_date": report_date.isoformat(),
+        "report_time": report_time.strftime("%H:%M:%S"),
+        "season_year": int(report_date.year),
+        "source_filename": f"{folder_name}.manual",
+        "source_file_hash": "",
+        "extraction_method": "manual_admin_entry",
+    }
+    (output_dir / "report_meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    reservoir_obs = pd.DataFrame(reservoirs_rows)
+    if reservoir_obs.empty:
+        reservoir_obs = pd.DataFrame(columns=["source_row_no", "reservoir_name", "district", "lsl_m", "frl_m", "live_capacity_frl_mcm", "observed_at", "water_level_m", "current_live_capacity_mcm", "filling_percent", "rainfall_daily_mm", "rainfall_total_mm"])
+    else:
+        reservoir_obs.insert(0, "source_row_no", range(1, len(reservoir_obs) + 1))
+        reservoir_obs["observed_at"] = observed_at
+    reservoir_obs.to_csv(output_dir / "reservoir_status_observations.csv", index=False)
+    reservoir_master_cols = ["reservoir_name", "district", "lsl_m", "frl_m", "live_capacity_frl_mcm", "total_no_of_gates"]
+    reservoir_master = reservoir_obs[[col for col in reservoir_master_cols if col in reservoir_obs.columns]].drop_duplicates("reservoir_name") if not reservoir_obs.empty else pd.DataFrame(columns=reservoir_master_cols)
+    reservoir_master.to_csv(output_dir / "reservoirs.csv", index=False)
+
+    gates = pd.DataFrame(gate_rows)
+    gate_cols = ["source_row_no", "reservoir_name", "district", "total_no_of_gates", "gate_opened_count", "opening_m", "gate_opening_date", "gate_opening_time", "discharge_cumecs", "discharge_cusec"]
+    if gates.empty:
+        gates = pd.DataFrame(columns=gate_cols)
+    else:
+        gates.insert(0, "source_row_no", range(1, len(gates) + 1))
+    gates.to_csv(output_dir / "reservoir_gate_observations.csv", index=False)
+
+    river_obs = pd.DataFrame(river_rows)
+    river_obs_cols = ["source_row_no", "river_name", "gauge_station", "district", "danger_or_max_water_level_m", "observed_at", "water_level_m"]
+    if river_obs.empty:
+        river_obs = pd.DataFrame(columns=river_obs_cols)
+    else:
+        river_obs.insert(0, "source_row_no", range(1, len(river_obs) + 1))
+        river_obs["observed_at"] = observed_at
+    river_obs.to_csv(output_dir / "river_water_level_observations.csv", index=False)
+    river_master_cols = ["river_name", "gauge_station", "district", "danger_or_max_water_level_m"]
+    river_master = river_obs[[col for col in river_master_cols if col in river_obs.columns]].drop_duplicates("gauge_station") if not river_obs.empty else pd.DataFrame(columns=river_master_cols)
+    river_master.to_csv(output_dir / "river_gauge_stations.csv", index=False)
+
+    return output_dir, {
+        "reservoir_observation_rows": len(reservoir_obs),
+        "gate_observation_rows": len(gates),
+        "river_observation_rows": len(river_obs),
+    }
 
 
 def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_reports: list[Path]) -> None:
@@ -4418,7 +4585,7 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
                 st.error("Invalid admin credentials.")
         return
 
-    admin_tabs = st.tabs(["PDF Upload & Data Refresh", "Messaging Alerts", "Audit Log"])
+    admin_tabs = st.tabs(["PDF Upload & Data Refresh", "Manual Data Entry", "Messaging Alerts", "Audit Log"])
     with admin_tabs[0]:
         st.markdown(
             '<div class="panel-note">Upload official MP WRD flood report PDFs. The parser creates a new parsed report folder that becomes available in the dashboard report selector.</div>',
@@ -4465,6 +4632,122 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
 
     with admin_tabs[1]:
         st.markdown(
+            '<div class="panel-note">Use this as a secondary source when a PDF is delayed or OCR needs correction. Saved rows are written in the same parsed-report format as uploaded PDFs.</div>',
+            unsafe_allow_html=True,
+        )
+        entry_meta_cols = st.columns(3)
+        with entry_meta_cols[0]:
+            manual_date = st.date_input("Report date", value=date.today(), key="manual_report_date")
+        with entry_meta_cols[1]:
+            manual_time = st.time_input("Report time", value=time(8, 0), key="manual_report_time")
+        with entry_meta_cols[2]:
+            st.caption("Tip: enter one or many rows, then save. The new manual report appears in the sidebar report selector after refresh.")
+
+        reservoir_options_for_entry = sorted(map_status["reservoir_name"].dropna().unique()) if not map_status.empty and "reservoir_name" in map_status else []
+        district_options_for_entry = sorted(
+            set(map_status.get("map_district", pd.Series(dtype=str)).dropna().astype(str))
+            | set(map_status.get("district", pd.Series(dtype=str)).dropna().astype(str))
+        ) if not map_status.empty else []
+        reservoir_template = pd.DataFrame(
+            [
+                {
+                    "reservoir_name": reservoir_options_for_entry[0] if reservoir_options_for_entry else "",
+                    "district": district_options_for_entry[0] if district_options_for_entry else "",
+                    "lsl_m": 0.0,
+                    "frl_m": 0.0,
+                    "live_capacity_frl_mcm": 0.0,
+                    "total_no_of_gates": 0,
+                    "water_level_m": 0.0,
+                    "current_live_capacity_mcm": 0.0,
+                    "filling_percent": 0.0,
+                    "rainfall_daily_mm": 0.0,
+                    "rainfall_total_mm": 0.0,
+                }
+            ]
+        )
+        river_template = pd.DataFrame(
+            [
+                {
+                    "river_name": "",
+                    "gauge_station": "",
+                    "district": district_options_for_entry[0] if district_options_for_entry else "",
+                    "danger_or_max_water_level_m": 0.0,
+                    "water_level_m": 0.0,
+                }
+            ]
+        )
+        gate_template = pd.DataFrame(
+            [
+                {
+                    "reservoir_name": reservoir_options_for_entry[0] if reservoir_options_for_entry else "",
+                    "district": district_options_for_entry[0] if district_options_for_entry else "",
+                    "total_no_of_gates": 0,
+                    "gate_opened_count": 0,
+                    "opening_m": 0.0,
+                    "gate_opening_date": manual_date,
+                    "gate_opening_time": manual_time.strftime("%H:%M:%S"),
+                    "discharge_cumecs": 0.0,
+                    "discharge_cusec": 0.0,
+                }
+            ]
+        )
+        manual_entry_tabs = st.tabs(["Reservoir Levels", "River Gauges", "Reservoir Gates"])
+        reservoir_column_config = {}
+        if reservoir_options_for_entry:
+            reservoir_column_config["reservoir_name"] = st.column_config.SelectboxColumn("Reservoir", options=reservoir_options_for_entry)
+        if district_options_for_entry:
+            reservoir_column_config["district"] = st.column_config.SelectboxColumn("District", options=district_options_for_entry)
+        reservoir_column_config = friendly_column_config(reservoir_template, reservoir_column_config)
+        river_column_config = friendly_column_config(river_template)
+        gate_select_config = {}
+        if reservoir_options_for_entry:
+            gate_select_config["reservoir_name"] = st.column_config.SelectboxColumn("Reservoir", options=reservoir_options_for_entry)
+        if district_options_for_entry:
+            gate_select_config["district"] = st.column_config.SelectboxColumn("District", options=district_options_for_entry)
+        gate_column_config = friendly_column_config(gate_template, gate_select_config)
+        with manual_entry_tabs[0]:
+            reservoir_entry_df = st.data_editor(
+                reservoir_template,
+                num_rows="dynamic",
+                use_container_width=True,
+                key="manual_reservoir_entries",
+                column_config=reservoir_column_config,
+            )
+        with manual_entry_tabs[1]:
+            river_entry_df = st.data_editor(
+                river_template,
+                num_rows="dynamic",
+                use_container_width=True,
+                key="manual_river_entries",
+                column_config=river_column_config,
+            )
+        with manual_entry_tabs[2]:
+            gate_entry_df = st.data_editor(
+                gate_template,
+                num_rows="dynamic",
+                use_container_width=True,
+                key="manual_gate_entries",
+                column_config=gate_column_config,
+            )
+
+        if st.button("Save Manual Entry Report", type="primary", use_container_width=True, key="save_manual_entry_report"):
+            reservoir_rows = reservoir_entry_df.dropna(how="all").to_dict("records") if isinstance(reservoir_entry_df, pd.DataFrame) else []
+            river_rows = river_entry_df.dropna(how="all").to_dict("records") if isinstance(river_entry_df, pd.DataFrame) else []
+            gate_rows = gate_entry_df.dropna(how="all").to_dict("records") if isinstance(gate_entry_df, pd.DataFrame) else []
+            output_dir, counts = write_manual_entry_report(manual_date, manual_time, reservoir_rows, river_rows, gate_rows)
+            st.session_state.setdefault("admin_audit_log", []).insert(
+                0,
+                {
+                    "time": pd.Timestamp.now(tz="Asia/Kolkata").strftime("%d %b %Y %I:%M %p"),
+                    "module": "Manual Data Entry",
+                    "action": f"Saved {output_dir.name}",
+                    "status": f"{counts['reservoir_observation_rows']} reservoir, {counts['river_observation_rows']} river, {counts['gate_observation_rows']} gate rows",
+                },
+            )
+            st.success(f"Manual report saved: {output_dir.name}. Refresh/reselect reports from the sidebar to include it.")
+
+    with admin_tabs[2]:
+        st.markdown(
             '<div class="panel-note">Configure alert thresholds and prepare SMS/WhatsApp messages. Delivery is preview/log mode until provider credentials and approved templates are configured in deployment secrets.</div>',
             unsafe_allow_html=True,
         )
@@ -4490,15 +4773,15 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
 
         gateway_cols = st.columns([0.32, 0.68])
         with gateway_cols[0]:
-            selected_channels = st.multiselect("Alert channels", ["SMS", "WhatsApp"], default=st.session_state.get("admin_alert_channels", ["SMS", "WhatsApp"]), key="admin_alert_channels")
+            selected_channels = st.multiselect("Alert channels", ["Email", "SMS", "WhatsApp"], default=st.session_state.get("admin_alert_channels", ["Email", "WhatsApp"]), key="admin_alert_channels")
             gateway_mode = st.selectbox("Gateway mode", ["Preview only", "Provider ready"], index=0, key="admin_alert_gateway_mode")
         with gateway_cols[1]:
             recipients_text = st.text_area(
                 "Alert recipients",
-                value=st.session_state.get("admin_alert_recipients", "Control Room +91XXXXXXXXXX\nDam Safety Officer +91XXXXXXXXXX"),
+                value=st.session_state.get("admin_alert_recipients", "Control Room control.room@example.com +91XXXXXXXXXX\nDam Safety Officer dam.safety@example.com +91XXXXXXXXXX"),
                 key="admin_alert_recipients",
                 height=86,
-                help="One recipient per line. Use role/name and phone number.",
+                help="One recipient per line. Use role/name with email and/or phone number.",
             )
 
         active_dam_alerts = build_dam_alert_rows(map_status, dam_critical_gap, dam_warning_gap, dam_watch_filling, rapid_rise_threshold)
@@ -4516,14 +4799,14 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
             alert_labels = [f"{row.reservoir_name} | {row.configured_alert}" for row in active_dam_alerts.itertuples(index=False)]
             selected_alert_label = st.selectbox("Message preview dam", alert_labels, key="admin_alert_preview_dam")
             selected_alert_row = active_dam_alerts.iloc[alert_labels.index(selected_alert_label)]
-            alert_message = st.text_area("SMS / WhatsApp alert message preview", value=dam_alert_message(selected_alert_row), key="admin_alert_message_preview", height=190)
+            alert_message = st.text_area("Email / SMS / WhatsApp alert message preview", value=dam_alert_message(selected_alert_row), key="admin_alert_message_preview", height=190)
             parsed_recipients = parse_alert_recipients(recipients_text)
             dispatch_links = build_alert_test_links(parsed_recipients, alert_message, selected_channels)
             if parsed_recipients:
-                st.caption(f"Parsed {len(parsed_recipients)} recipient(s). Test links open WhatsApp Web or the device SMS app where supported.")
+                st.caption(f"Parsed {len(parsed_recipients)} recipient(s). Test links open email, WhatsApp Web, or the device SMS app where supported.")
             if not dispatch_links.empty:
                 st.dataframe(
-                    dispatch_links[["label", "phone", "channel", "status"]],
+                    dispatch_links[["label", "email", "phone", "channel", "status"]],
                     use_container_width=True,
                     hide_index=True,
                     height=150,
@@ -4575,7 +4858,7 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
                     if link_items:
                         st.markdown("<br/>".join(link_items), unsafe_allow_html=True)
 
-    with admin_tabs[2]:
+    with admin_tabs[3]:
         st.markdown('<div class="panel-note">Local administration actions recorded during this browser session.</div>', unsafe_allow_html=True)
         audit_log = pd.DataFrame(st.session_state.get("admin_audit_log", []))
         alert_log = pd.DataFrame(st.session_state.get("alert_test_log", []))
