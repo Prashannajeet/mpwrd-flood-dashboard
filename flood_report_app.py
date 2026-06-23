@@ -104,6 +104,19 @@ COLUMN_LABEL_OVERRIDES = {
     "season_year": "Season Year",
 }
 
+COOLORS_ALERT_PALETTE = [
+    "#580aff",
+    "#147df5",
+    "#0aefff",
+    "#0aff99",
+    "#a1ff0a",
+    "#deff0a",
+    "#ffd300",
+    "#ff8700",
+    "#ff0000",
+    "#be0aff",
+]
+
 
 def column_display_label(column: object) -> str:
     raw = str(column)
@@ -600,9 +613,9 @@ st.markdown(
         background:
             linear-gradient(135deg, rgba(255,255,255,0.98), rgba(239,246,255,0.94)),
             linear-gradient(135deg, rgba(37,99,235,0.12), rgba(6,182,212,0.10), rgba(251,113,133,0.08));
-        padding: 1rem;
+        padding: 0.72rem;
         box-shadow: 0 18px 42px rgba(15, 23, 42, 0.07);
-        margin-bottom: 0.85rem;
+        margin-bottom: 0.55rem;
     }
     .infographic-title {
         color: var(--text);
@@ -615,19 +628,19 @@ st.markdown(
         color: var(--muted);
         font-size: 0.82rem;
         line-height: 1.35;
-        margin-bottom: 0.82rem;
+        margin-bottom: 0.48rem;
     }
     .infographic-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
-        gap: 0.72rem;
+        grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+        gap: 0.5rem;
     }
     .infographic-card {
         border: 1px solid rgba(199, 210, 229, 0.9);
         border-radius: 8px;
         background: rgba(255,255,255,0.92);
-        padding: 0.72rem 0.78rem;
-        min-height: 96px;
+        padding: 0.55rem 0.62rem;
+        min-height: 72px;
     }
     .infographic-card span {
         display: block;
@@ -640,7 +653,7 @@ st.markdown(
     .infographic-card b {
         display: block;
         color: var(--text);
-        font-size: 1.45rem;
+        font-size: 1.22rem;
         line-height: 1.15;
         margin-top: 0.28rem;
     }
@@ -2990,7 +3003,7 @@ def render_infographic_leaflet_map(map_frame: pd.DataFrame, district_geojson: di
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <style>
             #{map_id} {{
-                height: 420px;
+                height: 300px;
                 width: 100%;
                 border: 1px solid #dbe6f4;
                 border-radius: 8px;
@@ -5884,7 +5897,7 @@ if main_page == "Infographics":
                     ),
                     tooltip=["alert_level", "reservoirs"],
                 )
-                .properties(height=280, title="FRL Alert Composition")
+                .properties(height=210, title="FRL Alert Composition")
             )
             st.altair_chart(alert_chart, use_container_width=True)
         with info_cols[1]:
@@ -5909,10 +5922,14 @@ if main_page == "Infographics":
                     .encode(
                         y=alt.Y("district_label:N", sort="-x", title="District"),
                         x=alt.X("avg_filling:Q", title="Average filling (%)"),
-                        color=alt.Color("max_filling:Q", scale=alt.Scale(scheme="turbo"), title="Max filling"),
+                        color=alt.Color(
+                            "max_filling:Q",
+                            scale=alt.Scale(domain=[0, 100], range=COOLORS_ALERT_PALETTE),
+                            title="Max filling",
+                        ),
                         tooltip=["district_label", "reservoirs", "avg_filling", "max_filling"],
                     )
-                    .properties(height=280, title="District Reservoir Filling Snapshot")
+                    .properties(height=210, title="District Reservoir Filling Snapshot")
                 )
                 st.altair_chart(district_chart, use_container_width=True)
             else:
@@ -5938,7 +5955,7 @@ if main_page == "Infographics":
                         y=alt.Y("total_storage_mcm:Q", title="Total live storage (MCM)"),
                         tooltip=["observed_at", "total_storage_mcm", "avg_filling"],
                     )
-                    .properties(height=260, title="Storage Timeline")
+                    .properties(height=205, title="Storage Timeline")
                 )
                 st.altair_chart(storage_chart, use_container_width=True)
         with info_cols_2[1]:
@@ -5952,12 +5969,141 @@ if main_page == "Infographics":
                     .encode(
                         x=alt.X("reservoir_name:N", sort="-y", title="Reservoir", axis=alt.Axis(labelAngle=-35)),
                         y=alt.Y("filling_percent:Q", title="Filling (%)"),
-                        color=alt.Color("filling_percent:Q", scale=alt.Scale(scheme="plasma"), legend=None),
+                        color=alt.Color(
+                            "filling_percent:Q",
+                            scale=alt.Scale(domain=[0, 100], range=COOLORS_ALERT_PALETTE),
+                            legend=None,
+                        ),
                         tooltip=["reservoir_name", "district", "water_level_m", "frl_gap_m", "filling_percent"],
                     )
-                    .properties(height=260, title="Top Filled Reservoirs")
+                    .properties(height=205, title="Top Filled Reservoirs")
                 )
                 st.altair_chart(top_filling_chart, use_container_width=True)
+
+        info_cols_3 = st.columns([0.58, 0.42])
+        if not latest_reservoirs.empty:
+            filling_snapshot = latest_reservoirs.assign(
+                filling_percent=pd.to_numeric(latest_reservoirs["filling_percent"], errors="coerce")
+            ).dropna(subset=["filling_percent"])
+            with info_cols_3[0]:
+                least_filled = filling_snapshot[filling_snapshot["filling_percent"] < 25].nsmallest(12, "filling_percent")
+                if least_filled.empty:
+                    st.success("No reservoirs are below 25% filling under the active filters.")
+                else:
+                    least_chart = (
+                        alt.Chart(least_filled)
+                        .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
+                        .encode(
+                            y=alt.Y("reservoir_name:N", sort="x", title="Reservoir"),
+                            x=alt.X("filling_percent:Q", title="Filling (%)", scale=alt.Scale(domain=[0, 25])),
+                            color=alt.Color(
+                                "filling_percent:Q",
+                                scale=alt.Scale(domain=[0, 25], range=["#580aff", "#147df5", "#0aefff", "#0aff99"]),
+                                legend=None,
+                            ),
+                            tooltip=["reservoir_name", "district", "water_level_m", "frl_gap_m", "filling_percent"],
+                        )
+                        .properties(height=220, title="Least Filled Reservoirs Below 25%")
+                    )
+                    st.altair_chart(least_chart, use_container_width=True)
+            with info_cols_3[1]:
+                band_labels = ["0-25%", "25-50%", "50-75%", "75-100%"]
+                band_colors = ["#580aff", "#0aefff", "#ffd300", "#ff0000"]
+                banded = filling_snapshot.assign(
+                    filling_band=pd.cut(
+                        filling_snapshot["filling_percent"],
+                        bins=[-0.01, 25, 50, 75, 100],
+                        labels=band_labels,
+                    )
+                )
+                band_summary = (
+                    banded.groupby("filling_band", observed=False)
+                    .agg(reservoirs=("reservoir_name", "nunique"), avg_filling=("filling_percent", "mean"))
+                    .reindex(band_labels)
+                    .reset_index()
+                    .fillna({"reservoirs": 0, "avg_filling": 0})
+                )
+                band_summary["color"] = band_colors
+                band_chart = (
+                    alt.Chart(band_summary)
+                    .mark_arc(innerRadius=58, outerRadius=112, cornerRadius=5, padAngle=0.02)
+                    .encode(
+                        theta=alt.Theta("reservoirs:Q", title="Reservoirs"),
+                        color=alt.Color("filling_band:N", scale=alt.Scale(domain=band_labels, range=band_colors), title="Filling Band"),
+                        tooltip=["filling_band", "reservoirs", "avg_filling"],
+                    )
+                    .properties(height=220, title="Reservoir Filling Bands")
+                )
+                band_text = (
+                    alt.Chart(band_summary)
+                    .mark_text(radius=138, size=12, fontWeight="bold")
+                    .encode(
+                        theta=alt.Theta("reservoirs:Q"),
+                        text=alt.Text("reservoirs:Q", format=".0f"),
+                        color=alt.value("#172033"),
+                    )
+                )
+                st.altair_chart(band_chart + band_text, use_container_width=True)
+
+            st.markdown('<div class="panel-note">Filling band drill-down: choose a category to view the reservoirs inside that percentage range.</div>', unsafe_allow_html=True)
+            selected_band = st.radio(
+                "Reservoir filling category",
+                band_labels,
+                horizontal=True,
+                key="infographic_filling_band_drilldown",
+            )
+            band_detail = banded[banded["filling_band"].astype(str) == selected_band].sort_values("filling_percent")
+            if band_detail.empty:
+                st.info(f"No reservoirs are currently in the {selected_band} filling category.")
+            else:
+                selected_band_color = band_colors[band_labels.index(selected_band)]
+                drill_cols = st.columns([0.68, 0.32])
+                with drill_cols[0]:
+                    band_detail_chart = (
+                        alt.Chart(band_detail)
+                        .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
+                        .encode(
+                            y=alt.Y("reservoir_name:N", sort="x", title="Reservoir"),
+                            x=alt.X("filling_percent:Q", title="Filling (%)", scale=alt.Scale(domain=[0, 100])),
+                            color=alt.Color(
+                                "filling_percent:Q",
+                                scale=alt.Scale(domain=[0, 100], range=COOLORS_ALERT_PALETTE),
+                                legend=None,
+                            ),
+                            tooltip=["reservoir_name", "district", "water_level_m", "frl_gap_m", "filling_percent"],
+                        )
+                        .properties(height=max(220, min(360, 22 * len(band_detail))), title=f"{selected_band} Filled Reservoirs")
+                    )
+                    st.altair_chart(band_detail_chart, use_container_width=True)
+                with drill_cols[1]:
+                    st.markdown(
+                        f"""
+                        <div class="infographic-frame" style="padding:1rem;border-left:5px solid {selected_band_color}">
+                            <div class="infographic-title" style="font-size:1rem">{escape(selected_band)} Filled</div>
+                            <div class="infographic-grid" style="grid-template-columns:1fr;gap:.55rem">
+                                <div class="infographic-card"><span>Reservoirs</span><b>{len(band_detail)}</b><small>inside selected category</small></div>
+                                <div class="infographic-card"><span>Average Filling</span><b>{fmt_number(band_detail["filling_percent"].mean(), "%")}</b><small>selected category average</small></div>
+                                <div class="infographic-card"><span>Lowest Reservoir</span><b>{escape(str(band_detail.iloc[0].get("reservoir_name", "-")))}</b><small>{fmt_number(band_detail.iloc[0].get("filling_percent"), "%")} filled</small></div>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                detail_cols = [
+                    "reservoir_name",
+                    "district",
+                    "water_level_m",
+                    "frl_gap_m",
+                    "current_live_capacity_mcm",
+                    "filling_percent",
+                    "rainfall_daily_mm",
+                ]
+                st.dataframe(
+                    band_detail[[col for col in detail_cols if col in band_detail.columns]],
+                    use_container_width=True,
+                    hide_index=True,
+                    height=min(240, 64 + 26 * len(band_detail)),
+                )
 
         st.markdown(
             '<div class="panel-note">This tab is intended for visual briefings, screenshots, and report exports. It does not change the source observations; it summarizes the active dashboard filters.</div>',
