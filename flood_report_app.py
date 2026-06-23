@@ -723,8 +723,16 @@ def best_match_name(source_name: str, candidates: list[str]) -> tuple[str | None
     for candidate, candidate_norm in candidate_lookup.items():
         if source_norm == candidate_norm:
             return candidate, 1.0
+    substring_matches = []
+    source_tokens = set(source_norm.split())
+    for candidate, candidate_norm in candidate_lookup.items():
         if source_norm and candidate_norm and (source_norm in candidate_norm or candidate_norm in source_norm):
-            return candidate, 0.92
+            candidate_tokens = set(candidate_norm.split())
+            token_overlap = len(source_tokens & candidate_tokens)
+            length_score = min(len(source_norm), len(candidate_norm)) / max(len(source_norm), len(candidate_norm))
+            substring_matches.append((candidate, 0.92, token_overlap, length_score, len(candidate_norm)))
+    if substring_matches:
+        return max(substring_matches, key=lambda item: (item[2], item[3], item[4]))[:2]
     scored = [
         (candidate, SequenceMatcher(None, source_norm, candidate_norm).ratio())
         for candidate, candidate_norm in candidate_lookup.items()
