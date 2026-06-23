@@ -9,6 +9,7 @@ import re
 import subprocess
 import unicodedata
 import urllib.error
+import urllib.parse
 import urllib.request
 from difflib import SequenceMatcher
 from html import escape
@@ -4353,18 +4354,254 @@ def dam_alert_message(row: pd.Series) -> str:
         "Action: Monitor inflow, gates, and downstream warning protocol."
     )
 
+
+def parse_alert_recipients(recipients_text: str) -> list[dict[str, str]]:
+    recipients = []
+    for line in recipients_text.splitlines():
+        raw = line.strip()
+        if not raw:
+            continue
+        phone_match = re.search(r"(\+?\d[\d\s\-()]{7,}\d)", raw)
+        if not phone_match:
+            recipients.append({"label": raw, "phone": "", "status": "Missing phone"})
+            continue
+        phone = re.sub(r"\D+", "", phone_match.group(1))
+        if len(phone) == 10:
+            phone = f"91{phone}"
+        label = raw.replace(phone_match.group(1), "").strip(" -:,") or raw
+        recipients.append({"label": label, "phone": phone, "status": "Ready" if len(phone) >= 11 else "Check phone"})
+    return recipients
+
+
+def build_alert_test_links(recipients: list[dict[str, str]], message: str, channels: list[str]) -> pd.DataFrame:
+    rows = []
+    encoded = urllib.parse.quote(message)
+    for recipient in recipients:
+        phone = recipient.get("phone", "")
+        if not phone:
+            rows.append({**recipient, "channel": "None", "test_link": "", "status": recipient.get("status", "Missing phone")})
+            continue
+        if "WhatsApp" in channels:
+            rows.append({**recipient, "channel": "WhatsApp", "test_link": f"https://wa.me/{phone}?text={encoded}", "status": recipient.get("status", "Ready")})
+        if "SMS" in channels:
+            rows.append({**recipient, "channel": "SMS", "test_link": f"sms:+{phone}?&body={encoded}", "status": recipient.get("status", "Ready")})
+    return pd.DataFrame(rows)
+
+
+def save_alert_outbox_record(payload: dict) -> Path:
+    outbox_dir = APP_DIR / "admin_alert_outbox"
+    outbox_dir.mkdir(exist_ok=True)
+    timestamp = pd.Timestamp.now(tz="Asia/Kolkata").strftime("%Y%m%d_%H%M%S")
+    target = outbox_dir / f"alert_test_{timestamp}.json"
+    target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return target
+
+
+def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_reports: list[Path]) -> None:
+    st.subheader("Administration")
+    if not is_admin:
+        st.info("Administration is locked. Sign in as admin_nitaai to upload PDFs and manage SMS/WhatsApp alert messaging.")
+        if not ADMIN_PASSWORD:
+            st.warning("Admin access is disabled until MPWRD_ADMIN_PASSWORD or Streamlit secret admin_password is configured.")
+            return
+        with st.form("admin_page_login_form"):
+            username = st.text_input("Admin user", value=ADMIN_USER, key="admin_page_user")
+            password = st.text_input("Password", type="password", key="admin_page_password")
+            submitted = st.form_submit_button("Unlock Administration", type="primary", use_container_width=True)
+        if submitted:
+            user_ok = hmac.compare_digest(username.strip(), ADMIN_USER)
+            password_ok = bool(password and ADMIN_PASSWORD) and hmac.compare_digest(password, ADMIN_PASSWORD)
+            if user_ok and password_ok:
+                st.session_state.admin_authenticated = True
+                st.rerun()
+            else:
+                st.error("Invalid admin credentials.")
+        return
+
+    admin_tabs = st.tabs(["PDF Upload & Data Refresh", "Messaging Alerts", "Audit Log"])
+    with admin_tabs[0]:
+        st.markdown(
+            '<div class="panel-note">Upload official MP WRD flood report PDFs. The parser creates a new parsed report folder that becomes available in the dashboard report selector.</div>',
+            unsafe_allow_html=True,
+        )
+        upload_cols = st.columns([0.58, 0.42])
+        with upload_cols[0]:
+            uploaded = st.file_uploader("Upload MP WRD flood report PDF", type=["pdf"], key="admin_module_pdf_upload")
+            if uploaded is not None:
+                saved_pdf = save_uploaded_pdf(uploaded)
+                output_dir = APP_DIR / f"parsed_{saved_pdf.stem.replace(' ', '_')}"
+                with st.spinner("Parsing uploaded report and refreshing captured tables..."):
+                    counts = parse_pdf(saved_pdf, output_dir)
+                st.success(
+                    f"Captured {counts['river_observation_rows']} river rows, "
+                    f"{counts['reservoir_observation_rows']} reservoir rows, "
+                    f"and {counts['gate_observation_rows']} gate rows."
+                )
+                st.session_state.setdefault("admin_audit_log", []).insert(
+                    0,
+                    {
+                        "time": pd.Timestamp.now(tz="Asia/Kolkata").strftime("%d %b %Y %I:%M %p"),
+                        "module": "PDF Upload",
+                        "action": f"Parsed {uploaded.name}",
+                        "status": "Completed",
+                    },
+                )
+        with upload_cols[1]:
+            st.metric("Parsed Reports", len(parsed_reports))
+            st.metric("Mapped Dam Points", int(map_status["dam_name"].dropna().nunique()) if not map_status.empty and "dam_name" in map_status else 0)
+            st.caption("After upload, use the sidebar report selector to include the newly parsed report in the active dashboard window.")
+
+        if parsed_reports:
+            report_inventory = pd.DataFrame(
+                [
+                    {
+                        "report_folder": report.name,
+                        "modified": pd.Timestamp(report.stat().st_mtime, unit="s").strftime("%d %b %Y %I:%M %p"),
+                    }
+                    for report in parsed_reports
+                ]
+            ).sort_values("modified", ascending=False)
+            st.dataframe(report_inventory, use_container_width=True, hide_index=True, height=220)
+
+    with admin_tabs[1]:
+        st.markdown(
+            '<div class="panel-note">Configure alert thresholds and prepare SMS/WhatsApp messages. Delivery is preview/log mode until provider credentials and approved templates are configured in deployment secrets.</div>',
+            unsafe_allow_html=True,
+        )
+        if "alert_test_log" not in st.session_state:
+            st.session_state.alert_test_log = []
+        threshold_cols = st.columns(4)
+        with threshold_cols[0]:
+            dam_critical_gap = st.number_input("Critical FRL gap (m)", 0.0, 5.0, float(st.session_state.get("admin_dam_critical_gap", 0.5)), 0.1, key="admin_dam_critical_gap")
+        with threshold_cols[1]:
+            dam_warning_gap = st.number_input("Warning FRL gap (m)", 0.0, 10.0, float(st.session_state.get("admin_dam_warning_gap", 1.5)), 0.1, key="admin_dam_warning_gap")
+        with threshold_cols[2]:
+            dam_watch_filling = st.number_input("Watch filling (%)", 0.0, 100.0, float(st.session_state.get("admin_dam_watch_filling", 90.0)), 1.0, key="admin_dam_watch_filling")
+        with threshold_cols[3]:
+            rapid_rise_threshold = st.number_input("Rapid rise trigger (m/slot)", 0.0, 5.0, float(st.session_state.get("admin_rapid_rise_threshold", 0.30)), 0.05, key="admin_rapid_rise_threshold")
+
+        weather_cols = st.columns(3)
+        with weather_cols[0]:
+            st.number_input("Extreme 24h rainfall (mm)", 0.0, 500.0, float(st.session_state.get("admin_weather_24h_extreme_mm", 100.0)), 5.0, key="admin_weather_24h_extreme_mm")
+        with weather_cols[1]:
+            st.number_input("Extreme forecast rain (mm/day)", 0.0, 500.0, float(st.session_state.get("admin_weather_forecast_extreme_mm", 120.0)), 5.0, key="admin_weather_forecast_extreme_mm")
+        with weather_cols[2]:
+            st.number_input("Extreme wind speed (km/h)", 0.0, 200.0, float(st.session_state.get("admin_weather_wind_extreme_kmh", 50.0)), 5.0, key="admin_weather_wind_extreme_kmh")
+
+        gateway_cols = st.columns([0.32, 0.68])
+        with gateway_cols[0]:
+            selected_channels = st.multiselect("Alert channels", ["SMS", "WhatsApp"], default=st.session_state.get("admin_alert_channels", ["SMS", "WhatsApp"]), key="admin_alert_channels")
+            gateway_mode = st.selectbox("Gateway mode", ["Preview only", "Provider ready"], index=0, key="admin_alert_gateway_mode")
+        with gateway_cols[1]:
+            recipients_text = st.text_area(
+                "Alert recipients",
+                value=st.session_state.get("admin_alert_recipients", "Control Room +91XXXXXXXXXX\nDam Safety Officer +91XXXXXXXXXX"),
+                key="admin_alert_recipients",
+                height=86,
+                help="One recipient per line. Use role/name and phone number.",
+            )
+
+        active_dam_alerts = build_dam_alert_rows(map_status, dam_critical_gap, dam_warning_gap, dam_watch_filling, rapid_rise_threshold)
+        alert_kpis = st.columns(4)
+        alert_kpis[0].metric("Active Dam Alerts", len(active_dam_alerts))
+        alert_kpis[1].metric("Critical", int((active_dam_alerts.get("configured_alert", pd.Series(dtype=str)) == "Critical").sum()) if not active_dam_alerts.empty else 0)
+        alert_kpis[2].metric("Warning", int((active_dam_alerts.get("configured_alert", pd.Series(dtype=str)) == "Warning").sum()) if not active_dam_alerts.empty else 0)
+        alert_kpis[3].metric("Rapid Rise", int(active_dam_alerts.get("rapid_rise_alert", pd.Series(dtype=bool)).sum()) if not active_dam_alerts.empty else 0)
+
+        if active_dam_alerts.empty:
+            st.success("No dam alert exceeds the configured administration thresholds under the current filters.")
+        else:
+            alert_table_cols = ["reservoir_name", "district", "sub_basin", "observed_at", "water_level_m", "frl_m", "frl_gap_m", "display_filling", "wl_delta_m", "configured_alert", "alert_reason"]
+            st.dataframe(active_dam_alerts[[col for col in alert_table_cols if col in active_dam_alerts.columns]], use_container_width=True, hide_index=True, height=230)
+            alert_labels = [f"{row.reservoir_name} | {row.configured_alert}" for row in active_dam_alerts.itertuples(index=False)]
+            selected_alert_label = st.selectbox("Message preview dam", alert_labels, key="admin_alert_preview_dam")
+            selected_alert_row = active_dam_alerts.iloc[alert_labels.index(selected_alert_label)]
+            alert_message = st.text_area("SMS / WhatsApp alert message preview", value=dam_alert_message(selected_alert_row), key="admin_alert_message_preview", height=190)
+            parsed_recipients = parse_alert_recipients(recipients_text)
+            dispatch_links = build_alert_test_links(parsed_recipients, alert_message, selected_channels)
+            if parsed_recipients:
+                st.caption(f"Parsed {len(parsed_recipients)} recipient(s). Test links open WhatsApp Web or the device SMS app where supported.")
+            if not dispatch_links.empty:
+                st.dataframe(
+                    dispatch_links[["label", "phone", "channel", "status"]],
+                    use_container_width=True,
+                    hide_index=True,
+                    height=150,
+                )
+            action_cols = st.columns([0.22, 0.78])
+            with action_cols[0]:
+                if st.button("Create Test Dispatch", type="primary", use_container_width=True, key="admin_record_test_alert"):
+                    outbox_payload = {
+                        "created_at": pd.Timestamp.now(tz="Asia/Kolkata").isoformat(),
+                        "gateway_mode": gateway_mode,
+                        "channels": selected_channels,
+                        "reservoir": selected_alert_row.get("reservoir_name"),
+                        "alert": selected_alert_row.get("configured_alert"),
+                        "message": alert_message,
+                        "recipients": parsed_recipients,
+                        "dispatch_links": dispatch_links.to_dict("records") if not dispatch_links.empty else [],
+                    }
+                    outbox_path = save_alert_outbox_record(outbox_payload)
+                    st.session_state.alert_test_log.insert(
+                        0,
+                        {
+                            "time": pd.Timestamp.now(tz="Asia/Kolkata").strftime("%d %b %Y %I:%M %p"),
+                            "channels": ", ".join(selected_channels) if selected_channels else "None",
+                            "mode": gateway_mode,
+                            "reservoir": selected_alert_row.get("reservoir_name"),
+                            "alert": selected_alert_row.get("configured_alert"),
+                            "recipients": len([line for line in recipients_text.splitlines() if line.strip()]),
+                            "status": f"Outbox created: {outbox_path.name}",
+                        },
+                    )
+                    st.session_state.setdefault("admin_audit_log", []).insert(
+                        0,
+                        {
+                            "time": pd.Timestamp.now(tz="Asia/Kolkata").strftime("%d %b %Y %I:%M %p"),
+                            "module": "Messaging Alerts",
+                            "action": f"Recorded {selected_alert_row.get('configured_alert')} alert for {selected_alert_row.get('reservoir_name')}",
+                            "status": f"Outbox created: {outbox_path.name}",
+                        },
+                    )
+                    st.success(f"Test dispatch created: {outbox_path.name}")
+            with action_cols[1]:
+                st.caption(f"Prepared for {gateway_mode}. Message length: {len(alert_message)} characters. Real sending requires SMS/WhatsApp provider credentials.")
+                if not dispatch_links.empty:
+                    link_items = []
+                    for index, row in dispatch_links.head(8).iterrows():
+                        if row.get("test_link"):
+                            label = f"{row.get('channel')} - {row.get('label') or row.get('phone')}"
+                            link_items.append(f'<a href="{escape(str(row.get("test_link")))}" target="_blank">{escape(label)}</a>')
+                    if link_items:
+                        st.markdown("<br/>".join(link_items), unsafe_allow_html=True)
+
+    with admin_tabs[2]:
+        st.markdown('<div class="panel-note">Local administration actions recorded during this browser session.</div>', unsafe_allow_html=True)
+        audit_log = pd.DataFrame(st.session_state.get("admin_audit_log", []))
+        alert_log = pd.DataFrame(st.session_state.get("alert_test_log", []))
+        if not audit_log.empty:
+            st.dataframe(audit_log, use_container_width=True, hide_index=True, height=180)
+        if not alert_log.empty:
+            st.dataframe(alert_log, use_container_width=True, hide_index=True, height=220)
+        if audit_log.empty and alert_log.empty:
+            st.info("No administration actions have been recorded in this session.")
+
+
 if "main_dashboard_page" not in st.session_state:
     st.session_state.main_dashboard_page = "Infographics"
 
-nav_pages = ["Infographics", "Dam DSS & Analytics", "Weather Forecast", "3D Flood Scenarios", "Data & Timeseries"]
+nav_pages = ["Infographics", "Dam DSS & Analytics", "Weather Forecast", "3D Flood Scenarios", "Data & Timeseries", "Administration"]
 st.markdown('<div class="dashboard-topnav-title">Dashboard Navigation</div>', unsafe_allow_html=True)
-nav_cols = st.columns(5)
+nav_cols = st.columns(6)
 for nav_col, page in zip(nav_cols, nav_pages):
     if nav_col.button(page, key=f"main_nav_{page}", type="primary" if page == st.session_state.main_dashboard_page else "secondary", use_container_width=True):
         st.session_state.main_dashboard_page = page
         st.rerun()
 main_page = st.session_state.main_dashboard_page
 st.markdown(f'<div class="dashboard-topnav-active">Active page: <b>{escape(main_page)}</b></div>', unsafe_allow_html=True)
+
+if main_page == "Administration":
+    render_admin_operations(is_admin, map_status, dirs)
 
 if main_page == "Dam DSS & Analytics":
     st.subheader("Dam Locations and District Status")
