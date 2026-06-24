@@ -6,3 +6,4 @@ pydeck>=0.9
 geopandas>=0.14
 starlette>=0.37
 uvicorn>=0.30
+reportlab>=5.0

@@ -4,6 +4,7 @@ import json
 import math
 import os
 import hmac
+import sqlite3
 import sys
 import re
 import subprocess
@@ -28,6 +29,8 @@ DAM_SHAPEFILE = APP_DIR / "dam_shapefile" / "Dams_EinC_54_R2.shp"
 GLOFAS_PROJECT_JSON = APP_DIR / "data" / "glofas_mp_project.json"
 GRRR_PROJECT_JSON = APP_DIR / "data" / "grrr_mp_project.json"
 MP_TOWNS_CSV = APP_DIR / "data" / "mp_towns.csv"
+WEATHER_CACHE_DB = APP_DIR / "data" / "weather_cache.sqlite"
+WEATHER_REFRESH_HOURS = 3
 RESERVOIR_CAPACITY_ESTIMATES_CSV = APP_DIR / "data" / "reservoir_capacity_estimates.csv"
 RESERVOIR_CAPACITY_CURVES_CSV = APP_DIR / "data" / "reservoir_capacity_curves.csv"
 RESERVOIR_CAPACITY_CURVES_FABDEM_CSV = APP_DIR / "data" / "reservoir_capacity_curves_fabdem.csv"
@@ -811,6 +814,238 @@ def fetch_json_url(url: str) -> tuple[dict | list | None, str | None]:
             return None, f"Unable to reach weather API: {exc}"
     except Exception as exc:
         return None, f"Unable to read weather API response: {exc}"
+
+
+def weather_now_utc() -> pd.Timestamp:
+    return pd.Timestamp.now(tz="UTC")
+
+
+def weather_location_key(latitude: float, longitude: float) -> str:
+    return f"{float(latitude):.5f},{float(longitude):.5f}"
+
+
+def weather_cache_is_fresh(fetched_at: str | None) -> bool:
+    if not fetched_at:
+        return False
+    try:
+        age = weather_now_utc() - pd.Timestamp(fetched_at)
+    except Exception:
+        return False
+    return age <= pd.Timedelta(hours=WEATHER_REFRESH_HOURS)
+
+
+def init_weather_database() -> None:
+    WEATHER_CACHE_DB.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(WEATHER_CACHE_DB) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS weather_forecast_cache (
+                location_key TEXT PRIMARY KEY,
+                latitude REAL NOT NULL,
+                longitude REAL NOT NULL,
+                daily_json TEXT NOT NULL,
+                hourly_json TEXT NOT NULL,
+                current_json TEXT NOT NULL,
+                fetched_at TEXT NOT NULL,
+                source_url TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS weather_current_cache (
+                location_key TEXT PRIMARY KEY,
+                town_name TEXT,
+                district TEXT,
+                latitude REAL NOT NULL,
+                longitude REAL NOT NULL,
+                current_json TEXT NOT NULL,
+                status TEXT NOT NULL,
+                fetched_at TEXT NOT NULL,
+                source_url TEXT NOT NULL
+            )
+            """
+        )
+        conn.commit()
+
+
+def dataframe_to_weather_json(frame: pd.DataFrame) -> str:
+    payload = {
+        "columns": list(frame.columns),
+        "records": json.loads(frame.to_json(orient="records", date_format="iso")),
+    }
+    return json.dumps(payload)
+
+
+def dataframe_from_weather_json(payload_text: str) -> pd.DataFrame:
+    try:
+        payload = json.loads(payload_text or "{}")
+    except json.JSONDecodeError:
+        return pd.DataFrame()
+    records = payload.get("records") or []
+    columns = payload.get("columns") or None
+    frame = pd.DataFrame(records)
+    if columns:
+        for column in columns:
+            if column not in frame:
+                frame[column] = pd.NA
+        frame = frame[columns]
+    return frame
+
+
+def normalize_weather_frames(
+    daily: pd.DataFrame,
+    hourly: pd.DataFrame,
+    current: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    if not daily.empty and "time" in daily:
+        daily["date"] = pd.to_datetime(daily["time"], errors="coerce")
+        today = pd.Timestamp.now(tz="Asia/Kolkata").normalize().tz_localize(None)
+        daily["period"] = daily["date"].apply(lambda value: "Forecast" if pd.notna(value) and value >= today else "Hindcast")
+    if not hourly.empty and "time" in hourly:
+        hourly["datetime"] = pd.to_datetime(hourly["time"], errors="coerce")
+    if not current.empty and "time" in current:
+        current["datetime"] = pd.to_datetime(current["time"], errors="coerce")
+    for frame in [daily, hourly, current]:
+        for column in frame.columns:
+            if column not in {"time", "date", "datetime", "period"}:
+                frame[column] = pd.to_numeric(frame[column], errors="coerce")
+    return daily, hourly, current
+
+
+def get_weather_cache_summary() -> dict:
+    init_weather_database()
+    with sqlite3.connect(WEATHER_CACHE_DB) as conn:
+        forecast_count = conn.execute("SELECT COUNT(*) FROM weather_forecast_cache").fetchone()[0]
+        current_count = conn.execute("SELECT COUNT(*) FROM weather_current_cache").fetchone()[0]
+        latest_row = conn.execute(
+            """
+            SELECT MAX(fetched_at) FROM (
+                SELECT fetched_at FROM weather_forecast_cache
+                UNION ALL
+                SELECT fetched_at FROM weather_current_cache
+            )
+            """
+        ).fetchone()
+    latest = latest_row[0] if latest_row and latest_row[0] else ""
+    return {"forecast_locations": forecast_count, "current_locations": current_count, "latest_refresh": latest}
+
+
+def get_cached_open_meteo_weather(
+    latitude: float,
+    longitude: float,
+    force_refresh: bool = False,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, str | None, str]:
+    init_weather_database()
+    key = weather_location_key(latitude, longitude)
+    with sqlite3.connect(WEATHER_CACHE_DB) as conn:
+        row = None
+        if not force_refresh:
+            row = conn.execute(
+                """
+                SELECT daily_json, hourly_json, current_json, fetched_at
+                FROM weather_forecast_cache
+                WHERE location_key = ?
+                """,
+                (key,),
+            ).fetchone()
+        if row and weather_cache_is_fresh(row[3]):
+            daily = dataframe_from_weather_json(row[0])
+            hourly = dataframe_from_weather_json(row[1])
+            current = dataframe_from_weather_json(row[2])
+            daily, hourly, current = normalize_weather_frames(daily, hourly, current)
+            return daily, hourly, current, None, "database cache"
+
+    daily, hourly, current, error = fetch_open_meteo_weather(latitude, longitude)
+    if error:
+        if row:
+            daily = dataframe_from_weather_json(row[0])
+            hourly = dataframe_from_weather_json(row[1])
+            current = dataframe_from_weather_json(row[2])
+            daily, hourly, current = normalize_weather_frames(daily, hourly, current)
+            return daily, hourly, current, f"{error} Showing stored weather data from {row[3]}.", "stale database cache"
+        return daily, hourly, current, error, "api failed"
+
+    fetched_at = weather_now_utc().isoformat()
+    with sqlite3.connect(WEATHER_CACHE_DB) as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO weather_forecast_cache
+            (location_key, latitude, longitude, daily_json, hourly_json, current_json, fetched_at, source_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                key,
+                float(latitude),
+                float(longitude),
+                dataframe_to_weather_json(daily),
+                dataframe_to_weather_json(hourly),
+                dataframe_to_weather_json(current),
+                fetched_at,
+                open_meteo_url(latitude, longitude),
+            ),
+        )
+        conn.commit()
+    return daily, hourly, current, None, "api refreshed"
+
+
+def get_cached_open_meteo_current(
+    town_name: str,
+    district: str,
+    latitude: float,
+    longitude: float,
+    force_refresh: bool = False,
+) -> tuple[dict, str | None, str]:
+    init_weather_database()
+    key = weather_location_key(latitude, longitude)
+    with sqlite3.connect(WEATHER_CACHE_DB) as conn:
+        row = None
+        if not force_refresh:
+            row = conn.execute(
+                """
+                SELECT current_json, status, fetched_at
+                FROM weather_current_cache
+                WHERE location_key = ?
+                """,
+                (key,),
+            ).fetchone()
+        if row and weather_cache_is_fresh(row[2]):
+            try:
+                return json.loads(row[0]), None, "database cache"
+            except json.JSONDecodeError:
+                pass
+
+    current, error = fetch_open_meteo_current(latitude, longitude)
+    if error:
+        if row:
+            try:
+                return json.loads(row[0]), f"{error} Showing stored weather data from {row[2]}.", "stale database cache"
+            except json.JSONDecodeError:
+                pass
+        return {}, error, "api failed"
+
+    fetched_at = weather_now_utc().isoformat()
+    with sqlite3.connect(WEATHER_CACHE_DB) as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO weather_current_cache
+            (location_key, town_name, district, latitude, longitude, current_json, status, fetched_at, source_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                key,
+                town_name,
+                district,
+                float(latitude),
+                float(longitude),
+                json.dumps(current, default=str),
+                "Fetched",
+                fetched_at,
+                open_meteo_current_url(latitude, longitude),
+            ),
+        )
+        conn.commit()
+    return current, None, "api refreshed"
 
 
 def normalize_name(value: str | float | None) -> str:
@@ -3194,6 +3429,31 @@ def open_meteo_url(latitude: float, longitude: float, forecast_days: int = 7, pa
     )
 
 
+def open_meteo_current_url(latitude: float, longitude: float) -> str:
+    current_vars = ",".join(
+        [
+            "temperature_2m",
+            "relative_humidity_2m",
+            "apparent_temperature",
+            "precipitation",
+            "rain",
+            "showers",
+            "weather_code",
+            "cloud_cover",
+            "wind_speed_10m",
+            "wind_direction_10m",
+            "wind_gusts_10m",
+        ]
+    )
+    return (
+        "https://api.open-meteo.com/v1/forecast"
+        f"?latitude={latitude:.5f}&longitude={longitude:.5f}"
+        f"&current={current_vars}"
+        "&timezone=Asia%2FKolkata"
+        "&temperature_unit=celsius&wind_speed_unit=kmh&precipitation_unit=mm"
+    )
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_open_meteo_weather(latitude: float, longitude: float) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, str | None]:
     payload, error = fetch_json_url(open_meteo_url(latitude, longitude))
@@ -3217,6 +3477,18 @@ def fetch_open_meteo_weather(latitude: float, longitude: float) -> tuple[pd.Data
     return daily, hourly, current, None
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_open_meteo_current(latitude: float, longitude: float) -> tuple[dict, str | None]:
+    payload, error = fetch_json_url(open_meteo_current_url(latitude, longitude))
+    if error or not isinstance(payload, dict):
+        return {}, error or "Weather API returned an empty response."
+    current = payload.get("current") or {}
+    for key, value in list(current.items()):
+        if key != "time":
+            current[key] = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
+    return current, None
+
+
 def weather_risk_label(precipitation_mm: float | int | None, wind_kmh: float | int | None, uv_index: float | int | None) -> str:
     rain = 0 if precipitation_mm is None or pd.isna(precipitation_mm) else float(precipitation_mm)
     wind = 0 if wind_kmh is None or pd.isna(wind_kmh) else float(wind_kmh)
@@ -3232,6 +3504,36 @@ def weather_risk_label(precipitation_mm: float | int | None, wind_kmh: float | i
 
 def weather_risk_color(risk: str) -> str:
     return {"Severe": "#dc2626", "High": "#f97316", "Moderate": "#f59e0b", "Low": "#14b8a6"}.get(risk, "#2563eb")
+
+
+@st.cache_data(ttl=WEATHER_REFRESH_HOURS * 3600, show_spinner=False)
+def build_current_weather_for_towns(towns_key: tuple[tuple[str, str, float, float], ...]) -> pd.DataFrame:
+    rows = []
+    for town_name, district, latitude, longitude in towns_key:
+        current_row, error, cache_source = get_cached_open_meteo_current(str(town_name), str(district), float(latitude), float(longitude))
+        precipitation = current_row.get("precipitation")
+        wind_speed = current_row.get("wind_speed_10m")
+        risk = weather_risk_label(precipitation, wind_speed, current_row.get("uv_index"))
+        rows.append(
+            {
+                "town_name": town_name,
+                "district": district,
+                "latitude": latitude,
+                "longitude": longitude,
+                "current_time": current_row.get("time", ""),
+                "temperature_c": current_row.get("temperature_2m"),
+                "feels_like_c": current_row.get("apparent_temperature"),
+                "humidity_percent": current_row.get("relative_humidity_2m"),
+                "precipitation_mm": precipitation,
+                "rain_mm": current_row.get("rain"),
+                "cloud_cover_percent": current_row.get("cloud_cover"),
+                "wind_speed_kmh": wind_speed,
+                "wind_gusts_kmh": current_row.get("wind_gusts_10m"),
+                "weather_risk": risk if not error else "Unavailable",
+                "status": error or cache_source,
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def render_weather_town_leaflet_map(
@@ -4518,6 +4820,257 @@ def save_alert_outbox_record(payload: dict) -> Path:
     return target
 
 
+def reportlab_available() -> bool:
+    try:
+        import reportlab  # noqa: F401
+
+        return True
+    except Exception:
+        return False
+
+
+def report_value(value: object) -> str:
+    if value is None or pd.isna(value):
+        return ""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        number = float(value)
+        if abs(number - round(number)) < 0.005:
+            return f"{number:.0f}"
+        return f"{number:.2f}"
+    if isinstance(value, pd.Timestamp):
+        return value.strftime("%d %b %Y %I:%M %p")
+    text = str(value)
+    try:
+        numeric = pd.to_numeric(pd.Series([text]), errors="coerce").iloc[0]
+        if pd.notna(numeric) and re.fullmatch(r"\s*-?\d+(\.\d+)?\s*", text):
+            return report_value(float(numeric))
+    except Exception:
+        pass
+    return text
+
+
+def report_table(df: pd.DataFrame, max_rows: int = 18, font_size: int = 7):
+    from reportlab.lib import colors
+    from reportlab.platypus import Table, TableStyle
+
+    if df.empty:
+        df = pd.DataFrame({"Message": ["No rows available for the active filters."]})
+    display_df = prettify_dataframe_columns(df.head(max_rows).copy())
+    rows = [list(display_df.columns)] + [
+        [report_value(value)[:42] for value in record]
+        for record in display_df.to_numpy().tolist()
+    ]
+    table = Table(rows, repeatRows=1)
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#172033")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
+                ("FONTSIZE", (0, 0), (-1, -1), font_size),
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#dbe6f4")),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fbff")]),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    return table
+
+
+def report_bar_chart(df: pd.DataFrame, label_col: str, value_col: str, title: str, width: int = 500, height: int = 180):
+    from reportlab.graphics.shapes import Drawing, Rect, String
+    from reportlab.lib import colors
+
+    drawing = Drawing(width, height)
+    drawing.add(String(0, height - 12, title, fontName="Helvetica-Bold", fontSize=10, fillColor=colors.HexColor("#172033")))
+    if df.empty or value_col not in df:
+        drawing.add(String(0, height / 2, "No chart data available", fontSize=9, fillColor=colors.HexColor("#64748b")))
+        return drawing
+    plot = df[[label_col, value_col]].dropna().head(12).copy()
+    plot[value_col] = pd.to_numeric(plot[value_col], errors="coerce").fillna(0)
+    max_value = max(float(plot[value_col].max()), 1.0)
+    bar_h = max(8, min(16, (height - 34) / max(len(plot), 1) - 3))
+    y = height - 32
+    for idx, row in plot.iterrows():
+        value = float(row[value_col])
+        bar_w = (width - 185) * value / max_value
+        color = COOLORS_ALERT_PALETTE[min(len(COOLORS_ALERT_PALETTE) - 1, int(value / max(max_value, 1) * (len(COOLORS_ALERT_PALETTE) - 1)))]
+        drawing.add(String(0, y + 2, str(row[label_col])[:24], fontSize=7, fillColor=colors.HexColor("#334155")))
+        drawing.add(Rect(145, y, bar_w, bar_h, fillColor=colors.HexColor(color), strokeColor=None))
+        drawing.add(String(150 + bar_w, y + 2, report_value(value), fontSize=7, fillColor=colors.HexColor("#172033")))
+        y -= bar_h + 4
+    return drawing
+
+
+def report_map_panel(points: pd.DataFrame, title: str, label_col: str = "reservoir_name", width: int = 500, height: int = 235):
+    from io import BytesIO
+    from reportlab.graphics.shapes import Circle, Drawing, Rect, String
+    from reportlab.lib import colors
+    from reportlab.lib.utils import ImageReader
+    from reportlab.platypus import Image as RLImage
+
+    def fallback_panel():
+        drawing = Drawing(width, height)
+        drawing.add(String(0, height - 12, title, fontName="Helvetica-Bold", fontSize=10, fillColor=colors.HexColor("#172033")))
+        drawing.add(Rect(0, 0, width, height - 20, fillColor=colors.HexColor("#eef7ff"), strokeColor=colors.HexColor("#c8d7ea")))
+        if points.empty or not {"latitude", "longitude"}.issubset(points.columns):
+            drawing.add(String(18, height / 2, "No coordinate data available", fontSize=9, fillColor=colors.HexColor("#64748b")))
+            return drawing
+        plot = points.dropna(subset=["latitude", "longitude"]).copy()
+        if plot.empty:
+            return drawing
+        min_lon, max_lon = 73.6, 83.2
+        min_lat, max_lat = 20.8, 27.0
+        lon_span = max(max_lon - min_lon, 0.1)
+        lat_span = max(max_lat - min_lat, 0.1)
+        for _, row in plot.head(90).iterrows():
+            x = 22 + (float(row["longitude"]) - min_lon) / lon_span * (width - 44)
+            y = 18 + (float(row["latitude"]) - min_lat) / lat_span * (height - 58)
+            filling = pd.to_numeric(pd.Series([row.get("display_filling", row.get("filling_percent", 0))]), errors="coerce").iloc[0]
+            color = "#147df5" if pd.isna(filling) else COOLORS_ALERT_PALETTE[min(len(COOLORS_ALERT_PALETTE) - 1, max(0, int(float(filling) / 100 * (len(COOLORS_ALERT_PALETTE) - 1))))]
+            drawing.add(Circle(x, y, 3.2, fillColor=colors.HexColor(color), strokeColor=colors.white, strokeWidth=0.4))
+            label = str(row.get(label_col) or row.get("reservoir_name") or row.get("town_name") or "")[:18]
+            if label:
+                drawing.add(String(x + 4, y + 1, label, fontSize=5.8, fillColor=colors.HexColor("#111827")))
+        drawing.add(String(8, 7, f"{len(plot)} mapped points | Static report map from dashboard coordinates", fontSize=7, fillColor=colors.HexColor("#64748b")))
+        return drawing
+
+    if points.empty or not {"latitude", "longitude"}.issubset(points.columns):
+        return fallback_panel()
+    plot = points.dropna(subset=["latitude", "longitude"]).copy()
+    if plot.empty:
+        return fallback_panel()
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+
+        zoom = 7
+        tile_size = 256
+        min_lon, max_lon = 73.6, 83.2
+        min_lat, max_lat = 20.8, 27.0
+
+        def lonlat_to_pixels(lon: float, lat: float) -> tuple[float, float]:
+            sin_lat = math.sin(math.radians(lat))
+            scale = tile_size * (2**zoom)
+            x = (lon + 180.0) / 360.0 * scale
+            y = (0.5 - math.log((1 + sin_lat) / (1 - sin_lat)) / (4 * math.pi)) * scale
+            return x, y
+
+        px_min, py_max = lonlat_to_pixels(min_lon, min_lat)
+        px_max, py_min = lonlat_to_pixels(max_lon, max_lat)
+        tx_min, tx_max = int(px_min // tile_size), int(px_max // tile_size)
+        ty_min, ty_max = int(py_min // tile_size), int(py_max // tile_size)
+        mosaic = Image.new("RGB", ((tx_max - tx_min + 1) * tile_size, (ty_max - ty_min + 1) * tile_size), "#edf4fb")
+        for tx in range(tx_min, tx_max + 1):
+            for ty in range(ty_min, ty_max + 1):
+                url = f"https://services.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{zoom}/{ty}/{tx}"
+                try:
+                    with urllib.request.urlopen(url, timeout=5) as response:
+                        tile = Image.open(BytesIO(response.read())).convert("RGB")
+                    mosaic.paste(tile, ((tx - tx_min) * tile_size, (ty - ty_min) * tile_size))
+                except Exception:
+                    pass
+        crop_left = int(px_min - tx_min * tile_size)
+        crop_top = int(py_min - ty_min * tile_size)
+        crop_right = int(px_max - tx_min * tile_size)
+        crop_bottom = int(py_max - ty_min * tile_size)
+        cropped = mosaic.crop((crop_left, crop_top, crop_right, crop_bottom)).resize((int(width * 2), int((height - 20) * 2)))
+        draw = ImageDraw.Draw(cropped, "RGBA")
+        font = ImageFont.load_default()
+        draw.rectangle([0, 0, cropped.width - 1, cropped.height - 1], outline=(180, 198, 220, 255), width=2)
+        for _, row in plot.head(90).iterrows():
+            x_raw, y_raw = lonlat_to_pixels(float(row["longitude"]), float(row["latitude"]))
+            x = (x_raw - px_min) / max(px_max - px_min, 1) * cropped.width
+            y = (y_raw - py_min) / max(py_max - py_min, 1) * cropped.height
+            filling = pd.to_numeric(pd.Series([row.get("display_filling", row.get("filling_percent", 0))]), errors="coerce").iloc[0]
+            color = "#147df5" if pd.isna(filling) else COOLORS_ALERT_PALETTE[min(len(COOLORS_ALERT_PALETTE) - 1, max(0, int(float(filling) / 100 * (len(COOLORS_ALERT_PALETTE) - 1))))]
+            rgb = tuple(int(color[i : i + 2], 16) for i in (1, 3, 5))
+            draw.ellipse([x - 6, y - 6, x + 6, y + 6], fill=(*rgb, 235), outline=(255, 255, 255, 255), width=2)
+            label = str(row.get(label_col) or row.get("reservoir_name") or row.get("town_name") or "")[:18]
+            if label:
+                text_x, text_y = x + 8, y - 5
+                bbox = draw.textbbox((text_x, text_y), label, font=font)
+                draw.rectangle([bbox[0] - 2, bbox[1] - 1, bbox[2] + 2, bbox[3] + 1], fill=(255, 255, 255, 205))
+                draw.text((text_x, text_y), label, fill=(15, 23, 42, 255), font=font)
+        output = BytesIO()
+        cropped.save(output, format="PNG")
+        output.seek(0)
+        flowable = RLImage(output, width=width, height=height - 20)
+        return flowable
+    except Exception:
+        return fallback_panel()
+
+
+def build_pdf_report(title: str, subtitle: str, sections: list[tuple[str, list]]) -> bytes:
+    from io import BytesIO
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import inch
+    from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=32, leftMargin=32, topMargin=36, bottomMargin=32)
+    styles = getSampleStyleSheet()
+    styles.add(ParagraphStyle(name="ReportTitle", parent=styles["Title"], fontName="Helvetica-Bold", fontSize=18, leading=22, textColor=colors.HexColor("#172033"), spaceAfter=8))
+    styles.add(ParagraphStyle(name="SectionTitle", parent=styles["Heading2"], fontName="Helvetica-Bold", fontSize=12, leading=15, textColor=colors.HexColor("#2563eb"), spaceBefore=8, spaceAfter=6))
+    styles.add(ParagraphStyle(name="Small", parent=styles["Normal"], fontSize=8, leading=11, textColor=colors.HexColor("#64748b")))
+    cover_table = Table(
+        [
+            ["NITA AI & GEO-ANALYTICS", "MPWRD VBSR FLOOD SEASON 2026"],
+            [Paragraph(title, styles["ReportTitle"]), ""],
+            [Paragraph(subtitle, styles["Normal"]), ""],
+        ],
+        colWidths=[350, 150],
+        style=TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#172033")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), 7.5),
+                ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+                ("SPAN", (0, 1), (-1, 1)),
+                ("SPAN", (0, 2), (-1, 2)),
+                ("BACKGROUND", (0, 1), (-1, 2), colors.HexColor("#f8fbff")),
+                ("BOX", (0, 0), (-1, -1), 0.7, colors.HexColor("#dbe6f4")),
+                ("LINEBELOW", (0, 0), (-1, 0), 2.0, colors.HexColor("#147df5")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                ("TOPPADDING", (0, 1), (-1, 1), 12),
+                ("BOTTOMPADDING", (0, 2), (-1, 2), 12),
+            ]
+        ),
+    )
+    story = [cover_table, Spacer(1, 0.14 * inch)]
+    story.append(
+        Table(
+            [[f"Generated: {pd.Timestamp.now(tz='Asia/Kolkata').strftime('%d %b %Y %I:%M %p')}", "MPWRD VBSR Flood Season 2026"]],
+            colWidths=[250, 250],
+            style=TableStyle([("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#edf7ff")), ("TEXTCOLOR", (0, 0), (-1, -1), colors.HexColor("#334155")), ("FONTSIZE", (0, 0), (-1, -1), 8), ("BOX", (0, 0), (-1, -1), 0.4, colors.HexColor("#dbe6f4")), ("LEFTPADDING", (0, 0), (-1, -1), 8), ("RIGHTPADDING", (0, 0), (-1, -1), 8)]),
+        )
+    )
+    story.append(Spacer(1, 0.12 * inch))
+    for index, (section_title, flowables) in enumerate(sections):
+        if index and section_title.startswith("Appendix"):
+            story.append(PageBreak())
+        story.append(Paragraph(section_title, styles["SectionTitle"]))
+        story.extend(flowables)
+        story.append(Spacer(1, 0.1 * inch))
+
+    def add_page_number(canvas, document):
+        canvas.saveState()
+        canvas.setFont("Helvetica", 7)
+        canvas.setFillColor(colors.HexColor("#64748b"))
+        canvas.drawString(32, 18, "MPWRD VBSR Dam Water Level Intelligent Dashboard and Analytics")
+        canvas.drawRightString(A4[0] - 32, 18, f"Page {document.page}")
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=add_page_number, onLaterPages=add_page_number)
+    return buffer.getvalue()
+
+
 def write_manual_entry_report(
     report_date: date,
     report_time: time,
@@ -4886,9 +5439,9 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
 if "main_dashboard_page" not in st.session_state:
     st.session_state.main_dashboard_page = "Infographics"
 
-nav_pages = ["Infographics", "Dam DSS & Analytics", "Weather Forecast", "3D Flood Scenarios", "Data & Timeseries", "Administration"]
+nav_pages = ["Infographics", "Dam DSS & Analytics", "Weather Forecast", "3D Flood Scenarios", "Data & Timeseries", "Report Generation", "Administration"]
 st.markdown('<div class="dashboard-topnav-title">Dashboard Navigation</div>', unsafe_allow_html=True)
-nav_cols = st.columns(6)
+nav_cols = st.columns(len(nav_pages))
 for nav_col, page in zip(nav_cols, nav_pages):
     if nav_col.button(page, key=f"main_nav_{page}", type="primary" if page == st.session_state.main_dashboard_page else "secondary", use_container_width=True):
         st.session_state.main_dashboard_page = page
@@ -4898,6 +5451,121 @@ st.markdown(f'<div class="dashboard-topnav-active">Active page: <b>{escape(main_
 
 if main_page == "Administration":
     render_admin_operations(is_admin, map_status, dirs)
+
+if main_page == "Report Generation":
+    st.subheader("Report Generation")
+    if not reportlab_available():
+        st.error("ReportLab is not installed. Install reportlab to enable professional PDF report generation.")
+    else:
+        st.markdown(
+            '<div class="panel-note">Generate professional PDF reports from the active dashboard filters. Reports include static report maps, charts, and concise tables for briefings and record keeping.</div>',
+            unsafe_allow_html=True,
+        )
+        latest_label_for_report = time_label(latest_reservoirs["observed_at"].dropna().max()) if not latest_reservoirs.empty else "Current filter"
+        report_cols = st.columns(4)
+
+        snapshot_kpis = pd.DataFrame(
+            [
+                {"Metric": "Latest Slot", "Value": latest_label_for_report},
+                {"Metric": "Monitored Dams", "Value": int(map_status["reservoir_name"].dropna().nunique()) if not map_status.empty and "reservoir_name" in map_status else 0},
+                {"Metric": "Average Filling", "Value": fmt_number(pd.to_numeric(latest_reservoirs.get("filling_percent"), errors="coerce").mean() if not latest_reservoirs.empty else math.nan, "%")},
+                {"Metric": "Live Storage", "Value": fmt_number(pd.to_numeric(latest_reservoirs.get("current_live_capacity_mcm"), errors="coerce").sum() if not latest_reservoirs.empty else math.nan, " MCM")},
+            ]
+        )
+        latest_fill = latest_reservoirs.assign(
+            filling_percent=pd.to_numeric(latest_reservoirs.get("filling_percent"), errors="coerce")
+        ).dropna(subset=["filling_percent"]) if not latest_reservoirs.empty else pd.DataFrame()
+        top_fill = latest_fill.nlargest(12, "filling_percent") if not latest_fill.empty else pd.DataFrame()
+        low_fill = latest_fill[latest_fill["filling_percent"] < 25].nsmallest(12, "filling_percent") if not latest_fill.empty else pd.DataFrame()
+        district_fill = (
+            latest_fill.assign(district_label=latest_fill["district"].fillna("Unassigned"))
+            .groupby("district_label", as_index=False)
+            .agg(reservoirs=("reservoir_name", "nunique"), avg_filling=("filling_percent", "mean"), max_filling=("filling_percent", "max"))
+            .sort_values("avg_filling", ascending=False)
+            .head(15)
+        ) if not latest_fill.empty else pd.DataFrame()
+
+        with report_cols[0]:
+            infographic_pdf = build_pdf_report(
+                "Infographics Report",
+                "Snapshot report with maps, filling bands, top/least reservoirs and key tables.",
+                [
+                    ("Executive Snapshot", [report_table(snapshot_kpis, max_rows=8, font_size=8)]),
+                    ("Dam Location Report Map", [report_map_panel(map_status, "Mapped Dam Locations and Filling Status")]),
+                    ("District Reservoir Filling Snapshot", [report_bar_chart(district_fill, "district_label", "avg_filling", "Average Filling by District")]),
+                    ("Top Filled Reservoirs", [report_bar_chart(top_fill, "reservoir_name", "filling_percent", "Top Filled Reservoirs")]),
+                    ("Least Filled Reservoirs Below 25%", [report_bar_chart(low_fill, "reservoir_name", "filling_percent", "Least Filled Reservoirs Below 25%")]),
+                    ("Reservoir Detail Table", [report_table(latest_fill[["reservoir_name", "district", "water_level_m", "frl_gap_m", "current_live_capacity_mcm", "filling_percent"]] if not latest_fill.empty else latest_fill, max_rows=30, font_size=6)]),
+                ],
+            )
+            st.download_button("Download Infographics Report", infographic_pdf, "mpwrd_infographics_report.pdf", "application/pdf", use_container_width=True)
+
+        with report_cols[1]:
+            dss_alerts = map_status[map_status.get("alert_level", pd.Series(dtype=str)).isin(["Critical", "Warning", "Watch"])].copy() if not map_status.empty else pd.DataFrame()
+            dss_pdf = build_pdf_report(
+                "Dam DSS & Analytics Report",
+                "Dam DSS report with alert status, map context, reservoir filling and operational ranking.",
+                [
+                    ("Dam DSS Map", [report_map_panel(map_status, "Dam DSS and FRL Alert Map")]),
+                    ("Active Dam Alerts", [report_table(dss_alerts[["reservoir_name", "map_district", "sub_basin", "water_level_m", "frl_gap_m", "display_filling", "alert_level"]] if not dss_alerts.empty else dss_alerts, max_rows=30, font_size=6)]),
+                    ("Reservoir Filling Ranking", [report_bar_chart(map_status.sort_values("display_filling", ascending=False) if not map_status.empty else map_status, "reservoir_name", "display_filling", "Latest Reservoir Filling Ranking")]),
+                    ("DSS Data Table", [report_table(map_status[["reservoir_name", "dam_name", "map_district", "sub_basin", "water_level_m", "frl_gap_m", "display_filling", "alert_level"]] if not map_status.empty else map_status, max_rows=35, font_size=6)]),
+                ],
+            )
+            st.download_button("Download Dam DSS Report", dss_pdf, "mpwrd_dam_dss_analytics_report.pdf", "application/pdf", use_container_width=True)
+
+        with report_cols[2]:
+            towns_report = read_csv(MP_TOWNS_CSV)
+            if not towns_report.empty:
+                towns_report["latitude"] = pd.to_numeric(towns_report["latitude"], errors="coerce")
+                towns_report["longitude"] = pd.to_numeric(towns_report["longitude"], errors="coerce")
+            if st.button("Prepare Weather Report", use_container_width=True, key="prepare_weather_pdf_report"):
+                if towns_report.empty:
+                    st.warning("No town master data is available for the weather report.")
+                else:
+                    towns_key = tuple(
+                        (str(row.town_name), str(row.district), float(row.latitude), float(row.longitude))
+                        for row in towns_report.dropna(subset=["latitude", "longitude"]).itertuples(index=False)
+                    )
+                    with st.spinner(f"Fetching current weather for {len(towns_key)} towns..."):
+                        weather_current = build_current_weather_for_towns(towns_key)
+                    weather_pdf = build_pdf_report(
+                        "Weather Forecast Town Report",
+                        "Town-wise weather DSS report with current conditions, town map and forecast-risk indicators.",
+                        [
+                            ("Town Weather Map", [report_map_panel(towns_report.rename(columns={"town_name": "reservoir_name"}) if not towns_report.empty else towns_report, "Configured MP Weather Town Points", label_col="town_name")]),
+                            ("Current Weather Conditions for Towns", [report_table(weather_current[["town_name", "district", "temperature_c", "feels_like_c", "humidity_percent", "precipitation_mm", "cloud_cover_percent", "wind_speed_kmh", "wind_gusts_kmh", "weather_risk", "status"]], max_rows=45, font_size=5)]),
+                            ("Weather Risk Ranking", [report_bar_chart(weather_current.assign(risk_score=weather_current["weather_risk"].map({"Unavailable": 0, "Low": 1, "Moderate": 2, "High": 3, "Severe": 4}).fillna(0)).sort_values("risk_score", ascending=False), "town_name", "risk_score", "Town Weather Risk Score")]),
+                        ],
+                    )
+                    st.session_state.weather_pdf_report = weather_pdf
+                    st.session_state.weather_pdf_rows = len(weather_current)
+            if "weather_pdf_report" in st.session_state:
+                st.download_button("Download Weather Report", st.session_state.weather_pdf_report, "mpwrd_weather_town_report.pdf", "application/pdf", use_container_width=True)
+                st.caption(f"Prepared current weather report for {st.session_state.get('weather_pdf_rows', 0)} towns.")
+
+        with report_cols[3]:
+            season_summary = (
+                reservoir_view.assign(
+                    observed_at=pd.to_datetime(reservoir_view["observed_at"], errors="coerce"),
+                    filling_percent=pd.to_numeric(reservoir_view["filling_percent"], errors="coerce"),
+                    current_live_capacity_mcm=pd.to_numeric(reservoir_view["current_live_capacity_mcm"], errors="coerce"),
+                )
+                .groupby("observed_at", as_index=False)
+                .agg(reservoirs=("reservoir_name", "nunique"), avg_filling=("filling_percent", "mean"), total_storage_mcm=("current_live_capacity_mcm", "sum"))
+                .dropna(subset=["observed_at"])
+            ) if not reservoir_view.empty else pd.DataFrame()
+            season_pdf = build_pdf_report(
+                "Monsoon Season PDF-Template Data Report",
+                "Season report organized from the MP WRD PDF report template with reservoir, river and gate observations.",
+                [
+                    ("Season Timeline", [report_bar_chart(season_summary, "observed_at", "avg_filling", "Average Reservoir Filling by Observation Slot")]),
+                    ("Reservoir Observations", [report_table(reservoir_view.sort_values(["observed_at", "reservoir_name"]) if not reservoir_view.empty else reservoir_view, max_rows=45, font_size=5)]),
+                    ("River Gauge Observations", [report_table(river_view.sort_values(["observed_at", "river_name", "gauge_station"]) if not river_view.empty else river_view, max_rows=35, font_size=6)]),
+                    ("Gate Operations", [report_table(gate_view_all.sort_values(["report_at", "reservoir_name"]) if not gate_view_all.empty and "report_at" in gate_view_all else gate_view_all, max_rows=35, font_size=6)]),
+                ],
+            )
+            st.download_button("Download Season Data Report", season_pdf, "mpwrd_monsoon_season_data_report.pdf", "application/pdf", use_container_width=True)
 
 if main_page == "Dam DSS & Analytics":
     st.subheader("Dam Locations and District Status")
@@ -5435,15 +6103,29 @@ if main_page == "Weather Forecast":
                 selected_town_label = st.selectbox("Town weather point", town_labels, key="selected_weather_town")
             selected_town_name = selected_town_label.split(" | ", 1)[0]
             selected_town = town_options_df[town_options_df["town_name"] == selected_town_name].iloc[0]
-            daily_weather, hourly_weather, current_weather, weather_error = fetch_open_meteo_weather(
+            cache_summary = get_weather_cache_summary()
+            latest_refresh = cache_summary.get("latest_refresh") or "No stored weather data yet"
+            st.caption(
+                f"Weather backend database: {cache_summary.get('forecast_locations', 0)} forecast locations and "
+                f"{cache_summary.get('current_locations', 0)} current-condition locations stored. "
+                f"Automatic refresh interval: {WEATHER_REFRESH_HOURS} hours. Latest refresh: {latest_refresh}."
+            )
+            force_weather_refresh = False
+            if is_admin:
+                force_weather_refresh = st.button("Refresh selected town weather now", use_container_width=True, key="refresh_selected_weather_now")
+            daily_weather, hourly_weather, current_weather, weather_error, weather_source = get_cached_open_meteo_weather(
                 float(selected_town["latitude"]),
                 float(selected_town["longitude"]),
+                force_refresh=force_weather_refresh,
             )
-            if weather_error:
+            st.caption(f"Selected town weather source: {weather_source}.")
+            if weather_error and daily_weather.empty:
                 st.error(weather_error)
             elif daily_weather.empty:
                 st.warning("Weather service returned no daily weather rows for the selected town.")
             else:
+                if weather_error:
+                    st.warning(weather_error)
                 forecast_daily = daily_weather[daily_weather["period"] == "Forecast"].head(7).copy()
                 hindcast_daily = daily_weather[daily_weather["period"] == "Hindcast"].copy()
                 if forecast_daily.empty:
