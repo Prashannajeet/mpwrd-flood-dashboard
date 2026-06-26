@@ -4,6 +4,7 @@ import json
 import math
 import os
 import hmac
+import smtplib
 import sqlite3
 import sys
 import re
@@ -13,6 +14,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from difflib import SequenceMatcher
+from email.message import EmailMessage
 from html import escape
 from pathlib import Path
 from datetime import date, time
@@ -4330,6 +4332,78 @@ ADMIN_USER = get_app_secret("admin_user", "MPWRD_ADMIN_USER", "admin_nitaai")
 ADMIN_PASSWORD = get_app_secret("admin_password", "MPWRD_ADMIN_PASSWORD", "")
 
 
+def alert_email_config() -> dict:
+    port_text = get_app_secret("smtp_port", "SMTP_PORT", "587")
+    try:
+        port = int(port_text)
+    except (TypeError, ValueError):
+        port = 587
+    use_tls_text = get_app_secret("smtp_use_tls", "SMTP_USE_TLS", "true").strip().lower()
+    use_ssl_text = get_app_secret("smtp_use_ssl", "SMTP_USE_SSL", "false").strip().lower()
+    username = get_app_secret("smtp_username", "SMTP_USERNAME", "")
+    sender = get_app_secret("smtp_from", "SMTP_FROM", username)
+    return {
+        "host": get_app_secret("smtp_host", "SMTP_HOST", ""),
+        "port": port,
+        "username": username,
+        "password": get_app_secret("smtp_password", "SMTP_PASSWORD", ""),
+        "sender": sender,
+        "use_tls": use_tls_text not in {"0", "false", "no", "off"},
+        "use_ssl": use_ssl_text in {"1", "true", "yes", "on"},
+    }
+
+
+def alert_email_is_configured(config: dict | None = None) -> bool:
+    config = config or alert_email_config()
+    return all(str(config.get(key) or "").strip() for key in ["host", "username", "password", "sender"])
+
+
+def alert_email_missing_settings(config: dict | None = None) -> list[str]:
+    config = config or alert_email_config()
+    required = {
+        "host": "smtp_host / SMTP_HOST",
+        "username": "smtp_username / SMTP_USERNAME",
+        "password": "smtp_password / SMTP_PASSWORD",
+        "sender": "smtp_from / SMTP_FROM",
+    }
+    return [label for key, label in required.items() if not str(config.get(key) or "").strip()]
+
+
+def extract_email_recipients(recipients_text: str) -> list[str]:
+    emails = []
+    for line in recipients_text.splitlines():
+        emails.extend(re.findall(r"[\w.\-+%]+@[\w.\-]+\.[A-Za-z]{2,}", line))
+    return sorted(set(emails))
+
+
+def send_alert_email(subject: str, body: str, recipients: list[str], html_body: str | None = None) -> tuple[bool, str]:
+    if not recipients:
+        return False, "No email recipients were found. Add one email address per recipient line."
+    config = alert_email_config()
+    if not alert_email_is_configured(config):
+        missing = ", ".join(alert_email_missing_settings(config))
+        return False, f"SMTP is not configured. Missing: {missing}."
+
+    try:
+        smtp_class = smtplib.SMTP_SSL if config.get("use_ssl") else smtplib.SMTP
+        with smtp_class(config["host"], int(config["port"]), timeout=25) as smtp:
+            if config["use_tls"] and not config.get("use_ssl"):
+                smtp.starttls()
+            smtp.login(config["username"], config["password"])
+            for recipient in recipients:
+                message = EmailMessage()
+                message["Subject"] = subject
+                message["From"] = config["sender"]
+                message["To"] = recipient
+                message.set_content(body)
+                if html_body:
+                    message.add_alternative(html_body, subtype="html")
+                smtp.send_message(message)
+        return True, f"Email sent privately to {len(recipients)} recipient(s)."
+    except Exception as exc:
+        return False, f"Email delivery failed: {exc}"
+
+
 def admin_login_panel() -> bool:
     if "admin_authenticated" not in st.session_state:
         st.session_state.admin_authenticated = False
@@ -4764,6 +4838,86 @@ def dam_alert_message(row: pd.Series) -> str:
     )
 
 
+def dam_alert_email_html(row: pd.Series, message_text: str) -> str:
+    alert_level = str(row.get("configured_alert") or row.get("alert_level") or "Alert")
+    alert_colors = {
+        "Critical": "#dc2626",
+        "Warning": "#f59e0b",
+        "Watch": "#eab308",
+        "Normal": "#2563eb",
+    }
+    accent = alert_colors.get(alert_level, "#2563eb")
+    reservoir = row.get("reservoir_name") or row.get("dam_name") or "Reservoir"
+    district = row.get("district") or row.get("map_district") or "-"
+    basin = row.get("sub_basin") or row.get("major_basin") or "-"
+    observed_at = row.get("observed_at")
+    observed_label = time_label(observed_at) if pd.notna(observed_at) else "Latest dashboard observation"
+    rows = [
+        ("Reservoir", reservoir),
+        ("District", district),
+        ("Basin", basin),
+        ("Observed At", observed_label),
+        ("Current Water Level", fmt_number(row.get("water_level_m"), " m")),
+        ("FRL", fmt_number(row.get("frl_m"), " m")),
+        ("FRL Gap", fmt_number(row.get("frl_gap_m"), " m")),
+        ("Filling", fmt_number(row.get("display_filling"), "%")),
+        ("Latest WL Change", fmt_number(row.get("wl_delta_m"), " m")),
+        ("Alert Reason", row.get("alert_reason") or "-"),
+    ]
+    metric_rows = "\n".join(
+        f"""
+        <tr>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5edf7;color:#64748b;font-size:13px;">{escape(str(label))}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5edf7;color:#0f172a;font-size:13px;font-weight:700;">{escape(str(value))}</td>
+        </tr>
+        """
+        for label, value in rows
+    )
+    plain_lines = "".join(f"<li>{escape(line)}</li>" for line in message_text.splitlines() if line.strip())
+    generated_at = pd.Timestamp.now(tz="Asia/Kolkata").strftime("%d %b %Y, %I:%M %p IST")
+    return f"""
+    <!doctype html>
+    <html>
+      <body style="margin:0;padding:0;background:#eef3f8;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
+        <div style="max-width:720px;margin:0 auto;padding:24px;">
+          <div style="background:#0f172a;border-radius:14px 14px 0 0;padding:20px 24px;color:#ffffff;">
+            <div style="font-size:12px;letter-spacing:1.8px;text-transform:uppercase;color:#93c5fd;font-weight:700;">NITA AI & Geo-Analytics | MPWRD DSS</div>
+            <h1 style="margin:8px 0 4px;font-size:24px;line-height:1.22;">Dam Water Level Alert Report</h1>
+            <div style="font-size:13px;color:#cbd5e1;">Generated: {escape(generated_at)}</div>
+          </div>
+          <div style="background:#ffffff;border:1px solid #dbe6f4;border-top:0;border-radius:0 0 14px 14px;overflow:hidden;">
+            <div style="padding:22px 24px;border-left:8px solid {accent};background:#fbfdff;">
+              <div style="display:inline-block;background:{accent};color:#ffffff;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.8px;">{escape(alert_level)} Alert</div>
+              <h2 style="margin:12px 0 4px;font-size:22px;color:#0f172a;">{escape(str(reservoir))}</h2>
+              <p style="margin:0;color:#64748b;font-size:14px;">{escape(str(district))} district | {escape(str(basin))} basin</p>
+            </div>
+            <div style="padding:20px 24px;">
+              <table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;border:1px solid #e5edf7;border-radius:10px;overflow:hidden;">
+                {metric_rows}
+              </table>
+              <div style="margin-top:18px;padding:16px;border-radius:10px;background:#f8fafc;border:1px solid #e5edf7;">
+                <div style="font-size:13px;font-weight:800;color:#334155;text-transform:uppercase;letter-spacing:0.9px;margin-bottom:8px;">Recommended DSS Actions</div>
+                <ol style="margin:0;padding-left:20px;color:#334155;font-size:14px;line-height:1.55;">
+                  <li>Verify current reservoir level, inflow, gate status and downstream gauge trend.</li>
+                  <li>Keep district control room and dam safety officer on watch for rapid rise or FRL approach.</li>
+                  <li>Escalate warning protocol if the next observation confirms rising level or reduced FRL gap.</li>
+                </ol>
+              </div>
+              <div style="margin-top:18px;padding:16px;border-radius:10px;background:#fff7ed;border:1px solid #fed7aa;">
+                <div style="font-size:13px;font-weight:800;color:#9a3412;text-transform:uppercase;letter-spacing:0.9px;margin-bottom:8px;">Operational Message</div>
+                <ul style="margin:0;padding-left:18px;color:#431407;font-size:14px;line-height:1.55;">{plain_lines}</ul>
+              </div>
+            </div>
+            <div style="padding:14px 24px;background:#f1f5f9;color:#64748b;font-size:12px;border-top:1px solid #e5edf7;">
+              This automated DSS email is generated from MPWRD flood report observations and NITA GeoAI analytics. Validate with official field communication before public warning release.
+            </div>
+          </div>
+        </div>
+      </body>
+    </html>
+    """
+
+
 def parse_alert_recipients(recipients_text: str) -> list[dict[str, str]]:
     recipients = []
     for line in recipients_text.splitlines():
@@ -5133,7 +5287,7 @@ def write_manual_entry_report(
 def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_reports: list[Path]) -> None:
     st.subheader("Administration")
     if not is_admin:
-        st.info("Administration is locked. Sign in as admin_nitaai to upload PDFs and manage SMS/WhatsApp alert messaging.")
+        st.info("Administration is locked. Sign in as admin_nitaai to upload PDFs and manage SMS/WhatsApp/email alert messaging.")
         if not ADMIN_PASSWORD:
             st.warning("Admin access is disabled until MPWRD_ADMIN_PASSWORD or Streamlit secret admin_password is configured.")
             return
@@ -5314,7 +5468,7 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
 
     with admin_tabs[2]:
         st.markdown(
-            '<div class="panel-note">Configure alert thresholds and prepare SMS/WhatsApp messages. Delivery is preview/log mode until provider credentials and approved templates are configured in deployment secrets.</div>',
+            '<div class="panel-note">Configure alert thresholds and prepare Email, SMS and WhatsApp messages. Email can send through SMTP when secrets are configured; SMS/WhatsApp remain preview/link mode until provider gateways are connected.</div>',
             unsafe_allow_html=True,
         )
         if "alert_test_log" not in st.session_state:
@@ -5344,11 +5498,16 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
         with gateway_cols[1]:
             recipients_text = st.text_area(
                 "Alert recipients",
-                value=st.session_state.get("admin_alert_recipients", "Control Room control.room@example.com +91XXXXXXXXXX\nDam Safety Officer dam.safety@example.com +91XXXXXXXXXX"),
+                value=st.session_state.get("admin_alert_recipients", "NITA GeoAI Alerts info@nitageoai.com\nData Center Head baghel.bijendrakumar@gmail.com\nControl Room +91XXXXXXXXXX\nDam Safety Officer +91XXXXXXXXXX"),
                 key="admin_alert_recipients",
                 height=86,
                 help="One recipient per line. Use role/name with email and/or phone number.",
             )
+            admin_email_recipients = extract_email_recipients(recipients_text)
+            admin_email_configured = alert_email_is_configured()
+            admin_missing_email_settings = alert_email_missing_settings()
+            missing_note = "" if admin_email_configured else f" Missing: {', '.join(admin_missing_email_settings)}."
+            st.caption(f"Email recipients detected: {len(admin_email_recipients)}. SMTP is {'configured' if admin_email_configured else 'not configured'}.{missing_note}")
 
         active_dam_alerts = build_dam_alert_rows(map_status, dam_critical_gap, dam_warning_gap, dam_watch_filling, rapid_rise_threshold)
         alert_kpis = st.columns(4)
@@ -5414,7 +5573,32 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
                     )
                     st.success(f"Test dispatch created: {outbox_path.name}")
             with action_cols[1]:
-                st.caption(f"Prepared for {gateway_mode}. Message length: {len(alert_message)} characters. Real sending requires SMS/WhatsApp provider credentials.")
+                st.caption(f"Prepared for {gateway_mode}. Message length: {len(alert_message)} characters. Email sending requires SMTP secrets; SMS/WhatsApp require provider credentials.")
+                if "Email" in selected_channels:
+                    email_subject = f"MPWRD Dam Alert: {selected_alert_row.get('reservoir_name')} {selected_alert_row.get('configured_alert')}"
+                    email_html = dam_alert_email_html(selected_alert_row, alert_message)
+                    st.caption("Email output uses a professional HTML report layout with dam metrics, alert badge, DSS actions and plain-text fallback.")
+                    if st.button("Send Test Email Alert", use_container_width=True, key="admin_send_test_email_alert"):
+                        if gateway_mode != "Provider ready":
+                            st.warning("Switch Gateway mode to Provider ready before sending a real email test.")
+                        else:
+                            ok, email_status_message = send_alert_email(email_subject, alert_message, admin_email_recipients, email_html)
+                            st.session_state.alert_test_log.insert(
+                                0,
+                                {
+                                    "time": pd.Timestamp.now(tz="Asia/Kolkata").strftime("%d %b %Y %I:%M %p"),
+                                    "channels": "Email",
+                                    "mode": gateway_mode,
+                                    "reservoir": selected_alert_row.get("reservoir_name"),
+                                    "alert": selected_alert_row.get("configured_alert"),
+                                    "recipients": len(admin_email_recipients),
+                                    "status": email_status_message,
+                                },
+                            )
+                            if ok:
+                                st.success(email_status_message)
+                            else:
+                                st.error(email_status_message)
                 if not dispatch_links.empty:
                     link_items = []
                     for index, row in dispatch_links.head(8).iterrows():
@@ -5423,6 +5607,28 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
                             link_items.append(f'<a href="{escape(str(row.get("test_link")))}" target="_blank">{escape(label)}</a>')
                     if link_items:
                         st.markdown("<br/>".join(link_items), unsafe_allow_html=True)
+
+        st.markdown("#### Automated Hourly Alert Dispatch")
+        automated_recipients = extract_email_recipients(get_app_secret("alert_email_recipients", "ALERT_EMAIL_RECIPIENTS", ""))
+        st.markdown(
+            (
+                '<div class="panel-note">'
+                'The backend hourly dispatcher sends professional dam alert email reports to each official separately, '
+                'so recipient email addresses are not disclosed to other officials. Duplicate alerts are suppressed per dam, alert level, observation time and hour.'
+                '</div>'
+            ),
+            unsafe_allow_html=True,
+        )
+        auto_cols = st.columns(3)
+        auto_cols[0].metric("Automated Email Recipients", len(automated_recipients))
+        auto_cols[1].metric("SMTP", "Configured" if alert_email_is_configured() else "Incomplete")
+        auto_cols[2].metric("Interval", "Every 1 hour")
+        st.code(
+            "& 'D:\\01 Project\\Development\\flood_dashboard\\.venv\\Scripts\\python.exe' "
+            "'D:\\01 Project\\Development\\Flood Reports\\hourly_alert_dispatcher.py' --loop",
+            language="powershell",
+        )
+        st.caption("Use Windows Task Scheduler or run the command above as a background process. Add official addresses to Streamlit secret alert_email_recipients.")
 
     with admin_tabs[3]:
         st.markdown('<div class="panel-note">Local administration actions recorded during this browser session.</div>', unsafe_allow_html=True)
@@ -5640,7 +5846,7 @@ if main_page == "Dam DSS & Analytics":
             st.info("Alert configuration is restricted to administration users. Sign in from the sidebar to manage SMS/WhatsApp alert rules and recipients.")
         else:
             st.markdown(
-                '<div class="panel-note">Configure operational thresholds and prepare SMS/WhatsApp alert messages. Sending remains in test/preview mode until a gateway provider is connected.</div>',
+                '<div class="panel-note">Configure operational thresholds and prepare SMS, WhatsApp and email alert messages. SMS/WhatsApp stay in preview mode until provider gateways are connected; email can send when SMTP secrets are configured.</div>',
                 unsafe_allow_html=True,
             )
             alert_settings = st.columns(4)
@@ -5717,8 +5923,8 @@ if main_page == "Dam DSS & Analytics":
             with channel_cols[0]:
                 selected_channels = st.multiselect(
                     "Alert channels",
-                    ["SMS", "WhatsApp"],
-                    default=st.session_state.get("alert_channels", ["SMS", "WhatsApp"]),
+                    ["SMS", "WhatsApp", "Email"],
+                    default=st.session_state.get("alert_channels", ["SMS", "WhatsApp", "Email"]),
                     key="alert_channels",
                 )
                 gateway_mode = st.selectbox(
@@ -5731,11 +5937,17 @@ if main_page == "Dam DSS & Analytics":
             with channel_cols[1]:
                 recipients_text = st.text_area(
                     "Alert recipients",
-                    value=st.session_state.get("alert_recipients", "Control Room +91XXXXXXXXXX\nDam Safety Officer +91XXXXXXXXXX"),
+                    value=st.session_state.get("alert_recipients", "NITA GeoAI Alerts info@nitageoai.com\nData Center Head baghel.bijendrakumar@gmail.com\nControl Room +91XXXXXXXXXX\nDam Safety Officer +91XXXXXXXXXX"),
                     key="alert_recipients",
                     height=86,
-                    help="One recipient per line. Use role/name and phone number. Real delivery will require an approved SMS/WhatsApp gateway.",
+                    help="One recipient per line. Use role/name with phone number and/or email address. SMS/WhatsApp require an approved gateway; Email requires SMTP secrets.",
                 )
+                email_recipients = extract_email_recipients(recipients_text)
+                email_configured = alert_email_is_configured()
+                email_status = "configured" if email_configured else "not configured"
+                missing_email_settings = alert_email_missing_settings()
+                missing_note = "" if email_configured else f" Missing: {', '.join(missing_email_settings)}."
+                st.caption(f"Email recipients detected: {len(email_recipients)}. SMTP is {email_status}.{missing_note}")
 
             active_dam_alerts = build_dam_alert_rows(
                 map_status,
@@ -5780,7 +5992,7 @@ if main_page == "Dam DSS & Analytics":
                 selected_alert_row = active_dam_alerts.iloc[alert_labels.index(selected_alert_label)]
                 default_message = dam_alert_message(selected_alert_row)
                 alert_message = st.text_area(
-                    "SMS / WhatsApp alert message preview",
+                    "SMS / WhatsApp / Email alert message preview",
                     value=default_message,
                     key="alert_message_preview",
                     height=190,
@@ -5802,7 +6014,32 @@ if main_page == "Dam DSS & Analytics":
                         )
                         st.success("Test alert recorded in local administration log.")
                 with test_cols[1]:
-                    st.caption("Real SMS/WhatsApp delivery will be enabled after gateway credentials, approved WhatsApp templates, and recipient governance are configured.")
+                    st.caption("SMS/WhatsApp delivery will be enabled after gateway credentials, approved WhatsApp templates, and recipient governance are configured. Email delivery works when SMTP secrets are configured.")
+                    if "Email" in selected_channels:
+                        email_subject = f"MPWRD Dam Alert: {selected_alert_row.get('reservoir_name')} {selected_alert_row.get('configured_alert')}"
+                        st.caption("Email output uses a professional HTML report layout with dam metrics, alert badge, DSS actions and plain-text fallback.")
+                        if st.button("Send Test Email Alert", use_container_width=True, key="send_test_email_alert"):
+                            if gateway_mode != "Provider ready":
+                                st.warning("Switch Gateway mode to Provider ready before sending a real email test.")
+                            else:
+                                email_html = dam_alert_email_html(selected_alert_row, alert_message)
+                                ok, email_status_message = send_alert_email(email_subject, alert_message, email_recipients, email_html)
+                                st.session_state.alert_test_log.insert(
+                                    0,
+                                    {
+                                        "time": pd.Timestamp.now(tz="Asia/Kolkata").strftime("%d %b %Y %I:%M %p"),
+                                        "channels": "Email",
+                                        "mode": gateway_mode,
+                                        "reservoir": selected_alert_row.get("reservoir_name"),
+                                        "alert": selected_alert_row.get("configured_alert"),
+                                        "recipients": len(email_recipients),
+                                        "status": email_status_message,
+                                    },
+                                )
+                                if ok:
+                                    st.success(email_status_message)
+                                else:
+                                    st.error(email_status_message)
 
             if st.session_state.alert_test_log:
                 st.dataframe(pd.DataFrame(st.session_state.alert_test_log), use_container_width=True, hide_index=True, height=180)
