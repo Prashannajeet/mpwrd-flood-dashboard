@@ -4343,6 +4343,10 @@ def alert_email_config() -> dict:
     username = get_app_secret("smtp_username", "SMTP_USERNAME", "")
     sender = get_app_secret("smtp_from", "SMTP_FROM", username)
     return {
+        "provider": get_app_secret("email_provider", "EMAIL_PROVIDER", "auto").strip().lower(),
+        "resend_api_key": get_app_secret("resend_api_key", "RESEND_API_KEY", ""),
+        "brevo_api_key": get_app_secret("brevo_api_key", "BREVO_API_KEY", ""),
+        "sendgrid_api_key": get_app_secret("sendgrid_api_key", "SENDGRID_API_KEY", ""),
         "host": get_app_secret("smtp_host", "SMTP_HOST", ""),
         "port": port,
         "username": username,
@@ -4353,13 +4357,38 @@ def alert_email_config() -> dict:
     }
 
 
+def alert_email_api_provider(config: dict | None = None) -> str:
+    config = config or alert_email_config()
+    provider = str(config.get("provider") or "auto").strip().lower()
+    if provider in {"resend", "brevo", "sendgrid"}:
+        return provider
+    if config.get("resend_api_key"):
+        return "resend"
+    if config.get("brevo_api_key"):
+        return "brevo"
+    if config.get("sendgrid_api_key"):
+        return "sendgrid"
+    return ""
+
+
 def alert_email_is_configured(config: dict | None = None) -> bool:
     config = config or alert_email_config()
+    provider = alert_email_api_provider(config)
+    if provider:
+        key_name = f"{provider}_api_key"
+        return bool(str(config.get(key_name) or "").strip() and str(config.get("sender") or "").strip())
     return all(str(config.get(key) or "").strip() for key in ["host", "username", "password", "sender"])
 
 
 def alert_email_missing_settings(config: dict | None = None) -> list[str]:
     config = config or alert_email_config()
+    provider = alert_email_api_provider(config)
+    if provider:
+        required = {
+            f"{provider}_api_key": f"{provider}_api_key / {provider.upper()}_API_KEY",
+            "sender": "smtp_from / SMTP_FROM",
+        }
+        return [label for key, label in required.items() if not str(config.get(key) or "").strip()]
     required = {
         "host": "smtp_host / SMTP_HOST",
         "username": "smtp_username / SMTP_USERNAME",
@@ -4367,6 +4396,20 @@ def alert_email_missing_settings(config: dict | None = None) -> list[str]:
         "sender": "smtp_from / SMTP_FROM",
     }
     return [label for key, label in required.items() if not str(config.get(key) or "").strip()]
+
+
+def post_json(url: str, payload: dict, headers: dict) -> tuple[bool, str]:
+    try:
+        data = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(url, data=data, headers=headers, method="POST")
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = response.read().decode("utf-8", errors="ignore")
+            return 200 <= response.status < 300, body or f"HTTP {response.status}"
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="ignore")
+        return False, body or f"HTTP {exc.code}"
+    except Exception as exc:
+        return False, str(exc)
 
 
 def extract_email_recipients(recipients_text: str) -> list[str]:
@@ -4382,7 +4425,64 @@ def send_alert_email(subject: str, body: str, recipients: list[str], html_body: 
     config = alert_email_config()
     if not alert_email_is_configured(config):
         missing = ", ".join(alert_email_missing_settings(config))
-        return False, f"SMTP is not configured. Missing: {missing}."
+        return False, f"Email delivery is not configured. Missing: {missing}."
+
+    provider = alert_email_api_provider(config)
+    if provider:
+        failures = []
+        for recipient in recipients:
+            if provider == "resend":
+                ok, detail = post_json(
+                    "https://api.resend.com/emails",
+                    {
+                        "from": config["sender"],
+                        "to": [recipient],
+                        "subject": subject,
+                        "text": body,
+                        "html": html_body or body.replace("\n", "<br>"),
+                    },
+                    {
+                        "Authorization": f"Bearer {config['resend_api_key']}",
+                        "Content-Type": "application/json",
+                    },
+                )
+            elif provider == "brevo":
+                ok, detail = post_json(
+                    "https://api.brevo.com/v3/smtp/email",
+                    {
+                        "sender": {"email": config["sender"], "name": "NITA GeoAI Alerts"},
+                        "to": [{"email": recipient}],
+                        "subject": subject,
+                        "textContent": body,
+                        "htmlContent": html_body or body.replace("\n", "<br>"),
+                    },
+                    {
+                        "api-key": config["brevo_api_key"],
+                        "Content-Type": "application/json",
+                    },
+                )
+            else:
+                ok, detail = post_json(
+                    "https://api.sendgrid.com/v3/mail/send",
+                    {
+                        "personalizations": [{"to": [{"email": recipient}]}],
+                        "from": {"email": config["sender"]},
+                        "subject": subject,
+                        "content": [
+                            {"type": "text/plain", "value": body},
+                            {"type": "text/html", "value": html_body or body.replace("\n", "<br>")},
+                        ],
+                    },
+                    {
+                        "Authorization": f"Bearer {config['sendgrid_api_key']}",
+                        "Content-Type": "application/json",
+                    },
+                )
+            if not ok:
+                failures.append(f"{recipient}: {detail[:180]}")
+        if failures:
+            return False, f"{provider.title()} email API failed for {len(failures)} recipient(s): {' | '.join(failures[:2])}"
+        return True, f"Email sent privately to {len(recipients)} recipient(s) using {provider.title()} API."
 
     def send_with_config(active_config: dict) -> None:
         smtp_class = smtplib.SMTP_SSL if active_config.get("use_ssl") else smtplib.SMTP
@@ -5478,7 +5578,7 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
 
     with admin_tabs[2]:
         st.markdown(
-            '<div class="panel-note">Configure alert thresholds and prepare Email, SMS and WhatsApp messages. Email can send through SMTP when secrets are configured; SMS/WhatsApp remain preview/link mode until provider gateways are connected.</div>',
+            '<div class="panel-note">Configure alert thresholds and prepare Email, SMS and WhatsApp messages. Email can send through HTTPS email API providers for online deployments or SMTP for local deployments; SMS/WhatsApp remain preview/link mode until provider gateways are connected.</div>',
             unsafe_allow_html=True,
         )
         if "alert_test_log" not in st.session_state:
@@ -5517,7 +5617,7 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
             admin_email_configured = alert_email_is_configured()
             admin_missing_email_settings = alert_email_missing_settings()
             missing_note = "" if admin_email_configured else f" Missing: {', '.join(admin_missing_email_settings)}."
-            st.caption(f"Email recipients detected: {len(admin_email_recipients)}. SMTP is {'configured' if admin_email_configured else 'not configured'}.{missing_note}")
+            st.caption(f"Email recipients detected: {len(admin_email_recipients)}. Email delivery is {'configured' if admin_email_configured else 'not configured'}.{missing_note}")
 
         active_dam_alerts = build_dam_alert_rows(map_status, dam_critical_gap, dam_warning_gap, dam_watch_filling, rapid_rise_threshold)
         alert_kpis = st.columns(4)
@@ -5583,7 +5683,7 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
                     )
                     st.success(f"Test dispatch created: {outbox_path.name}")
             with action_cols[1]:
-                st.caption(f"Prepared for {gateway_mode}. Message length: {len(alert_message)} characters. Email sending requires SMTP secrets; SMS/WhatsApp require provider credentials.")
+                st.caption(f"Prepared for {gateway_mode}. Message length: {len(alert_message)} characters. Email sending requires email API or SMTP secrets; SMS/WhatsApp require provider credentials.")
                 if "Email" in selected_channels:
                     email_subject = f"MPWRD Dam Alert: {selected_alert_row.get('reservoir_name')} {selected_alert_row.get('configured_alert')}"
                     email_html = dam_alert_email_html(selected_alert_row, alert_message)
@@ -5631,7 +5731,7 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
         )
         auto_cols = st.columns(3)
         auto_cols[0].metric("Automated Email Recipients", len(automated_recipients))
-        auto_cols[1].metric("SMTP", "Configured" if alert_email_is_configured() else "Incomplete")
+        auto_cols[1].metric("Email Delivery", "Configured" if alert_email_is_configured() else "Incomplete")
         auto_cols[2].metric("Interval", "Every 1 hour")
         st.code(
             "& 'D:\\01 Project\\Development\\flood_dashboard\\.venv\\Scripts\\python.exe' "
@@ -5856,7 +5956,7 @@ if main_page == "Dam DSS & Analytics":
             st.info("Alert configuration is restricted to administration users. Sign in from the sidebar to manage SMS/WhatsApp alert rules and recipients.")
         else:
             st.markdown(
-                '<div class="panel-note">Configure operational thresholds and prepare SMS, WhatsApp and email alert messages. SMS/WhatsApp stay in preview mode until provider gateways are connected; email can send when SMTP secrets are configured.</div>',
+                '<div class="panel-note">Configure operational thresholds and prepare SMS, WhatsApp and email alert messages. SMS/WhatsApp stay in preview mode until provider gateways are connected; email can send when HTTPS email API or SMTP secrets are configured.</div>',
                 unsafe_allow_html=True,
             )
             alert_settings = st.columns(4)
@@ -5950,14 +6050,14 @@ if main_page == "Dam DSS & Analytics":
                     value=st.session_state.get("alert_recipients", "NITA GeoAI Alerts info@nitageoai.com\nData Center Head baghel.bijendrakumar@gmail.com\nControl Room +91XXXXXXXXXX\nDam Safety Officer +91XXXXXXXXXX"),
                     key="alert_recipients",
                     height=86,
-                    help="One recipient per line. Use role/name with phone number and/or email address. SMS/WhatsApp require an approved gateway; Email requires SMTP secrets.",
+                    help="One recipient per line. Use role/name with phone number and/or email address. SMS/WhatsApp require an approved gateway; Email requires email API or SMTP secrets.",
                 )
                 email_recipients = extract_email_recipients(recipients_text)
                 email_configured = alert_email_is_configured()
                 email_status = "configured" if email_configured else "not configured"
                 missing_email_settings = alert_email_missing_settings()
                 missing_note = "" if email_configured else f" Missing: {', '.join(missing_email_settings)}."
-                st.caption(f"Email recipients detected: {len(email_recipients)}. SMTP is {email_status}.{missing_note}")
+                st.caption(f"Email recipients detected: {len(email_recipients)}. Email delivery is {email_status}.{missing_note}")
 
             active_dam_alerts = build_dam_alert_rows(
                 map_status,
@@ -6024,7 +6124,7 @@ if main_page == "Dam DSS & Analytics":
                         )
                         st.success("Test alert recorded in local administration log.")
                 with test_cols[1]:
-                    st.caption("SMS/WhatsApp delivery will be enabled after gateway credentials, approved WhatsApp templates, and recipient governance are configured. Email delivery works when SMTP secrets are configured.")
+                    st.caption("SMS/WhatsApp delivery will be enabled after gateway credentials, approved WhatsApp templates, and recipient governance are configured. Email delivery works when email API or SMTP secrets are configured.")
                     if "Email" in selected_channels:
                         email_subject = f"MPWRD Dam Alert: {selected_alert_row.get('reservoir_name')} {selected_alert_row.get('configured_alert')}"
                         st.caption("Email output uses a professional HTML report layout with dam metrics, alert badge, DSS actions and plain-text fallback.")

@@ -8,6 +8,8 @@ import re
 import smtplib
 import sqlite3
 import time
+import urllib.error
+import urllib.request
 from email.message import EmailMessage
 from html import escape
 from pathlib import Path
@@ -44,6 +46,10 @@ def secret(name: str, env_name: str, default: str = "") -> str:
 
 def smtp_config() -> dict:
     return {
+        "provider": secret("email_provider", "EMAIL_PROVIDER", "auto").strip().lower(),
+        "resend_api_key": secret("resend_api_key", "RESEND_API_KEY"),
+        "brevo_api_key": secret("brevo_api_key", "BREVO_API_KEY"),
+        "sendgrid_api_key": secret("sendgrid_api_key", "SENDGRID_API_KEY"),
         "host": secret("smtp_host", "SMTP_HOST"),
         "port": int(secret("smtp_port", "SMTP_PORT", "587") or "587"),
         "username": secret("smtp_username", "SMTP_USERNAME"),
@@ -52,6 +58,37 @@ def smtp_config() -> dict:
         "use_tls": secret("smtp_use_tls", "SMTP_USE_TLS", "true").lower() not in {"0", "false", "no", "off"},
         "use_ssl": secret("smtp_use_ssl", "SMTP_USE_SSL", "false").lower() in {"1", "true", "yes", "on"},
     }
+
+
+def email_api_provider(config: dict) -> str:
+    provider = str(config.get("provider") or "auto").strip().lower()
+    if provider in {"resend", "brevo", "sendgrid"}:
+        return provider
+    if config.get("resend_api_key"):
+        return "resend"
+    if config.get("brevo_api_key"):
+        return "brevo"
+    if config.get("sendgrid_api_key"):
+        return "sendgrid"
+    return ""
+
+
+def post_json(url: str, payload: dict, headers: dict) -> tuple[bool, str]:
+    try:
+        request = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = response.read().decode("utf-8", errors="ignore")
+            return 200 <= response.status < 300, body or f"HTTP {response.status}"
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="ignore")
+        return False, body or f"HTTP {exc.code}"
+    except Exception as exc:
+        return False, str(exc)
 
 
 def parse_recipients(text: str) -> list[str]:
@@ -287,11 +324,57 @@ def record_dispatch(dispatch_key: str, row: pd.Series, recipients: int, status: 
 
 def send_email_private(subject: str, text: str, html: str, recipients: list[str]) -> tuple[bool, str]:
     config = smtp_config()
+    if not recipients:
+        return False, "No recipients configured."
+    provider = email_api_provider(config)
+    if provider:
+        key_name = f"{provider}_api_key"
+        missing = [key for key in [key_name, "sender"] if not str(config.get(key) or "").strip()]
+        if missing:
+            return False, f"Missing {provider} email API settings: {', '.join(missing)}"
+        failures = []
+        for recipient in recipients:
+            if provider == "resend":
+                ok, detail = post_json(
+                    "https://api.resend.com/emails",
+                    {"from": config["sender"], "to": [recipient], "subject": subject, "text": text, "html": html},
+                    {"Authorization": f"Bearer {config['resend_api_key']}", "Content-Type": "application/json"},
+                )
+            elif provider == "brevo":
+                ok, detail = post_json(
+                    "https://api.brevo.com/v3/smtp/email",
+                    {
+                        "sender": {"email": config["sender"], "name": "NITA GeoAI Alerts"},
+                        "to": [{"email": recipient}],
+                        "subject": subject,
+                        "textContent": text,
+                        "htmlContent": html,
+                    },
+                    {"api-key": config["brevo_api_key"], "Content-Type": "application/json"},
+                )
+            else:
+                ok, detail = post_json(
+                    "https://api.sendgrid.com/v3/mail/send",
+                    {
+                        "personalizations": [{"to": [{"email": recipient}]}],
+                        "from": {"email": config["sender"]},
+                        "subject": subject,
+                        "content": [
+                            {"type": "text/plain", "value": text},
+                            {"type": "text/html", "value": html},
+                        ],
+                    },
+                    {"Authorization": f"Bearer {config['sendgrid_api_key']}", "Content-Type": "application/json"},
+                )
+            if not ok:
+                failures.append(f"{recipient}: {detail[:180]}")
+        if failures:
+            return False, f"{provider.title()} email API failed for {len(failures)} recipient(s): {' | '.join(failures[:2])}"
+        return True, f"Sent privately to {len(recipients)} recipient(s) using {provider.title()} API."
+
     missing = [key for key in ["host", "username", "password", "sender"] if not str(config.get(key) or "").strip()]
     if missing:
         return False, f"Missing SMTP settings: {', '.join(missing)}"
-    if not recipients:
-        return False, "No recipients configured."
     def send_with_config(active_config: dict) -> None:
         smtp_class = smtplib.SMTP_SSL if active_config["use_ssl"] else smtplib.SMTP
         with smtp_class(active_config["host"], active_config["port"], timeout=35) as smtp:
