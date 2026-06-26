@@ -292,22 +292,32 @@ def send_email_private(subject: str, text: str, html: str, recipients: list[str]
         return False, f"Missing SMTP settings: {', '.join(missing)}"
     if not recipients:
         return False, "No recipients configured."
-    try:
-        smtp_class = smtplib.SMTP_SSL if config["use_ssl"] else smtplib.SMTP
-        with smtp_class(config["host"], config["port"], timeout=30) as smtp:
-            if config["use_tls"] and not config["use_ssl"]:
+    def send_with_config(active_config: dict) -> None:
+        smtp_class = smtplib.SMTP_SSL if active_config["use_ssl"] else smtplib.SMTP
+        with smtp_class(active_config["host"], active_config["port"], timeout=35) as smtp:
+            if active_config["use_tls"] and not active_config["use_ssl"]:
                 smtp.starttls()
-            smtp.login(config["username"], config["password"])
+            smtp.login(active_config["username"], active_config["password"])
             for recipient in recipients:
                 message = EmailMessage()
                 message["Subject"] = subject
-                message["From"] = config["sender"]
+                message["From"] = active_config["sender"]
                 message["To"] = recipient
                 message.set_content(text)
                 message.add_alternative(html, subtype="html")
                 smtp.send_message(message)
+
+    try:
+        send_with_config(config)
         return True, f"Sent privately to {len(recipients)} recipient(s)."
     except Exception as exc:
+        if str(config.get("host", "")).endswith("secureserver.net") and not config.get("use_ssl"):
+            fallback = {**config, "port": 465, "use_tls": False, "use_ssl": True}
+            try:
+                send_with_config(fallback)
+                return True, f"Sent privately to {len(recipients)} recipient(s) using SSL fallback."
+            except Exception as fallback_exc:
+                return False, f"Email failed: {exc}; SSL fallback also failed: {fallback_exc}"
         return False, f"Email failed: {exc}"
 
 

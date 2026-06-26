@@ -4384,23 +4384,33 @@ def send_alert_email(subject: str, body: str, recipients: list[str], html_body: 
         missing = ", ".join(alert_email_missing_settings(config))
         return False, f"SMTP is not configured. Missing: {missing}."
 
-    try:
-        smtp_class = smtplib.SMTP_SSL if config.get("use_ssl") else smtplib.SMTP
-        with smtp_class(config["host"], int(config["port"]), timeout=25) as smtp:
-            if config["use_tls"] and not config.get("use_ssl"):
+    def send_with_config(active_config: dict) -> None:
+        smtp_class = smtplib.SMTP_SSL if active_config.get("use_ssl") else smtplib.SMTP
+        with smtp_class(active_config["host"], int(active_config["port"]), timeout=35) as smtp:
+            if active_config["use_tls"] and not active_config.get("use_ssl"):
                 smtp.starttls()
-            smtp.login(config["username"], config["password"])
+            smtp.login(active_config["username"], active_config["password"])
             for recipient in recipients:
                 message = EmailMessage()
                 message["Subject"] = subject
-                message["From"] = config["sender"]
+                message["From"] = active_config["sender"]
                 message["To"] = recipient
                 message.set_content(body)
                 if html_body:
                     message.add_alternative(html_body, subtype="html")
                 smtp.send_message(message)
+
+    try:
+        send_with_config(config)
         return True, f"Email sent privately to {len(recipients)} recipient(s)."
     except Exception as exc:
+        if str(config.get("host", "")).endswith("secureserver.net") and not config.get("use_ssl"):
+            fallback = {**config, "port": 465, "use_tls": False, "use_ssl": True}
+            try:
+                send_with_config(fallback)
+                return True, f"Email sent privately to {len(recipients)} recipient(s) using SSL fallback."
+            except Exception as fallback_exc:
+                return False, f"Email delivery failed: {exc}; SSL fallback also failed: {fallback_exc}"
         return False, f"Email delivery failed: {exc}"
 
 
