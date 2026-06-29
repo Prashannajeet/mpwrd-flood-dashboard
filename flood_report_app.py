@@ -110,16 +110,16 @@ COLUMN_LABEL_OVERRIDES = {
 }
 
 COOLORS_ALERT_PALETTE = [
-    "#580aff",
-    "#147df5",
-    "#0aefff",
-    "#0aff99",
-    "#a1ff0a",
-    "#deff0a",
-    "#ffd300",
-    "#ff8700",
-    "#ff0000",
-    "#be0aff",
+    "#2563eb",
+    "#0891b2",
+    "#10b981",
+    "#65a30d",
+    "#facc15",
+    "#f97316",
+    "#ef4444",
+    "#db2777",
+    "#8b5cf6",
+    "#111827",
 ]
 
 
@@ -613,13 +613,13 @@ st.markdown(
         margin-bottom: 0.7rem;
     }
     .infographic-frame {
-        border: 1px solid var(--line);
+        border: 1px solid rgba(125, 149, 190, 0.36);
         border-radius: 8px;
         background:
-            linear-gradient(135deg, rgba(255,255,255,0.98), rgba(239,246,255,0.94)),
-            linear-gradient(135deg, rgba(37,99,235,0.12), rgba(6,182,212,0.10), rgba(251,113,133,0.08));
+            linear-gradient(135deg, rgba(255,255,255,0.99), rgba(248,250,252,0.96)),
+            linear-gradient(135deg, rgba(37,99,235,0.14), rgba(16,185,129,0.10), rgba(249,115,22,0.10));
         padding: 0.72rem;
-        box-shadow: 0 18px 42px rgba(15, 23, 42, 0.07);
+        box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
         margin-bottom: 0.55rem;
     }
     .infographic-title {
@@ -641,15 +641,17 @@ st.markdown(
         gap: 0.5rem;
     }
     .infographic-card {
-        border: 1px solid rgba(199, 210, 229, 0.9);
+        border: 1px solid rgba(148, 163, 184, 0.38);
+        border-top: 3px solid #2563eb;
         border-radius: 8px;
-        background: rgba(255,255,255,0.92);
+        background: rgba(255,255,255,0.97);
         padding: 0.55rem 0.62rem;
         min-height: 72px;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
     }
     .infographic-card span {
         display: block;
-        color: var(--muted);
+        color: #475569;
         font-size: 0.66rem;
         font-weight: 760;
         letter-spacing: 0.04em;
@@ -657,14 +659,14 @@ st.markdown(
     }
     .infographic-card b {
         display: block;
-        color: var(--text);
+        color: #0f172a;
         font-size: 1.22rem;
         line-height: 1.15;
         margin-top: 0.28rem;
     }
     .infographic-card small {
         display: block;
-        color: var(--muted);
+        color: #64748b;
         font-size: 0.7rem;
         line-height: 1.25;
         margin-top: 0.26rem;
@@ -3538,11 +3540,63 @@ def build_current_weather_for_towns(towns_key: tuple[tuple[str, str, float, floa
     return pd.DataFrame(rows)
 
 
+def weather_points_from_dams(dams: pd.DataFrame) -> pd.DataFrame:
+    if dams.empty or not {"latitude", "longitude"}.issubset(dams.columns):
+        return pd.DataFrame()
+    points = dams.copy()
+    points["latitude"] = pd.to_numeric(points["latitude"], errors="coerce")
+    points["longitude"] = pd.to_numeric(points["longitude"], errors="coerce")
+    points = points.dropna(subset=["latitude", "longitude"]).copy()
+    points["town_name"] = points.get("reservoir_name", points.get("dam_name", "Dam")).fillna(points.get("dam_name", "Dam"))
+    points["district"] = points.get("map_district", points.get("district", "")).fillna("Unassigned")
+    points["basin"] = points.get("sub_basin", points.get("major_basin", "")).fillna("")
+    points["priority_flag"] = points.get("alert_level", pd.Series("Dam", index=points.index)).fillna("Dam")
+    return points[["town_name", "district", "latitude", "longitude", "basin", "priority_flag"]].drop_duplicates("town_name")
+
+
+def weather_points_from_districts(dams: pd.DataFrame, towns: pd.DataFrame) -> pd.DataFrame:
+    frames = []
+    if not dams.empty and {"latitude", "longitude"}.issubset(dams.columns):
+        dam_points = dams.copy()
+        dam_points["latitude"] = pd.to_numeric(dam_points["latitude"], errors="coerce")
+        dam_points["longitude"] = pd.to_numeric(dam_points["longitude"], errors="coerce")
+        district_col = "map_district" if "map_district" in dam_points.columns else "district"
+        if district_col in dam_points:
+            frames.append(
+                dam_points.dropna(subset=["latitude", "longitude", district_col])
+                .assign(district=lambda data: data[district_col].astype(str))
+                .groupby("district", as_index=False)
+                .agg(latitude=("latitude", "mean"), longitude=("longitude", "mean"))
+            )
+    if not towns.empty and {"district", "latitude", "longitude"}.issubset(towns.columns):
+        town_points = towns.copy()
+        town_points["latitude"] = pd.to_numeric(town_points["latitude"], errors="coerce")
+        town_points["longitude"] = pd.to_numeric(town_points["longitude"], errors="coerce")
+        frames.append(
+            town_points.dropna(subset=["latitude", "longitude", "district"])
+            .groupby("district", as_index=False)
+            .agg(latitude=("latitude", "mean"), longitude=("longitude", "mean"))
+        )
+    if not frames:
+        return pd.DataFrame()
+    districts = (
+        pd.concat(frames, ignore_index=True)
+        .groupby("district", as_index=False)
+        .agg(latitude=("latitude", "mean"), longitude=("longitude", "mean"))
+        .sort_values("district")
+    )
+    districts["town_name"] = districts["district"] + " District"
+    districts["basin"] = "District centroid"
+    districts["priority_flag"] = "District"
+    return districts[["town_name", "district", "latitude", "longitude", "basin", "priority_flag"]]
+
+
 def render_weather_town_leaflet_map(
     towns: pd.DataFrame,
     selected_town: str,
     weather_tile_api_key: str = "",
     district_geojson: dict | None = None,
+    map_title: str = "Weather Forecast Map: MP Points",
 ) -> None:
     if towns.empty:
         return
@@ -3652,7 +3706,7 @@ def render_weather_town_leaflet_map(
             .weather-legend b {{ display:block; color:#172033; margin-bottom:4px; }}
             .weather-legend span {{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; }}
         </style>
-        <div class="weather-map-title">Weather Forecast Map: MP Towns</div>
+        <div class="weather-map-title">{escape(map_title)}</div>
         <div class="weather-map-note">Town markers are colored by 7-day rainfall, wind and UV risk. {escape(layer_note)}</div>
         <div class="weather-layer-badges">
             {layer_badges_html}
@@ -5084,6 +5138,202 @@ def save_alert_outbox_record(payload: dict) -> Path:
     return target
 
 
+def assistant_table(frame: pd.DataFrame, columns: list[str], limit: int = 12) -> pd.DataFrame:
+    if frame.empty:
+        return pd.DataFrame()
+    available = [column for column in columns if column in frame.columns]
+    if not available:
+        return pd.DataFrame()
+    return prettify_dataframe_columns(frame[available].head(limit).copy())
+
+
+def dashboard_assistant_answer(
+    question: str,
+    map_status_frame: pd.DataFrame,
+    reservoir_frame: pd.DataFrame,
+    river_frame: pd.DataFrame,
+    gate_frame: pd.DataFrame,
+    page_name: str,
+) -> dict:
+    query = normalize_name(question)
+    latest_label = "current filter"
+    if not reservoir_frame.empty and "observed_at" in reservoir_frame:
+        latest_time = pd.to_datetime(reservoir_frame["observed_at"], errors="coerce").dropna()
+        if not latest_time.empty:
+            latest_label = time_label(latest_time.max())
+
+    if not map_status_frame.empty:
+        map_frame = map_status_frame.copy()
+        map_frame["display_filling"] = pd.to_numeric(map_frame.get("display_filling"), errors="coerce")
+        map_frame["frl_gap_m"] = pd.to_numeric(map_frame.get("frl_gap_m"), errors="coerce")
+    else:
+        map_frame = pd.DataFrame()
+
+    if any(term in query for term in ["critical", "warning", "alert", "frl"]):
+        if map_frame.empty or "alert_level" not in map_frame:
+            return {"text": "No mapped dam alert data is available under the current filters.", "table": pd.DataFrame()}
+        alerts = map_frame[map_frame["alert_level"].isin(["Critical", "Warning", "Watch"])].copy()
+        critical = int((map_frame["alert_level"] == "Critical").sum())
+        warning = int((map_frame["alert_level"] == "Warning").sum())
+        watch = int((map_frame["alert_level"] == "Watch").sum())
+        text = (
+            f"For {latest_label}, the current filtered data shows {critical} Critical, "
+            f"{warning} Warning, and {watch} Watch dam alert(s). "
+            "Priority should start with Critical and Warning reservoirs, especially where FRL gap is low or the latest water level is rising."
+        )
+        table = assistant_table(
+            alerts.sort_values(["alert_level", "frl_gap_m", "display_filling"], ascending=[True, True, False]),
+            ["reservoir_name", "dam_name", "map_district", "district", "sub_basin", "water_level_m", "frl_m", "frl_gap_m", "display_filling", "alert_level"],
+            15,
+        )
+        return {"text": text, "table": table}
+
+    if any(term in query for term in ["district", "where", "area"]):
+        if map_frame.empty:
+            return {"text": "No district-wise dam data is available under the current filters.", "table": pd.DataFrame()}
+        district_col = "map_district" if "map_district" in map_frame else "district"
+        if district_col not in map_frame:
+            return {"text": "District field is not available in the current dam map data.", "table": pd.DataFrame()}
+        district_summary = (
+            map_frame.assign(
+                alert_flag=map_frame.get("alert_level", pd.Series(dtype=str)).isin(["Critical", "Warning"]),
+                district_label=map_frame[district_col].fillna("Unassigned"),
+            )
+            .groupby("district_label", as_index=False)
+            .agg(
+                dams=("reservoir_name", "nunique"),
+                avg_filling=("display_filling", "mean"),
+                max_filling=("display_filling", "max"),
+                active_alerts=("alert_flag", "sum"),
+            )
+            .sort_values(["active_alerts", "max_filling"], ascending=False)
+        )
+        text = "District-wise attention ranking is based on active Critical/Warning alerts first, then maximum reservoir filling."
+        return {"text": text, "table": prettify_dataframe_columns(district_summary.head(15))}
+
+    if any(term in query for term in ["top", "highest", "filled", "full", "75", "90"]):
+        if map_frame.empty:
+            return {"text": "No reservoir filling data is available under the current filters.", "table": pd.DataFrame()}
+        top = map_frame.sort_values("display_filling", ascending=False)
+        text = f"These are the highest-filled reservoirs in the current dashboard filter for {latest_label}."
+        table = assistant_table(top, ["reservoir_name", "dam_name", "map_district", "water_level_m", "frl_gap_m", "display_filling", "alert_level"], 15)
+        return {"text": text, "table": table}
+
+    if any(term in query for term in ["least", "low", "below 25", "below25", "empty"]):
+        if map_frame.empty:
+            return {"text": "No reservoir filling data is available under the current filters.", "table": pd.DataFrame()}
+        low = map_frame[map_frame["display_filling"] < 25].sort_values("display_filling", ascending=True)
+        text = f"{len(low)} reservoir(s) are below 25% filling in the current filter."
+        table = assistant_table(low, ["reservoir_name", "dam_name", "map_district", "water_level_m", "display_filling", "alert_level"], 15)
+        return {"text": text, "table": table}
+
+    if any(term in query for term in ["gate", "gates", "opened", "discharge"]):
+        if gate_frame.empty:
+            return {"text": "No reservoir gate observations are available under the current filters.", "table": pd.DataFrame()}
+        gates = gate_frame.copy()
+        gates["gate_opened_count"] = pd.to_numeric(gates.get("gate_opened_count"), errors="coerce").fillna(0)
+        open_gates = gates[gates["gate_opened_count"] > 0].sort_values("gate_opened_count", ascending=False)
+        total_sites = int(open_gates["reservoir_name"].nunique()) if "reservoir_name" in open_gates else len(open_gates)
+        text = f"{total_sites} reservoir gate site(s) currently show opened gates under the selected reports."
+        table = assistant_table(open_gates, ["reservoir_name", "district", "gate_opened_count", "total_no_of_gates", "opening_m", "discharge_cumecs", "discharge_cusec", "report_at"], 15)
+        return {"text": text, "table": table}
+
+    if any(term in query for term in ["river", "gauge", "station", "danger"]):
+        if river_frame.empty:
+            return {"text": "No river gauge observations are available under the current filters.", "table": pd.DataFrame()}
+        rivers = river_frame.copy()
+        if {"water_level_m", "danger_or_max_water_level_m"}.issubset(rivers.columns):
+            rivers["danger_gap_m"] = pd.to_numeric(rivers["danger_or_max_water_level_m"], errors="coerce") - pd.to_numeric(rivers["water_level_m"], errors="coerce")
+            rivers = rivers.sort_values("danger_gap_m")
+        text = "River gauge ranking is shown by lowest gap to danger/max water level where that field is available."
+        table = assistant_table(rivers, ["river_name", "gauge_station", "district", "water_level_m", "danger_or_max_water_level_m", "danger_gap_m", "observed_at"], 15)
+        return {"text": text, "table": table}
+
+    if any(term in query for term in ["rain", "rainfall", "weather", "forecast"]):
+        text = (
+            "Weather and rainfall DSS is available in the Weather Forecast page. "
+            "For dam operations, compare 24-hour rainfall, 7-day precipitation forecast, wind risk, and active FRL alerts before issuing field advisories."
+        )
+        rain_table = pd.DataFrame()
+        if not reservoir_frame.empty and "rainfall_daily_mm" in reservoir_frame:
+            rain = reservoir_frame.copy()
+            rain["rainfall_daily_mm"] = pd.to_numeric(rain.get("rainfall_daily_mm"), errors="coerce")
+            rain_table = assistant_table(rain.sort_values("rainfall_daily_mm", ascending=False), ["reservoir_name", "district", "rainfall_daily_mm", "rainfall_total_mm", "observed_at"], 12)
+        return {"text": text, "table": rain_table}
+
+    if any(term in query for term in ["email", "sms", "whatsapp", "message", "admin", "upload", "pdf"]):
+        text = (
+            "Administration controls PDF upload, manual data entry, report generation support, and alert messaging. "
+            "Email alerts are sent privately per recipient. Online deployments should prefer an HTTPS email API provider such as Brevo, Resend, or SendGrid; local deployments can use SMTP."
+        )
+        return {"text": text, "table": pd.DataFrame()}
+
+    dam_count = int(map_frame["reservoir_name"].dropna().nunique()) if not map_frame.empty and "reservoir_name" in map_frame else 0
+    avg_filling = pd.to_numeric(map_frame.get("display_filling"), errors="coerce").mean() if not map_frame.empty else math.nan
+    alert_count = int(map_frame.get("alert_level", pd.Series(dtype=str)).isin(["Critical", "Warning"]).sum()) if not map_frame.empty else 0
+    river_count = int(river_frame["gauge_station"].dropna().nunique()) if not river_frame.empty and "gauge_station" in river_frame else 0
+    text = (
+        f"Current page: {page_name}. For {latest_label}, the selected data covers {dam_count} mapped reservoir(s), "
+        f"{river_count} river gauge station(s), average reservoir filling of {fmt_number(avg_filling, '%')}, "
+        f"and {alert_count} Critical/Warning dam alert(s). Try asking: 'critical dams', 'district ranking', "
+        "'opened gates', 'least filled dams', or 'river gauges near danger level'."
+    )
+    return {"text": text, "table": pd.DataFrame()}
+
+
+def render_dashboard_assistant(
+    map_status_frame: pd.DataFrame,
+    reservoir_frame: pd.DataFrame,
+    river_frame: pd.DataFrame,
+    gate_frame: pd.DataFrame,
+    page_name: str,
+) -> None:
+    if "assistant_history" not in st.session_state:
+        st.session_state.assistant_history = []
+    if "assistant_question" not in st.session_state:
+        st.session_state.assistant_question = ""
+
+    with st.expander("AI DSS Assistant: Ask About Current Dashboard Data", expanded=False):
+        st.markdown(
+            '<div class="panel-note">Hybrid support assistant: quick prompts plus local data analysis from the currently selected reports and filters. No external AI key is required for these answers.</div>',
+            unsafe_allow_html=True,
+        )
+        prompt_cols = st.columns(5)
+        quick_prompts = [
+            "Critical dams",
+            "District ranking",
+            "Opened gates",
+            "Least filled below 25%",
+            "River gauges near danger",
+        ]
+        for col, prompt in zip(prompt_cols, quick_prompts):
+            if col.button(prompt, key=f"assistant_quick_{normalize_name(prompt)}", use_container_width=True):
+                answer = dashboard_assistant_answer(prompt, map_status_frame, reservoir_frame, river_frame, gate_frame, page_name)
+                st.session_state.assistant_history.insert(0, {"question": prompt, **answer})
+
+        with st.form("dashboard_assistant_form", clear_on_submit=True):
+            question = st.text_input(
+                "Ask a question",
+                placeholder="Example: Which dams are critical today and which district needs attention?",
+                key="assistant_question_input",
+            )
+            submitted = st.form_submit_button("Ask Assistant", type="primary", use_container_width=True)
+        if submitted and question.strip():
+            answer = dashboard_assistant_answer(question, map_status_frame, reservoir_frame, river_frame, gate_frame, page_name)
+            st.session_state.assistant_history.insert(0, {"question": question.strip(), **answer})
+
+        if st.session_state.assistant_history:
+            latest = st.session_state.assistant_history[0]
+            st.markdown(f"**You asked:** {escape(str(latest.get('question', '')))}")
+            st.info(str(latest.get("text", "")))
+            table = latest.get("table")
+            if isinstance(table, pd.DataFrame) and not table.empty:
+                st.dataframe(table, use_container_width=True, hide_index=True, height=260)
+        else:
+            overview = dashboard_assistant_answer("", map_status_frame, reservoir_frame, river_frame, gate_frame, page_name)
+            st.info(overview["text"])
+
+
 def reportlab_available() -> bool:
     try:
         import reportlab  # noqa: F401
@@ -5608,7 +5858,7 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
         with gateway_cols[1]:
             recipients_text = st.text_area(
                 "Alert recipients",
-                value=st.session_state.get("admin_alert_recipients", "NITA GeoAI Alerts info@nitageoai.com\nData Center Head baghel.bijendrakumar@gmail.com\nControl Room +91XXXXXXXXXX\nDam Safety Officer +91XXXXXXXXXX"),
+                value=st.session_state.get("admin_alert_recipients", "NITA GeoAI Sender nitageoai@gmail.com\nNITA GeoAI Alerts info@nitageoai.com\nData Center Head baghel.bijendrakumar@gmail.com\nControl Room +91XXXXXXXXXX\nDam Safety Officer +91XXXXXXXXXX"),
                 key="admin_alert_recipients",
                 height=86,
                 help="One recipient per line. Use role/name with email and/or phone number.",
@@ -5764,6 +6014,7 @@ for nav_col, page in zip(nav_cols, nav_pages):
         st.rerun()
 main_page = st.session_state.main_dashboard_page
 st.markdown(f'<div class="dashboard-topnav-active">Active page: <b>{escape(main_page)}</b></div>', unsafe_allow_html=True)
+render_dashboard_assistant(map_status, reservoir_view, river_view, gate_view_all, main_page)
 
 if main_page == "Administration":
     render_admin_operations(is_admin, map_status, dirs)
@@ -6047,7 +6298,7 @@ if main_page == "Dam DSS & Analytics":
             with channel_cols[1]:
                 recipients_text = st.text_area(
                     "Alert recipients",
-                    value=st.session_state.get("alert_recipients", "NITA GeoAI Alerts info@nitageoai.com\nData Center Head baghel.bijendrakumar@gmail.com\nControl Room +91XXXXXXXXXX\nDam Safety Officer +91XXXXXXXXXX"),
+                    value=st.session_state.get("alert_recipients", "NITA GeoAI Sender nitageoai@gmail.com\nNITA GeoAI Alerts info@nitageoai.com\nData Center Head baghel.bijendrakumar@gmail.com\nControl Room +91XXXXXXXXXX\nDam Safety Officer +91XXXXXXXXXX"),
                     key="alert_recipients",
                     height=86,
                     help="One recipient per line. Use role/name with phone number and/or email address. SMS/WhatsApp require an approved gateway; Email requires email API or SMTP secrets.",
@@ -6427,27 +6678,39 @@ if main_page == "Dam DSS & Analytics":
 
 if main_page == "Weather Forecast":
     st.subheader("Weather Forecast")
-    towns = read_csv(MP_TOWNS_CSV)
-    if towns.empty:
-        st.info("No MP towns master data is available. Add data/mp_towns.csv to enable town-wise weather forecasting.")
+    towns_master = read_csv(MP_TOWNS_CSV)
+    if not towns_master.empty:
+        towns_master["latitude"] = pd.to_numeric(towns_master["latitude"], errors="coerce")
+        towns_master["longitude"] = pd.to_numeric(towns_master["longitude"], errors="coerce")
+        towns_master = towns_master.dropna(subset=["latitude", "longitude"]).sort_values(["district", "town_name"]).reset_index(drop=True)
+    dam_weather_points = weather_points_from_dams(dam_locations)
+    district_weather_points = weather_points_from_districts(dam_locations, towns_master)
+    weather_point_sets = {
+        "Towns": towns_master,
+        "Dams": dam_weather_points,
+        "Districts": district_weather_points,
+    }
+    available_weather_sets = [label for label, frame in weather_point_sets.items() if not frame.empty]
+    if not available_weather_sets:
+        st.info("No weather point master data is available. Add towns, dam locations, or district centroids to enable weather forecasting.")
     else:
-        towns["latitude"] = pd.to_numeric(towns["latitude"], errors="coerce")
-        towns["longitude"] = pd.to_numeric(towns["longitude"], errors="coerce")
-        towns = towns.dropna(subset=["latitude", "longitude"]).sort_values(["district", "town_name"]).reset_index(drop=True)
-        weather_top = st.columns([0.42, 0.58])
+        weather_top = st.columns([0.25, 0.32, 0.43])
         with weather_top[0]:
-            district_filter_options = ["All districts"] + sorted(towns["district"].dropna().unique())
+            selected_weather_set = st.selectbox("Weather coverage", available_weather_sets, key="weather_point_set")
+        weather_points = weather_point_sets[selected_weather_set].copy()
+        with weather_top[1]:
+            district_filter_options = ["All districts"] + sorted(weather_points["district"].dropna().astype(str).unique())
             selected_weather_district = st.selectbox("Weather district", district_filter_options, key="weather_district_filter")
-        town_options_df = towns if selected_weather_district == "All districts" else towns[towns["district"] == selected_weather_district]
+        town_options_df = weather_points if selected_weather_district == "All districts" else weather_points[weather_points["district"].astype(str) == selected_weather_district]
         town_labels = [
             f"{row.town_name} | {row.district}"
             for row in town_options_df.itertuples(index=False)
         ]
         if not town_labels:
-            st.warning("No towns are available for the selected district.")
+            st.warning(f"No {selected_weather_set.lower()} are available for the selected district.")
         else:
-            with weather_top[1]:
-                selected_town_label = st.selectbox("Town weather point", town_labels, key="selected_weather_town")
+            with weather_top[2]:
+                selected_town_label = st.selectbox(f"{selected_weather_set[:-1] if selected_weather_set.endswith('s') else selected_weather_set} weather point", town_labels, key="selected_weather_town")
             selected_town_name = selected_town_label.split(" | ", 1)[0]
             selected_town = town_options_df[town_options_df["town_name"] == selected_town_name].iloc[0]
             cache_summary = get_weather_cache_summary()
@@ -6459,13 +6722,13 @@ if main_page == "Weather Forecast":
             )
             force_weather_refresh = False
             if is_admin:
-                force_weather_refresh = st.button("Refresh selected town weather now", use_container_width=True, key="refresh_selected_weather_now")
+                force_weather_refresh = st.button("Refresh selected weather point now", use_container_width=True, key="refresh_selected_weather_now")
             daily_weather, hourly_weather, current_weather, weather_error, weather_source = get_cached_open_meteo_weather(
                 float(selected_town["latitude"]),
                 float(selected_town["longitude"]),
                 force_refresh=force_weather_refresh,
             )
-            st.caption(f"Selected town weather source: {weather_source}.")
+            st.caption(f"Selected {selected_weather_set.lower()} weather source: {weather_source}.")
             if weather_error and daily_weather.empty:
                 st.error(weather_error)
             elif daily_weather.empty:
@@ -6509,7 +6772,7 @@ if main_page == "Weather Forecast":
                         past_24h_rainfall = past_24h_rows["precipitation"].sum()
                         past_24h_window_label = f"{window_start.strftime('%d %b %I:%M %p')} to {window_end.strftime('%d %b %I:%M %p')}"
 
-                summary_towns = towns.copy()
+                summary_towns = weather_points.copy()
                 summary_towns["forecast_rain_mm"] = 0.0
                 summary_towns["forecast_temp_max_c"] = 0.0
                 summary_towns["forecast_wind_max_kmh"] = 0.0
@@ -6526,7 +6789,7 @@ if main_page == "Weather Forecast":
                     f"""
                     <div class="infographic-frame">
                         <div class="infographic-title">Weather Data: {escape(str(selected_town['town_name']))}</div>
-                        <div class="infographic-subtitle">7-day forecast and 3-month hindcast in SI units. Location: {float(selected_town['latitude']):.4f}, {float(selected_town['longitude']):.4f} | District: {escape(str(selected_town['district']))}</div>
+                        <div class="infographic-subtitle">{escape(selected_weather_set)} coverage | 7-day forecast and 3-month hindcast in SI units. Location: {float(selected_town['latitude']):.4f}, {float(selected_town['longitude']):.4f} | District: {escape(str(selected_town['district']))}</div>
                         <div class="infographic-grid">
                             <div class="infographic-card"><span>Forecast Temp Range</span><b>{fmt_number(forecast_temp_min, " deg C")} - {fmt_number(forecast_temp_max, " deg C")}</b><small>7-day min/max envelope</small></div>
                             <div class="infographic-card"><span>7-Day Precipitation</span><b>{fmt_number(forecast_rain_total, " mm")}</b><small>Rain + showers + snow</small></div>
@@ -6566,6 +6829,7 @@ if main_page == "Weather Forecast":
                     selected_town_name,
                     weather_tile_api_key,
                     weather_district_geojson,
+                    f"Weather Forecast Map: MP {selected_weather_set}",
                 )
 
                 weather_cols = st.columns([1.05, 0.95])
@@ -7010,14 +7274,15 @@ if main_page == "Infographics":
                 st.altair_chart(top_filling_chart, use_container_width=True)
 
         info_cols_3 = st.columns([0.58, 0.42])
-        if not latest_reservoirs.empty:
-            filling_snapshot = latest_reservoirs.assign(
-                filling_percent=pd.to_numeric(latest_reservoirs["filling_percent"], errors="coerce")
+        all_latest_reservoirs = latest_by_asset(reservoirs, "reservoir_name") if not reservoirs.empty else pd.DataFrame()
+        if not all_latest_reservoirs.empty:
+            filling_snapshot = all_latest_reservoirs.assign(
+                filling_percent=pd.to_numeric(all_latest_reservoirs["filling_percent"], errors="coerce")
             ).dropna(subset=["filling_percent"])
             with info_cols_3[0]:
                 least_filled = filling_snapshot[filling_snapshot["filling_percent"] < 25].nsmallest(12, "filling_percent")
                 if least_filled.empty:
-                    st.success("No reservoirs are below 25% filling under the active filters.")
+                    st.success("No reservoirs are below 25% filling in the complete latest reservoir set for the selected reports.")
                 else:
                     least_chart = (
                         alt.Chart(least_filled)
@@ -7027,17 +7292,17 @@ if main_page == "Infographics":
                             x=alt.X("filling_percent:Q", title="Filling (%)", scale=alt.Scale(domain=[0, 25])),
                             color=alt.Color(
                                 "filling_percent:Q",
-                                scale=alt.Scale(domain=[0, 25], range=["#580aff", "#147df5", "#0aefff", "#0aff99"]),
+                                scale=alt.Scale(domain=[0, 25], range=["#1d4ed8", "#0891b2", "#10b981", "#f59e0b"]),
                                 legend=None,
                             ),
                             tooltip=["reservoir_name", "district", "water_level_m", "frl_gap_m", "filling_percent"],
                         )
-                        .properties(height=220, title="Least Filled Reservoirs Below 25%")
+                        .properties(height=220, title="Least Filled Reservoirs Below 25%: All Dams")
                     )
                     st.altair_chart(least_chart, use_container_width=True)
             with info_cols_3[1]:
                 band_labels = ["0-25%", "25-50%", "50-75%", "75-100%"]
-                band_colors = ["#580aff", "#0aefff", "#ffd300", "#ff0000"]
+                band_colors = ["#2563eb", "#06b6d4", "#f59e0b", "#ef4444"]
                 banded = filling_snapshot.assign(
                     filling_band=pd.cut(
                         filling_snapshot["filling_percent"],
@@ -7074,7 +7339,8 @@ if main_page == "Infographics":
                 )
                 st.altair_chart(band_chart + band_text, use_container_width=True)
 
-            st.markdown('<div class="panel-note">Filling band drill-down: choose a category to view the reservoirs inside that percentage range.</div>', unsafe_allow_html=True)
+            global_lowest = filling_snapshot.sort_values("filling_percent").iloc[0] if not filling_snapshot.empty else None
+            st.markdown('<div class="panel-note">Filling band drill-down uses the complete latest reservoir set for the selected reports, not only the visible chart subset.</div>', unsafe_allow_html=True)
             selected_band = st.radio(
                 "Reservoir filling category",
                 band_labels,
@@ -7112,7 +7378,8 @@ if main_page == "Infographics":
                             <div class="infographic-grid" style="grid-template-columns:1fr;gap:.55rem">
                                 <div class="infographic-card"><span>Reservoirs</span><b>{len(band_detail)}</b><small>inside selected category</small></div>
                                 <div class="infographic-card"><span>Average Filling</span><b>{fmt_number(band_detail["filling_percent"].mean(), "%")}</b><small>selected category average</small></div>
-                                <div class="infographic-card"><span>Lowest Reservoir</span><b>{escape(str(band_detail.iloc[0].get("reservoir_name", "-")))}</b><small>{fmt_number(band_detail.iloc[0].get("filling_percent"), "%")} filled</small></div>
+                                <div class="infographic-card"><span>Lowest In Category</span><b>{escape(str(band_detail.iloc[0].get("reservoir_name", "-")))}</b><small>{fmt_number(band_detail.iloc[0].get("filling_percent"), "%")} filled</small></div>
+                                <div class="infographic-card"><span>Lowest Overall Dam</span><b>{escape(str(global_lowest.get("reservoir_name", "-") if global_lowest is not None else "-"))}</b><small>{fmt_number(global_lowest.get("filling_percent") if global_lowest is not None else math.nan, "%")} filled across all dams</small></div>
                             </div>
                         </div>
                         """,
