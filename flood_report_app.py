@@ -47,6 +47,19 @@ MP_DRAINS_GEOJSON = (
     else APP_DIR.parent / "nitageoai_platform" / "private_flood_dashboard" / "data" / "mpwrd" / "mp-drains.geojson"
 )
 ARCGIS_EMBED_ITEM_ID = "5f7c5ee24d104d31bc2f85ecba4bd17a"
+
+
+def open_meteo_base_url() -> str:
+    value = os.getenv("OPEN_METEO_BASE_URL", "").strip()
+    if value:
+        return value.rstrip("/")
+    try:
+        value = str(st.secrets.get("open_meteo_base_url", "")).strip()
+        if value:
+            return value.rstrip("/")
+    except Exception:
+        pass
+    return "https://api.open-meteo.com"
 ARCGIS_PORTAL_URL = "https://prashannajeet.maps.arcgis.com"
 ARCGIS_EMBED_CENTER = "78.22922399768257,23.48361289099537"
 ARCGIS_EMBED_SCALE = "4622324.434309"
@@ -3877,7 +3890,7 @@ def open_meteo_url(latitude: float, longitude: float, forecast_days: int = 7, pa
         ]
     )
     return (
-        "https://api.open-meteo.com/v1/forecast"
+        f"{open_meteo_base_url()}/v1/forecast"
         f"?latitude={latitude:.5f}&longitude={longitude:.5f}"
         f"&daily={daily_vars}&hourly={hourly_vars}&current={current_vars}"
         "&timezone=Asia%2FKolkata"
@@ -3903,7 +3916,7 @@ def open_meteo_current_url(latitude: float, longitude: float) -> str:
         ]
     )
     return (
-        "https://api.open-meteo.com/v1/forecast"
+        f"{open_meteo_base_url()}/v1/forecast"
         f"?latitude={latitude:.5f}&longitude={longitude:.5f}"
         f"&current={current_vars}"
         "&timezone=Asia%2FKolkata"
@@ -3961,6 +3974,58 @@ def weather_risk_label(precipitation_mm: float | int | None, wind_kmh: float | i
 
 def weather_risk_color(risk: str) -> str:
     return {"Severe": "#dc2626", "High": "#f97316", "Moderate": "#f59e0b", "Low": "#14b8a6"}.get(risk, "#2563eb")
+
+
+@st.cache_data(ttl=WEATHER_REFRESH_HOURS * 3600, show_spinner=False)
+def build_weather_dss_summary(points_key: tuple[tuple[str, str, str, float, float], ...], max_points: int = 12) -> pd.DataFrame:
+    rows = []
+    for point_type, point_name, district, latitude, longitude in points_key[:max_points]:
+        daily, hourly, current, error, source = get_cached_open_meteo_weather(float(latitude), float(longitude))
+        if daily.empty:
+            rows.append(
+                {
+                    "point_type": point_type,
+                    "point_name": point_name,
+                    "district": district,
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "forecast_rain_mm": math.nan,
+                    "max_wind_kmh": math.nan,
+                    "max_uv": math.nan,
+                    "current_rain_mm": math.nan,
+                    "current_temp_c": math.nan,
+                    "weather_risk": "No Data",
+                    "source": source,
+                    "status": error or "No forecast data",
+                }
+            )
+            continue
+        forecast = daily[daily.get("period", pd.Series(dtype=str)) == "Forecast"].head(7).copy()
+        if forecast.empty:
+            forecast = daily.tail(7).copy()
+        forecast_rain = pd.to_numeric(forecast.get("precipitation_sum"), errors="coerce").sum()
+        max_wind = pd.to_numeric(forecast.get("wind_speed_10m_max"), errors="coerce").max()
+        max_uv = pd.to_numeric(forecast.get("uv_index_max"), errors="coerce").max()
+        current_row = current.iloc[0].to_dict() if not current.empty else {}
+        risk = weather_risk_label(forecast_rain, max_wind, max_uv)
+        rows.append(
+            {
+                "point_type": point_type,
+                "point_name": point_name,
+                "district": district,
+                "latitude": latitude,
+                "longitude": longitude,
+                "forecast_rain_mm": round(float(forecast_rain), 2) if pd.notna(forecast_rain) else math.nan,
+                "max_wind_kmh": round(float(max_wind), 2) if pd.notna(max_wind) else math.nan,
+                "max_uv": round(float(max_uv), 2) if pd.notna(max_uv) else math.nan,
+                "current_rain_mm": pd.to_numeric(pd.Series([current_row.get("precipitation")]), errors="coerce").iloc[0],
+                "current_temp_c": pd.to_numeric(pd.Series([current_row.get("temperature_2m")]), errors="coerce").iloc[0],
+                "weather_risk": risk,
+                "source": source,
+                "status": error or "OK",
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 @st.cache_data(ttl=WEATHER_REFRESH_HOURS * 3600, show_spinner=False)
@@ -5646,6 +5711,7 @@ def dashboard_assistant_answer(
     river_frame: pd.DataFrame,
     gate_frame: pd.DataFrame,
     page_name: str,
+    weather_points_frame: pd.DataFrame | None = None,
 ) -> dict:
     query = normalize_name(question)
     latest_label = "current filter"
@@ -5660,6 +5726,72 @@ def dashboard_assistant_answer(
         map_frame["frl_gap_m"] = pd.to_numeric(map_frame.get("frl_gap_m"), errors="coerce")
     else:
         map_frame = pd.DataFrame()
+
+    weather_terms = ["weather", "rain", "rainfall", "forecast", "temperature", "wind", "uv", "cloud", "meteo", "open meteo"]
+    if any(term in query for term in weather_terms):
+        weather_points = weather_points_frame.copy() if isinstance(weather_points_frame, pd.DataFrame) else pd.DataFrame()
+        if weather_points.empty:
+            return {"text": "No weather points are available for DSS analysis. Add town, dam, or district weather coordinates.", "table": pd.DataFrame()}
+        if matched_dam := assistant_match_dam(query, map_frame):
+            matched_points = weather_points[weather_points["point_name"].astype(str).map(normalize_name) == normalize_name(matched_dam)].copy()
+            if not matched_points.empty:
+                weather_points = matched_points
+        if "district" in weather_points:
+            district_matches = [
+                district for district in weather_points["district"].dropna().astype(str).unique()
+                if normalize_name(district) and normalize_name(district) in query
+            ]
+            if district_matches:
+                weather_points = weather_points[weather_points["district"].astype(str).isin(district_matches)]
+        priority_points = weather_points.copy()
+        if "point_type" in priority_points:
+            priority_points["type_priority"] = priority_points["point_type"].map({"Dam": 0, "District": 1, "Town": 2}).fillna(3)
+            priority_points = priority_points.sort_values(["type_priority", "district", "point_name"])
+        points_key = tuple(
+            (
+                str(row.point_type),
+                str(row.point_name),
+                str(row.district),
+                float(row.latitude),
+                float(row.longitude),
+            )
+            for row in priority_points.dropna(subset=["latitude", "longitude"]).head(12).itertuples(index=False)
+        )
+        if not points_key:
+            return {"text": "Weather DSS points are available, but none have valid coordinates under the current filter.", "table": pd.DataFrame()}
+        weather_summary = build_weather_dss_summary(points_key, max_points=12)
+        if weather_summary.empty:
+            return {"text": "Weather DSS analysis did not return forecast rows for the selected points.", "table": pd.DataFrame()}
+        weather_summary = weather_summary.sort_values(["weather_risk", "forecast_rain_mm"], ascending=[True, False])
+        severe_count = int(weather_summary["weather_risk"].isin(["Severe", "High"]).sum()) if "weather_risk" in weather_summary else 0
+        max_rain = pd.to_numeric(weather_summary.get("forecast_rain_mm"), errors="coerce").max()
+        max_wind = pd.to_numeric(weather_summary.get("max_wind_kmh"), errors="coerce").max()
+        highest = weather_summary.sort_values("forecast_rain_mm", ascending=False).iloc[0]
+        text = (
+            f"Weather intelligence for the active DSS area indicates {severe_count} High/Severe risk location(s) "
+            f"out of {len(weather_summary)} analysed point(s). The highest 7-day rainfall signal is "
+            f"{fmt_number(max_rain, ' mm')} near {highest.get('point_name')} in {highest.get('district')}, "
+            f"with peak wind potential of {fmt_number(max_wind, ' km/h')}. "
+            "Operational interpretation: combine the rainfall and wind outlook with reservoir filling, FRL gap, gate status, "
+            "and downstream gauge trend before escalating field advisories or official alert messages."
+        )
+        table = prettify_dataframe_columns(
+            weather_summary[
+                [
+                    "point_type",
+                    "point_name",
+                    "district",
+                    "forecast_rain_mm",
+                    "current_rain_mm",
+                    "max_wind_kmh",
+                    "max_uv",
+                    "current_temp_c",
+                    "weather_risk",
+                    "source",
+                ]
+            ].head(12)
+        )
+        return {"text": text, "table": table}
 
     matched_dam = assistant_match_dam(query, map_frame)
     if matched_dam:
@@ -5830,6 +5962,7 @@ def render_dashboard_assistant(
     river_frame: pd.DataFrame,
     gate_frame: pd.DataFrame,
     page_name: str,
+    weather_points_frame: pd.DataFrame | None = None,
 ) -> None:
     if "assistant_history" not in st.session_state:
         st.session_state.assistant_history = []
@@ -5841,9 +5974,10 @@ def render_dashboard_assistant(
             '<div class="panel-note">Enhanced hybrid DSS assistant: quick prompts, dam-name lookup, operational brief generation, and local analytics from the currently selected reports and filters. No external AI key is required for these answers.</div>',
             unsafe_allow_html=True,
         )
-        prompt_cols = st.columns(6)
+        prompt_cols = st.columns(7)
         quick_prompts = [
             "DSS brief",
+            "Weather DSS brief",
             "Critical dams",
             "District ranking",
             "Opened gates",
@@ -5852,7 +5986,7 @@ def render_dashboard_assistant(
         ]
         for col, prompt in zip(prompt_cols, quick_prompts):
             if col.button(prompt, key=f"assistant_quick_{normalize_name(prompt)}", use_container_width=True):
-                answer = dashboard_assistant_answer(prompt, map_status_frame, reservoir_frame, river_frame, gate_frame, page_name)
+                answer = dashboard_assistant_answer(prompt, map_status_frame, reservoir_frame, river_frame, gate_frame, page_name, weather_points_frame)
                 st.session_state.assistant_history.insert(0, {"question": prompt, **answer})
 
         with st.form("dashboard_assistant_form", clear_on_submit=True):
@@ -5863,7 +5997,7 @@ def render_dashboard_assistant(
             )
             submitted = st.form_submit_button("Ask Assistant", type="primary", use_container_width=True)
         if submitted and question.strip():
-            answer = dashboard_assistant_answer(question, map_status_frame, reservoir_frame, river_frame, gate_frame, page_name)
+            answer = dashboard_assistant_answer(question, map_status_frame, reservoir_frame, river_frame, gate_frame, page_name, weather_points_frame)
             st.session_state.assistant_history.insert(0, {"question": question.strip(), **answer})
 
         if st.session_state.assistant_history:
@@ -5874,7 +6008,7 @@ def render_dashboard_assistant(
             if isinstance(table, pd.DataFrame) and not table.empty:
                 st.dataframe(table, use_container_width=True, hide_index=True, height=260)
         else:
-            overview = dashboard_assistant_answer("", map_status_frame, reservoir_frame, river_frame, gate_frame, page_name)
+            overview = dashboard_assistant_answer("", map_status_frame, reservoir_frame, river_frame, gate_frame, page_name, weather_points_frame)
             st.info(overview["text"])
 
 
@@ -6619,7 +6753,36 @@ for nav_col, page in zip(nav_cols, nav_pages):
         st.rerun()
 main_page = st.session_state.main_dashboard_page
 st.markdown(f'<div class="dashboard-topnav-active">Active page: <b>{escape(main_page)}</b></div>', unsafe_allow_html=True)
-render_dashboard_assistant(map_status, reservoir_view, river_view, gate_view_all, main_page)
+
+assistant_weather_frames = []
+assistant_dam_weather = weather_points_from_dams(map_status)
+if not assistant_dam_weather.empty:
+    assistant_weather_frames.append(
+        assistant_dam_weather.assign(point_type="Dam", point_name=assistant_dam_weather["town_name"])
+        [["point_type", "point_name", "district", "latitude", "longitude"]]
+    )
+assistant_towns_master = read_csv(MP_TOWNS_CSV)
+if not assistant_towns_master.empty:
+    assistant_towns_master["latitude"] = pd.to_numeric(assistant_towns_master.get("latitude"), errors="coerce")
+    assistant_towns_master["longitude"] = pd.to_numeric(assistant_towns_master.get("longitude"), errors="coerce")
+    assistant_towns_master = assistant_towns_master.dropna(subset=["latitude", "longitude"])
+    if {"town_name", "district"}.issubset(assistant_towns_master.columns):
+        assistant_weather_frames.append(
+            assistant_towns_master.assign(point_type="Town", point_name=assistant_towns_master["town_name"])
+            [["point_type", "point_name", "district", "latitude", "longitude"]]
+        )
+assistant_district_weather = weather_points_from_districts(map_status, assistant_towns_master)
+if not assistant_district_weather.empty:
+    assistant_weather_frames.append(
+        assistant_district_weather.assign(point_type="District", point_name=assistant_district_weather["town_name"])
+        [["point_type", "point_name", "district", "latitude", "longitude"]]
+    )
+assistant_weather_points = (
+    pd.concat(assistant_weather_frames, ignore_index=True).drop_duplicates(["point_type", "point_name", "district"])
+    if assistant_weather_frames
+    else pd.DataFrame(columns=["point_type", "point_name", "district", "latitude", "longitude"])
+)
+render_dashboard_assistant(map_status, reservoir_view, river_view, gate_view_all, main_page, assistant_weather_points)
 
 if main_page == "Administration":
     render_admin_operations(is_admin, map_status, dirs)
@@ -7283,6 +7446,16 @@ if main_page == "Dam DSS & Analytics":
 
 if main_page == "Weather Forecast":
     st.subheader("Weather Forecast")
+    meteo_base = open_meteo_base_url()
+    st.markdown(
+        f"""
+        <div class="panel-note">
+            Weather Data supports town, dam, and district-level decision support using forecast, current condition, and recent weather context.
+            A hosted or self-managed meteorological backend can be configured for operational deployments.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     towns_master = read_csv(MP_TOWNS_CSV)
     if not towns_master.empty:
         towns_master["latitude"] = pd.to_numeric(towns_master["latitude"], errors="coerce")
