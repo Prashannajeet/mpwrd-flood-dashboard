@@ -7,3 +7,6 @@ geopandas>=0.14
 starlette>=0.37
 uvicorn>=0.30
 reportlab>=5.0
+SQLAlchemy>=2.0
+psycopg2-binary>=2.9
+PyMySQL>=1.1

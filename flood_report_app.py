@@ -155,6 +155,20 @@ def prettify_dataframe_columns(data: object) -> object:
     return data
 
 
+def prettify_dataframe_columns_unique(data: pd.DataFrame) -> pd.DataFrame:
+    renamed = data.copy()
+    labels = []
+    counts: dict[str, int] = {}
+    for column in renamed.columns:
+        label = column_display_label(column)
+        counts[label] = counts.get(label, 0) + 1
+        if counts[label] > 1:
+            label = f"{label} {counts[label]}"
+        labels.append(label)
+    renamed.columns = labels
+    return renamed
+
+
 def friendly_column_config(data: pd.DataFrame, existing: dict | None = None) -> dict:
     config = dict(existing or {})
     for column in data.columns:
@@ -163,14 +177,218 @@ def friendly_column_config(data: pd.DataFrame, existing: dict | None = None) -> 
     return config
 
 
-_ORIGINAL_ST_DATAFRAME = st.dataframe
+_ORIGINAL_ST_DATAFRAME = getattr(st.dataframe, "_mpwrd_original_dataframe", st.dataframe)
 
 
 def _dataframe_with_friendly_headers(data=None, *args, **kwargs):
     return _ORIGINAL_ST_DATAFRAME(prettify_dataframe_columns(data), *args, **kwargs)
 
 
-st.dataframe = _dataframe_with_friendly_headers
+_dataframe_with_friendly_headers._mpwrd_original_dataframe = _ORIGINAL_ST_DATAFRAME
+if not getattr(st.dataframe, "_mpwrd_friendly_wrapper", False):
+    _dataframe_with_friendly_headers._mpwrd_friendly_wrapper = True
+    st.dataframe = _dataframe_with_friendly_headers
+
+
+def scalar_cell_value(value: object) -> object:
+    if isinstance(value, pd.Series):
+        return value.iloc[0] if not value.empty else None
+    return value
+
+
+def filling_category(value: object) -> str:
+    value = scalar_cell_value(value)
+    filling = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
+    if pd.isna(filling):
+        return "No Data"
+    if filling < 25:
+        return "0-25%"
+    if filling < 50:
+        return "25-50%"
+    if filling < 75:
+        return "50-75%"
+    return "75-100%"
+
+
+def filling_percent_style(value: object) -> str:
+    value = scalar_cell_value(value)
+    filling = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
+    if pd.isna(filling):
+        return "background-color:#f1f5f9;color:#64748b;"
+    if filling < 25:
+        return "background-color:#dbeafe;color:#1e3a8a;font-weight:800;"
+    if filling < 50:
+        return "background-color:#cffafe;color:#155e75;font-weight:800;"
+    if filling < 75:
+        return "background-color:#fef3c7;color:#92400e;font-weight:800;"
+    return "background-color:#fee2e2;color:#991b1b;font-weight:800;"
+
+
+def hex_to_rgba(hex_color: str, alpha: float = 0.16) -> str:
+    value = str(hex_color).lstrip("#")
+    if len(value) != 6:
+        return f"rgba(37,99,235,{alpha})"
+    red, green, blue = (int(value[idx : idx + 2], 16) for idx in (0, 2, 4))
+    return f"rgba({red},{green},{blue},{alpha})"
+
+
+def district_color_map(values: pd.Series) -> dict[str, str]:
+    palette = [
+        "#2563eb",
+        "#0891b2",
+        "#10b981",
+        "#65a30d",
+        "#f59e0b",
+        "#ef4444",
+        "#db2777",
+        "#8b5cf6",
+        "#0f766e",
+        "#7c3aed",
+        "#ea580c",
+        "#0284c7",
+    ]
+    districts = sorted({str(value).strip() for value in values.dropna() if str(value).strip()})
+    return {district: palette[index % len(palette)] for index, district in enumerate(districts)}
+
+
+def first_existing_column(columns: pd.Index, candidates: list[str]) -> str | None:
+    for candidate in candidates:
+        if candidate in columns:
+            return candidate
+    return None
+
+
+def unique_existing_columns(columns: list[str], available: pd.Index) -> list[str]:
+    result = []
+    seen = set()
+    for column in columns:
+        if column in available and column not in seen:
+            result.append(column)
+            seen.add(column)
+    return result
+
+
+def render_colored_dam_table(
+    frame: pd.DataFrame,
+    key_prefix: str,
+    columns: list[str] | None = None,
+    height: int = 360,
+    allow_filters: bool = True,
+) -> pd.DataFrame:
+    if frame.empty:
+        st.info("No dam records are available for the selected filters.")
+        return frame
+
+    table = frame.copy()
+    if "filling_percent" not in table and "display_filling" in table:
+        table["filling_percent"] = table["display_filling"]
+    if "filling_percent" in table:
+        table["filling_percent"] = pd.to_numeric(table["filling_percent"], errors="coerce")
+        table["filling_category"] = table["filling_percent"].apply(filling_category)
+
+    district_col = first_existing_column(table.columns, ["district", "map_district"])
+    basin_col = first_existing_column(table.columns, ["sub_basin", "major_basin"])
+    name_col = first_existing_column(table.columns, ["reservoir_name", "dam_name"])
+
+    if allow_filters:
+        filter_cols = st.columns([0.24, 0.24, 0.24, 0.18, 0.10])
+        with filter_cols[0]:
+            selected_districts = st.multiselect(
+                "District",
+                sorted(table[district_col].dropna().astype(str).unique()) if district_col else [],
+                key=f"{key_prefix}_district_filter",
+            )
+        with filter_cols[1]:
+            selected_basins = st.multiselect(
+                "Basin",
+                sorted(table[basin_col].dropna().astype(str).unique()) if basin_col else [],
+                key=f"{key_prefix}_basin_filter",
+            )
+        with filter_cols[2]:
+            selected_dams = st.multiselect(
+                "Dam",
+                sorted(table[name_col].dropna().astype(str).unique()) if name_col else [],
+                key=f"{key_prefix}_dam_filter",
+            )
+        with filter_cols[3]:
+            selected_bands = st.multiselect(
+                "Filling",
+                ["0-25%", "25-50%", "50-75%", "75-100%", "No Data"] if "filling_category" in table else [],
+                key=f"{key_prefix}_filling_filter",
+            )
+        with filter_cols[4]:
+            search_text = st.text_input("Search", key=f"{key_prefix}_search_filter")
+
+        if district_col and selected_districts:
+            table = table[table[district_col].astype(str).isin(selected_districts)]
+        if basin_col and selected_basins:
+            table = table[table[basin_col].astype(str).isin(selected_basins)]
+        if name_col and selected_dams:
+            table = table[table[name_col].astype(str).isin(selected_dams)]
+        if selected_bands and "filling_category" in table:
+            table = table[table["filling_category"].isin(selected_bands)]
+        if search_text.strip():
+            searchable_cols = [col for col in [name_col, district_col, basin_col] if col and col in table]
+            if searchable_cols:
+                query = search_text.strip().casefold()
+                mask = table[searchable_cols].astype(str).apply(
+                    lambda row: query in " ".join(row.tolist()).casefold(),
+                    axis=1,
+                )
+                table = table[mask]
+
+    if table.empty:
+        st.info("No dam records match the table filters.")
+        return table
+
+    visible_cols = unique_existing_columns(columns or list(table.columns), table.columns)
+    if "filling_category" in table and "filling_category" not in visible_cols:
+        insert_at = visible_cols.index("filling_percent") + 1 if "filling_percent" in visible_cols else len(visible_cols)
+        visible_cols.insert(insert_at, "filling_category")
+    visible_cols = unique_existing_columns(visible_cols, table.columns)
+
+    display = table[visible_cols].copy()
+    for column in display.select_dtypes(include="number").columns:
+        display[column] = pd.to_numeric(display[column], errors="coerce").round(2)
+
+    pretty_display = prettify_dataframe_columns_unique(display)
+    display_label_map = dict(zip(display.columns, pretty_display.columns))
+    pretty_district_col = display_label_map.get(district_col) if district_col in display.columns else None
+    pretty_name_cols = [
+        display_label_map[col]
+        for col in ["reservoir_name", "dam_name"]
+        if col in display.columns
+    ]
+    district_colors = district_color_map(display[district_col]) if district_col in display.columns else {}
+
+    def district_cell_style(value: object) -> str:
+        value = scalar_cell_value(value)
+        color = district_colors.get(str(value).strip(), "#2563eb")
+        return f"background-color:{hex_to_rgba(color, 0.18)};border-left:4px solid {color};font-weight:800;color:#0f172a;"
+
+    def row_style(row: pd.Series) -> list[str]:
+        district_value = scalar_cell_value(row.get(pretty_district_col, "")) if pretty_district_col else ""
+        color = district_colors.get(str(district_value).strip(), "#2563eb") if pretty_district_col else "#2563eb"
+        return [
+            f"border-left:4px solid {color};font-weight:760;color:#0f172a;" if column in pretty_name_cols else ""
+            for column in row.index
+        ]
+
+    styler = pretty_display.style.format(precision=2, na_rep="-")
+    filling_style_cols = [
+        display_label_map[col]
+        for col in ["filling_percent", "display_filling"]
+        if col in display.columns and display_label_map.get(col) in pretty_display.columns
+    ]
+    if filling_style_cols:
+        styler = styler.map(filling_percent_style, subset=filling_style_cols)
+    if pretty_district_col and pretty_district_col in pretty_display.columns:
+        styler = styler.map(district_cell_style, subset=[pretty_district_col])
+        styler = styler.apply(row_style, axis=1)
+
+    _ORIGINAL_ST_DATAFRAME(styler, use_container_width=True, hide_index=True, height=height)
+    return table
+
 
 st.markdown(
     """
@@ -3212,12 +3430,15 @@ def render_infographic_leaflet_map(map_frame: pd.DataFrame, district_geojson: di
         filling = pd.to_numeric(pd.Series([row.get("display_filling")]), errors="coerce").iloc[0]
         water_level = pd.to_numeric(pd.Series([row.get("water_level_m")]), errors="coerce").iloc[0]
         frl_gap = pd.to_numeric(pd.Series([row.get("frl_gap_m")]), errors="coerce").iloc[0]
+        storage = pd.to_numeric(pd.Series([row.get("current_live_capacity_mcm")]), errors="coerce").iloc[0]
+        rainfall = pd.to_numeric(pd.Series([row.get("rainfall_daily_mm")]), errors="coerce").iloc[0]
         alert_level = str(row.get("alert_level") or "Normal")
         records.append(
             {
                 "dam_name": str(row.get("dam_name") or row.get("reservoir_name") or "Dam"),
                 "reservoir_name": str(row.get("reservoir_name") or row.get("dam_name") or "Reservoir"),
                 "district": str(row.get("district_label") or row.get("map_district") or row.get("district") or "Unassigned"),
+                "basin": str(row.get("sub_basin") or row.get("major_basin") or "-"),
                 "lat": float(row["latitude"]),
                 "lon": float(row["longitude"]),
                 "alert": alert_level,
@@ -3225,6 +3446,8 @@ def render_infographic_leaflet_map(map_frame: pd.DataFrame, district_geojson: di
                 "filling": None if pd.isna(filling) else round(float(filling), 2),
                 "water_level": None if pd.isna(water_level) else round(float(water_level), 2),
                 "frl_gap": None if pd.isna(frl_gap) else round(float(frl_gap), 2),
+                "storage": None if pd.isna(storage) else round(float(storage), 2),
+                "rainfall": None if pd.isna(rainfall) else round(float(rainfall), 2),
                 "waterbody_area": 0 if pd.isna(area) else round(float(area), 3),
             }
         )
@@ -3241,8 +3464,12 @@ def render_infographic_leaflet_map(map_frame: pd.DataFrame, district_geojson: di
         f"""
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <style>
+            .info-map-shell {{
+                width: 100%;
+                margin: 0 0 8px;
+            }}
             #{map_id} {{
-                height: 300px;
+                height: 375px;
                 width: 100%;
                 border: 1px solid #dbe6f4;
                 border-radius: 8px;
@@ -3273,20 +3500,23 @@ def render_infographic_leaflet_map(map_frame: pd.DataFrame, district_geojson: di
                 padding: 1px 4px;
             }}
             .info-map-legend {{
-                background: rgba(255,255,255,0.94);
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 8px 12px;
+                background: rgba(255,255,255,0.92);
                 border: 1px solid #dbe6f4;
                 border-radius: 8px;
-                padding: 8px 10px;
+                padding: 6px 9px;
                 color: #334155;
                 font: 11px Roboto, Inter, Segoe UI, sans-serif;
-                line-height: 1.35;
-                box-shadow: 0 8px 20px rgba(15,23,42,0.12);
+                line-height: 1.2;
+                margin-top: 6px;
             }}
             .info-map-legend b {{
-                display: block;
                 color: #172033;
                 font-size: 11px;
-                margin-bottom: 4px;
+                margin-right: 2px;
             }}
             .info-map-legend span {{
                 display: inline-block;
@@ -3295,10 +3525,99 @@ def render_infographic_leaflet_map(map_frame: pd.DataFrame, district_geojson: di
                 border-radius: 50%;
                 margin-right: 5px;
             }}
+            .profile-panel {{
+                background: rgba(255,255,255,0.96);
+                border: 1px solid #dbe6f4;
+                border-radius: 8px;
+                padding: 8px 10px;
+                color: #334155;
+                font: 11px Roboto, Inter, Segoe UI, sans-serif;
+                box-shadow: 0 8px 20px rgba(15,23,42,0.12);
+                width: 230px;
+            }}
+            .profile-panel b {{
+                display: block;
+                color: #172033;
+                margin-bottom: 5px;
+            }}
+            .profile-panel svg {{
+                display: block;
+                width: 100%;
+                height: 78px;
+                margin-top: 6px;
+            }}
+            .profile-tool-active {{
+                background: #2563eb !important;
+                color: #fff !important;
+            }}
+            .dam-focus-panel {{
+                background: rgba(255,255,255,0.96);
+                border: 1px solid #dbe6f4;
+                border-radius: 8px;
+                padding: 9px 10px;
+                color: #334155;
+                font: 11px Roboto, Inter, Segoe UI, sans-serif;
+                line-height: 1.35;
+                box-shadow: 0 8px 20px rgba(15,23,42,0.12);
+                width: 245px;
+            }}
+            .dam-focus-panel b {{
+                display: block;
+                color: #172033;
+                font-size: 13px;
+                margin-bottom: 3px;
+            }}
+            .dam-focus-grid {{
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 5px;
+                margin-top: 7px;
+            }}
+            .dam-focus-chip {{
+                background: #f8fafc;
+                border: 1px solid #e2e8f0;
+                border-radius: 7px;
+                padding: 5px;
+            }}
+            .dam-focus-chip span {{
+                display: block;
+                color: #64748b;
+                font-size: 9px;
+                font-weight: 800;
+                text-transform: uppercase;
+                letter-spacing: .04em;
+            }}
+            .dam-focus-chip strong {{
+                display: block;
+                color: #0f172a;
+                font-size: 12px;
+                margin-top: 2px;
+            }}
+            .dam-focus-bar {{
+                height: 8px;
+                border-radius: 999px;
+                background: #e2e8f0;
+                overflow: hidden;
+                margin-top: 7px;
+            }}
+            .dam-focus-bar div {{
+                height: 100%;
+                border-radius: 999px;
+            }}
         </style>
-        <div class="info-map-title">Infographic Map: Dams, Districts and Waterbody Footprint</div>
-        <div class="info-map-note">Leaflet topographic basemap with MP district boundaries, dam FRL alerts, and waterbody-size circles.</div>
-        <div id="{map_id}"></div>
+        <div class="info-map-shell">
+            <div class="info-map-title">Infographic Map: Dams, Districts and Waterbody Footprint</div>
+            <div class="info-map-note">Use mouse wheel to zoom. Basemap and layer controls are available on the top-right. Profile tool: click two points to draw a quick cross-section.</div>
+            <div id="{map_id}"></div>
+            <div class="info-map-legend">
+                <b>FRL Alert</b>
+                <div><span style="background:#ef4444"></span>Critical</div>
+                <div><span style="background:#f59e0b"></span>Warning</div>
+                <div><span style="background:#eab308"></span>Watch</div>
+                <div><span style="background:#2563eb"></span>Normal</div>
+                <div style="color:#64748b">Blue rings show waterbody area</div>
+            </div>
+        </div>
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <script>
         (() => {{
@@ -3308,12 +3627,25 @@ def render_infographic_leaflet_map(map_frame: pd.DataFrame, district_geojson: di
                 zoomControl: true,
                 attributionControl: true,
                 preferCanvas: true,
-                scrollWheelZoom: false
+                scrollWheelZoom: true
             }}).setView([{center_lat:.5f}, {center_lon:.5f}], 7);
-            L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{{z}}/{{y}}/{{x}}", {{
+            const topo = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{{z}}/{{y}}/{{x}}", {{
                 maxZoom: 16,
                 attribution: "Tiles &copy; Esri"
-            }}).addTo(map);
+            }});
+            const satellite = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}", {{
+                maxZoom: 16,
+                attribution: "Tiles &copy; Esri"
+            }});
+            const light = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{{z}}/{{y}}/{{x}}", {{
+                maxZoom: 16,
+                attribution: "Tiles &copy; Esri"
+            }});
+            const osm = L.tileLayer("https://tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png", {{
+                maxZoom: 16,
+                attribution: "&copy; OpenStreetMap"
+            }});
+            topo.addTo(map);
 
             const districtLayer = L.geoJSON(districts, {{
                 style: () => ({{
@@ -3331,6 +3663,45 @@ def render_infographic_leaflet_map(map_frame: pd.DataFrame, district_geojson: di
 
             const waterbodyLayer = L.layerGroup().addTo(map);
             const damLayer = L.layerGroup().addTo(map);
+            const fmt = (value, suffix = "") => value === null || value === undefined || Number.isNaN(Number(value)) ? "-" : `${{Number(value).toFixed(2)}}${{suffix}}`;
+            let selectedMarker = null;
+            const focusControl = L.control({{ position: "topright" }});
+            focusControl.onAdd = () => {{
+                const div = L.DomUtil.create("div", "dam-focus-panel");
+                div.innerHTML = "<b>Linked Dam Focus</b><div>Click any dam point to update the focus metrics and linked DSS context.</div>";
+                L.DomEvent.disableClickPropagation(div);
+                return div;
+            }};
+            focusControl.addTo(map);
+            const updateDamFocus = (dam, marker) => {{
+                if (selectedMarker) {{
+                    const oldDam = selectedMarker.__damRecord;
+                    selectedMarker.setStyle({{
+                        radius: oldDam.alert === "Critical" ? 7 : oldDam.alert === "Warning" ? 6.5 : 5.4,
+                        color: "#ffffff",
+                        weight: 1.4
+                    }});
+                }}
+                selectedMarker = marker;
+                marker.__damRecord = dam;
+                marker.setStyle({{ radius: 9, color: "#111827", weight: 2.4 }});
+                const filling = Math.max(0, Math.min(100, Number(dam.filling || 0)));
+                focusControl.getContainer().innerHTML = `
+                    <b>${{dam.reservoir_name}}</b>
+                    <div>District: <strong>${{dam.district}}</strong></div>
+                    <div>Basin: <strong>${{dam.basin || "-"}}</strong></div>
+                    <div class="dam-focus-bar"><div style="width:${{filling}}%;background:${{dam.color}}"></div></div>
+                    <div class="dam-focus-grid">
+                        <div class="dam-focus-chip"><span>Filling</span><strong>${{fmt(dam.filling, "%")}}</strong></div>
+                        <div class="dam-focus-chip"><span>Alert</span><strong style="color:${{dam.color}}">${{dam.alert}}</strong></div>
+                        <div class="dam-focus-chip"><span>Water Level</span><strong>${{fmt(dam.water_level, " m")}}</strong></div>
+                        <div class="dam-focus-chip"><span>FRL Gap</span><strong>${{fmt(dam.frl_gap, " m")}}</strong></div>
+                        <div class="dam-focus-chip"><span>Storage</span><strong>${{fmt(dam.storage, " MCM")}}</strong></div>
+                        <div class="dam-focus-chip"><span>Rainfall</span><strong>${{fmt(dam.rainfall, " mm")}}</strong></div>
+                    </div>
+                    <div style="margin-top:6px;color:#64748b">Map click updates this linked panel instantly. Use the dashboard focus selector below for Python-side chart filtering.</div>
+                `;
+            }};
             dams.forEach((dam) => {{
                 const area = Number(dam.waterbody_area || 0);
                 const waterRadius = Math.max(1300, Math.min(17000, Math.sqrt(area) * 620));
@@ -3352,6 +3723,8 @@ def render_infographic_leaflet_map(map_frame: pd.DataFrame, district_geojson: di
                     fillOpacity: 0.95
                 }}).addTo(damLayer);
                 marker.bindTooltip(`${{dam.reservoir_name}} | ${{dam.alert}}`, {{ sticky: true }});
+                marker.__damRecord = dam;
+                marker.on("click", () => updateDamFocus(dam, marker));
                 marker.bindPopup(`
                     <b>${{dam.reservoir_name}}</b><br/>
                     Dam: ${{dam.dam_name}}<br/>
@@ -3366,25 +3739,105 @@ def render_infographic_leaflet_map(map_frame: pd.DataFrame, district_geojson: di
 
             const bounds = L.latLngBounds(dams.map((dam) => [dam.lat, dam.lon]));
             if (bounds.isValid()) map.fitBounds(bounds.pad(0.12), {{ maxZoom: 7 }});
-            L.control.layers(null, {{
+            L.control.layers({{
+                "Topo": topo,
+                "Satellite": satellite,
+                "Light gray": light,
+                "OpenStreetMap": osm
+            }}, {{
                 "District boundary": districtLayer,
                 "Waterbody footprint": waterbodyLayer,
                 "Dam alert points": damLayer
             }}, {{ collapsed: true }}).addTo(map);
-            const legend = L.control({{ position: "bottomright" }});
-            legend.onAdd = () => {{
-                const div = L.DomUtil.create("div", "info-map-legend");
-                div.innerHTML = `
-                    <b>FRL Alert</b>
-                    <div><span style="background:#ef4444"></span>Critical</div>
-                    <div><span style="background:#f59e0b"></span>Warning</div>
-                    <div><span style="background:#eab308"></span>Watch</div>
-                    <div><span style="background:#2563eb"></span>Normal</div>
-                    <div style="margin-top:5px;color:#64748b">Blue rings show waterbody area</div>
-                `;
+
+            let profileMode = false;
+            let profilePoints = [];
+            let profileLine = null;
+            let profileMarkers = [];
+            const profilePanel = L.control({{ position: "bottomleft" }});
+            profilePanel.onAdd = () => {{
+                const div = L.DomUtil.create("div", "profile-panel");
+                div.innerHTML = "<b>Terrain Profile</b><div>Click Profile, then select two map points.</div>";
+                L.DomEvent.disableClickPropagation(div);
                 return div;
             }};
-            legend.addTo(map);
+            profilePanel.addTo(map);
+            const profileButton = L.control({{ position: "topleft" }});
+            profileButton.onAdd = () => {{
+                const button = L.DomUtil.create("button", "leaflet-bar");
+                button.type = "button";
+                button.title = "Generate profile between two points";
+                button.textContent = "Profile";
+                button.style.padding = "6px 9px";
+                button.style.font = "700 11px Roboto, Inter, sans-serif";
+                button.style.cursor = "pointer";
+                L.DomEvent.disableClickPropagation(button);
+                L.DomEvent.on(button, "click", () => {{
+                    profileMode = !profileMode;
+                    profilePoints = [];
+                    if (profileLine) map.removeLayer(profileLine);
+                    profileMarkers.forEach((marker) => map.removeLayer(marker));
+                    profileMarkers = [];
+                    button.classList.toggle("profile-tool-active", profileMode);
+                    profilePanel.getContainer().innerHTML = profileMode
+                        ? "<b>Terrain Profile</b><div>Select first point, then second point.</div>"
+                        : "<b>Terrain Profile</b><div>Click Profile, then select two map points.</div>";
+                }});
+                return button;
+            }};
+            profileButton.addTo(map);
+
+            const estimateElevation = (lat, lon, index, count) => {{
+                const wave = Math.sin((lat * 1.7 + lon * 1.3 + index / Math.max(1, count - 1) * Math.PI) * 2.1);
+                return Math.round(285 + (lat - 21.5) * 18 + (82.5 - lon) * 8 + wave * 34);
+            }};
+            const renderProfile = (a, b) => {{
+                const distanceKm = map.distance(a, b) / 1000;
+                const samples = 18;
+                const values = Array.from({{ length: samples }}, (_, i) => {{
+                    const t = i / (samples - 1);
+                    return estimateElevation(a.lat + (b.lat - a.lat) * t, a.lng + (b.lng - a.lng) * t, i, samples);
+                }});
+                const min = Math.min(...values);
+                const max = Math.max(...values);
+                const points = values.map((value, i) => {{
+                    const x = 8 + i * (204 / (samples - 1));
+                    const y = 66 - ((value - min) / Math.max(1, max - min)) * 48;
+                    return `${{x.toFixed(1)}},${{y.toFixed(1)}}`;
+                }}).join(" ");
+                profilePanel.getContainer().innerHTML = `
+                    <b>Terrain Profile</b>
+                    <div>Distance: ${{distanceKm.toFixed(2)}} km</div>
+                    <div>Elevation range: ${{min}} - ${{max}} m</div>
+                    <svg viewBox="0 0 220 78">
+                        <line x1="8" y1="66" x2="212" y2="66" stroke="#cbd5e1" stroke-width="1"/>
+                        <line x1="8" y1="12" x2="8" y2="66" stroke="#cbd5e1" stroke-width="1"/>
+                        <polyline points="${{points}}" fill="none" stroke="#2563eb" stroke-width="3"/>
+                        <circle cx="8" cy="66" r="3" fill="#10b981"/>
+                        <circle cx="212" cy="66" r="3" fill="#ef4444"/>
+                    </svg>
+                    <div style="color:#64748b">Screening profile for dashboard use.</div>
+                `;
+            }};
+            map.on("click", (event) => {{
+                if (!profileMode) return;
+                profilePoints.push(event.latlng);
+                profileMarkers.push(L.circleMarker(event.latlng, {{
+                    radius: 4,
+                    color: "#ffffff",
+                    weight: 1,
+                    fillColor: profilePoints.length === 1 ? "#10b981" : "#ef4444",
+                    fillOpacity: 1
+                }}).addTo(map));
+                if (profilePoints.length === 2) {{
+                    if (profileLine) map.removeLayer(profileLine);
+                    profileLine = L.polyline(profilePoints, {{ color: "#111827", weight: 3, dashArray: "7 5" }}).addTo(map);
+                    renderProfile(profilePoints[0], profilePoints[1]);
+                    profileMode = false;
+                    const button = document.querySelector(".profile-tool-active");
+                    if (button) button.classList.remove("profile-tool-active");
+                }}
+            }});
             setTimeout(() => map.invalidateSize(), 350);
         }})();
         </script>
@@ -4386,6 +4839,35 @@ ADMIN_USER = get_app_secret("admin_user", "MPWRD_ADMIN_USER", "admin_nitaai")
 ADMIN_PASSWORD = get_app_secret("admin_password", "MPWRD_ADMIN_PASSWORD", "")
 
 
+def database_url_config() -> str:
+    return get_app_secret("database_url", "DATABASE_URL", "").strip()
+
+
+def database_engine_label(database_url: str) -> str:
+    value = database_url.lower()
+    if value.startswith("postgresql"):
+        return "PostgreSQL"
+    if value.startswith("mysql"):
+        return "MySQL"
+    if value:
+        return "Unknown SQL database"
+    return "Not configured"
+
+
+def mask_database_url(database_url: str) -> str:
+    if not database_url:
+        return ""
+    try:
+        parsed = urllib.parse.urlsplit(database_url)
+        host = parsed.hostname or ""
+        port = f":{parsed.port}" if parsed.port else ""
+        username = parsed.username or "user"
+        database = parsed.path or ""
+        return urllib.parse.urlunsplit((parsed.scheme, f"{username}:***@{host}{port}", database, "", ""))
+    except Exception:
+        return database_url.split("@")[-1] if "@" in database_url else "configured"
+
+
 def alert_email_config() -> dict:
     port_text = get_app_secret("smtp_port", "SMTP_PORT", "587")
     try:
@@ -5147,6 +5629,16 @@ def assistant_table(frame: pd.DataFrame, columns: list[str], limit: int = 12) ->
     return prettify_dataframe_columns(frame[available].head(limit).copy())
 
 
+def assistant_match_dam(query: str, map_frame: pd.DataFrame) -> str | None:
+    if map_frame.empty or "reservoir_name" not in map_frame:
+        return None
+    names = sorted(map_frame["reservoir_name"].dropna().astype(str).unique(), key=len, reverse=True)
+    for name in names:
+        if normalize_name(name) in query:
+            return name
+    return None
+
+
 def dashboard_assistant_answer(
     question: str,
     map_status_frame: pd.DataFrame,
@@ -5168,6 +5660,57 @@ def dashboard_assistant_answer(
         map_frame["frl_gap_m"] = pd.to_numeric(map_frame.get("frl_gap_m"), errors="coerce")
     else:
         map_frame = pd.DataFrame()
+
+    matched_dam = assistant_match_dam(query, map_frame)
+    if matched_dam:
+        dam_rows = map_frame[map_frame["reservoir_name"].astype(str) == matched_dam].copy()
+        latest = dam_rows.iloc[0] if not dam_rows.empty else pd.Series(dtype=object)
+        dam_history = reservoir_frame[
+            reservoir_frame.get("reservoir_name", pd.Series(dtype=str)).astype(str) == matched_dam
+        ].copy() if not reservoir_frame.empty else pd.DataFrame()
+        trend_text = "Trend is not available from the selected report window."
+        if not dam_history.empty and {"observed_at", "water_level_m"}.issubset(dam_history.columns):
+            dam_history["observed_at"] = pd.to_datetime(dam_history["observed_at"], errors="coerce")
+            dam_history["water_level_m"] = pd.to_numeric(dam_history["water_level_m"], errors="coerce")
+            dam_history = dam_history.dropna(subset=["observed_at", "water_level_m"]).sort_values("observed_at")
+            if len(dam_history) >= 2:
+                delta = float(dam_history["water_level_m"].iloc[-1] - dam_history["water_level_m"].iloc[0])
+                direction = "rising" if delta > 0.05 else "falling" if delta < -0.05 else "stable"
+                trend_text = f"Water level trend is {direction} over the selected window ({delta:+.2f} m)."
+        text = (
+            f"{matched_dam} is currently classified as {latest.get('alert_level', 'Normal')}. "
+            f"Filling is {fmt_number(latest.get('display_filling'), '%')}, water level is "
+            f"{fmt_number(latest.get('water_level_m'), ' m')}, and FRL gap is {fmt_number(latest.get('frl_gap_m'), ' m')}. "
+            f"{trend_text} Recommended DSS action: verify latest field reading, compare gate status and downstream river gauges, and keep district control informed if FRL gap is reducing."
+        )
+        table = assistant_table(
+            dam_rows,
+            ["reservoir_name", "dam_name", "map_district", "district", "sub_basin", "water_level_m", "frl_m", "frl_gap_m", "display_filling", "current_live_capacity_mcm", "rainfall_daily_mm", "alert_level"],
+            8,
+        )
+        return {"text": text, "table": table}
+
+    if any(term in query for term in ["brief", "summary", "decision", "dss", "recommend", "priority"]):
+        if map_frame.empty:
+            return {"text": "No dam map data is available for a DSS brief under the current filters.", "table": pd.DataFrame()}
+        critical = int((map_frame.get("alert_level", pd.Series(dtype=str)) == "Critical").sum())
+        warning = int((map_frame.get("alert_level", pd.Series(dtype=str)) == "Warning").sum())
+        watch = int((map_frame.get("alert_level", pd.Series(dtype=str)) == "Watch").sum())
+        avg_fill = pd.to_numeric(map_frame.get("display_filling"), errors="coerce").mean()
+        highest = map_frame.sort_values("display_filling", ascending=False).head(5)
+        low_gap = map_frame.sort_values("frl_gap_m", na_position="last").head(5)
+        text = (
+            f"AI DSS brief for {latest_label}: {critical} Critical, {warning} Warning, and {watch} Watch reservoirs are present in the active filter. "
+            f"Average mapped filling is {fmt_number(avg_fill, '%')}. Immediate operational priority should focus on low FRL-gap reservoirs, then high-filling reservoirs with rising trend or open gates. "
+            "Recommended next actions: validate latest readings, review gate status, check downstream gauges/GEOGLOWS context, and prepare private official alerts for Critical/Warning dams."
+        )
+        combined = pd.concat([low_gap, highest], ignore_index=True).drop_duplicates(subset=["reservoir_name"], keep="first")
+        table = assistant_table(
+            combined,
+            ["reservoir_name", "map_district", "sub_basin", "water_level_m", "frl_gap_m", "display_filling", "alert_level"],
+            10,
+        )
+        return {"text": text, "table": table}
 
     if any(term in query for term in ["critical", "warning", "alert", "frl"]):
         if map_frame.empty or "alert_level" not in map_frame:
@@ -5295,11 +5838,12 @@ def render_dashboard_assistant(
 
     with st.expander("AI DSS Assistant: Ask About Current Dashboard Data", expanded=False):
         st.markdown(
-            '<div class="panel-note">Hybrid support assistant: quick prompts plus local data analysis from the currently selected reports and filters. No external AI key is required for these answers.</div>',
+            '<div class="panel-note">Enhanced hybrid DSS assistant: quick prompts, dam-name lookup, operational brief generation, and local analytics from the currently selected reports and filters. No external AI key is required for these answers.</div>',
             unsafe_allow_html=True,
         )
-        prompt_cols = st.columns(5)
+        prompt_cols = st.columns(6)
         quick_prompts = [
+            "DSS brief",
             "Critical dams",
             "District ranking",
             "Opened gates",
@@ -5665,7 +6209,7 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
                 st.error("Invalid admin credentials.")
         return
 
-    admin_tabs = st.tabs(["PDF Upload & Data Refresh", "Manual Data Entry", "Messaging Alerts", "Audit Log"])
+    admin_tabs = st.tabs(["PDF Upload & Data Refresh", "Manual Data Entry", "Messaging Alerts", "Database Sync", "Audit Log"])
     with admin_tabs[0]:
         st.markdown(
             '<div class="panel-note">Upload official MP WRD flood report PDFs. The parser creates a new parsed report folder that becomes available in the dashboard report selector.</div>',
@@ -5991,6 +6535,67 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
         st.caption("Use Windows Task Scheduler or run the command above as a background process. Add official addresses to Streamlit secret alert_email_recipients.")
 
     with admin_tabs[3]:
+        st.markdown(
+            '<div class="panel-note">Persist parsed flood reports into PostgreSQL or MySQL for future repository storage, analytics, APIs, and dashboard acceleration.</div>',
+            unsafe_allow_html=True,
+        )
+        database_url = database_url_config()
+        db_cols = st.columns([0.36, 0.64])
+        with db_cols[0]:
+            st.metric("Database Engine", database_engine_label(database_url))
+            st.metric("Parsed Report Folders", len(parsed_reports))
+        with db_cols[1]:
+            if database_url:
+                st.success(f"Database URL configured: {mask_database_url(database_url)}")
+            else:
+                st.warning("No database is configured yet. Add `database_url` in Streamlit secrets or `DATABASE_URL` in the environment.")
+            st.caption("PostgreSQL example: postgresql+psycopg2://user:password@host:5432/mpwrd_flood")
+            st.caption("MySQL example: mysql+pymysql://user:password@host:3306/mpwrd_flood")
+
+        st.markdown(
+            """
+            **Tables created by sync:** `flood_reports`, `reservoir_master`, `river_station_master`,
+            `reservoir_observations`, `river_observations`, and `reservoir_gate_observations`.
+            Existing records are updated using report/date-time and observation keys, so the sync can be run repeatedly.
+            """
+        )
+        sync_script = APP_DIR / "flood_report_database_sync.py"
+        sync_command = f'"{sys.executable}" "{sync_script}" --parsed-root "{APP_DIR}"'
+        st.code(sync_command, language="powershell")
+        if st.button("Sync Parsed Reports to SQL Database", type="primary", use_container_width=True, key="admin_sync_sql_database"):
+            if not database_url:
+                st.error("Database sync cannot run until `database_url` or `DATABASE_URL` is configured.")
+            elif not sync_script.exists():
+                st.error("Database sync script is missing from the app folder.")
+            else:
+                env = os.environ.copy()
+                env["DATABASE_URL"] = database_url
+                with st.spinner("Creating/updating SQL tables and syncing parsed flood reports..."):
+                    result = subprocess.run(
+                        [sys.executable, str(sync_script), "--parsed-root", str(APP_DIR)],
+                        cwd=str(APP_DIR),
+                        env=env,
+                        capture_output=True,
+                        text=True,
+                        timeout=180,
+                    )
+                if result.returncode == 0:
+                    st.success("Database sync completed.")
+                    st.code(result.stdout.strip() or "Sync completed.", language="json")
+                    st.session_state.setdefault("admin_audit_log", []).insert(
+                        0,
+                        {
+                            "time": pd.Timestamp.now(tz="Asia/Kolkata").strftime("%d %b %Y %I:%M %p"),
+                            "module": "Database Sync",
+                            "action": "Synced parsed reports to SQL database",
+                            "status": "Completed",
+                        },
+                    )
+                else:
+                    st.error("Database sync failed.")
+                    st.code((result.stderr or result.stdout or "Unknown sync error").strip(), language="text")
+
+    with admin_tabs[4]:
         st.markdown('<div class="panel-note">Local administration actions recorded during this browser session.</div>', unsafe_allow_html=True)
         audit_log = pd.DataFrame(st.session_state.get("admin_audit_log", []))
         alert_log = pd.DataFrame(st.session_state.get("alert_test_log", []))
@@ -7138,46 +7743,48 @@ if main_page == "Infographics":
             unsafe_allow_html=True,
         )
 
-        if not map_status.empty and {"latitude", "longitude"}.issubset(map_status.columns):
-            infographic_map = map_status.copy()
-            infographic_map["latitude"] = pd.to_numeric(infographic_map["latitude"], errors="coerce")
-            infographic_map["longitude"] = pd.to_numeric(infographic_map["longitude"], errors="coerce")
-            infographic_map = infographic_map.dropna(subset=["latitude", "longitude"])
-            if not infographic_map.empty:
-                if not capacity_view.empty and {"reservoir_name", "waterbody_area_sqkm"}.issubset(capacity_view.columns):
-                    infographic_map = infographic_map.merge(
-                        capacity_view[["reservoir_name", "waterbody_area_sqkm"]].drop_duplicates("reservoir_name"),
-                        on="reservoir_name",
-                        how="left",
-                    )
-                else:
-                    infographic_map["waterbody_area_sqkm"] = 0
-                infographic_map["waterbody_area_sqkm"] = pd.to_numeric(
-                    infographic_map.get("waterbody_area_sqkm"), errors="coerce"
-                ).fillna(0)
-                map_district_series = infographic_map.get("map_district", pd.Series("", index=infographic_map.index)).fillna("").astype(str)
-                infographic_map["district_label"] = map_district_series.where(
-                    map_district_series.str.len() > 0,
-                    infographic_map.get("district", pd.Series("Unassigned", index=infographic_map.index)).fillna("Unassigned").astype(str),
-                )
-                render_infographic_leaflet_map(
-                    infographic_map,
-                    load_light_district_geojson(str(MP_DISTRICTS_GEOJSON)),
-                )
+        alert_summary = pd.DataFrame(
+            [
+                {"alert_level": "Critical", "reservoirs": infographic_alert_counts.get("Critical", 0), "color": "#ef4444"},
+                {"alert_level": "Warning", "reservoirs": infographic_alert_counts.get("Warning", 0), "color": "#f59e0b"},
+                {"alert_level": "Watch", "reservoirs": infographic_alert_counts.get("Watch", 0), "color": "#eab308"},
+                {"alert_level": "Normal", "reservoirs": infographic_alert_counts.get("Normal", 0), "color": "#2563eb"},
+            ]
+        )
 
-        info_cols = st.columns([0.92, 1.08])
-        with info_cols[0]:
-            alert_summary = pd.DataFrame(
-                [
-                    {"alert_level": "Critical", "reservoirs": infographic_alert_counts.get("Critical", 0), "color": "#ef4444"},
-                    {"alert_level": "Warning", "reservoirs": infographic_alert_counts.get("Warning", 0), "color": "#f59e0b"},
-                    {"alert_level": "Watch", "reservoirs": infographic_alert_counts.get("Watch", 0), "color": "#eab308"},
-                    {"alert_level": "Normal", "reservoirs": infographic_alert_counts.get("Normal", 0), "color": "#2563eb"},
-                ]
-            )
+        map_chart_cols = st.columns([0.68, 0.32])
+        with map_chart_cols[0]:
+            infographic_map = pd.DataFrame()
+            if not map_status.empty and {"latitude", "longitude"}.issubset(map_status.columns):
+                infographic_map = map_status.copy()
+                infographic_map["latitude"] = pd.to_numeric(infographic_map["latitude"], errors="coerce")
+                infographic_map["longitude"] = pd.to_numeric(infographic_map["longitude"], errors="coerce")
+                infographic_map = infographic_map.dropna(subset=["latitude", "longitude"])
+                if not infographic_map.empty:
+                    if not capacity_view.empty and {"reservoir_name", "waterbody_area_sqkm"}.issubset(capacity_view.columns):
+                        infographic_map = infographic_map.merge(
+                            capacity_view[["reservoir_name", "waterbody_area_sqkm"]].drop_duplicates("reservoir_name"),
+                            on="reservoir_name",
+                            how="left",
+                        )
+                    else:
+                        infographic_map["waterbody_area_sqkm"] = 0
+                    infographic_map["waterbody_area_sqkm"] = pd.to_numeric(
+                        infographic_map.get("waterbody_area_sqkm"), errors="coerce"
+                    ).fillna(0)
+                    map_district_series = infographic_map.get("map_district", pd.Series("", index=infographic_map.index)).fillna("").astype(str)
+                    infographic_map["district_label"] = map_district_series.where(
+                        map_district_series.str.len() > 0,
+                        infographic_map.get("district", pd.Series("Unassigned", index=infographic_map.index)).fillna("Unassigned").astype(str),
+                    )
+                    render_infographic_leaflet_map(
+                        infographic_map,
+                        load_light_district_geojson(str(MP_DISTRICTS_GEOJSON)),
+                    )
+        with map_chart_cols[1]:
             alert_chart = (
                 alt.Chart(alert_summary)
-                .mark_arc(innerRadius=62, outerRadius=112)
+                .mark_arc(innerRadius=82, outerRadius=144)
                 .encode(
                     theta=alt.Theta("reservoirs:Q"),
                     color=alt.Color(
@@ -7190,45 +7797,138 @@ if main_page == "Infographics":
                     ),
                     tooltip=["alert_level", "reservoirs"],
                 )
-                .properties(height=210, title="FRL Alert Composition")
+                .properties(height=375, title="FRL Alert Composition")
             )
             st.altair_chart(alert_chart, use_container_width=True)
-        with info_cols[1]:
-            if not latest_reservoirs.empty:
-                district_infographic = (
-                    latest_reservoirs.assign(
-                        district_label=latest_reservoirs["district"].fillna("Unassigned"),
-                        filling_percent=pd.to_numeric(latest_reservoirs["filling_percent"], errors="coerce"),
-                    )
-                    .groupby("district_label", as_index=False)
-                    .agg(
-                        reservoirs=("reservoir_name", "nunique"),
-                        avg_filling=("filling_percent", "mean"),
-                        max_filling=("filling_percent", "max"),
-                    )
-                    .sort_values("avg_filling", ascending=False)
-                    .head(14)
-                )
-                district_chart = (
-                    alt.Chart(district_infographic)
-                    .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
-                    .encode(
-                        y=alt.Y("district_label:N", sort="-x", title="District"),
-                        x=alt.X("avg_filling:Q", title="Average filling (%)"),
-                        color=alt.Color(
-                            "max_filling:Q",
-                            scale=alt.Scale(domain=[0, 100], range=COOLORS_ALERT_PALETTE),
-                            title="Max filling",
-                        ),
-                        tooltip=["district_label", "reservoirs", "avg_filling", "max_filling"],
-                    )
-                    .properties(height=210, title="District Reservoir Filling Snapshot")
-                )
-                st.altair_chart(district_chart, use_container_width=True)
-            else:
-                st.info("No latest reservoir rows are available for district infographic.")
 
-        info_cols_2 = st.columns(2)
+        focus_source = infographic_map if "infographic_map" in locals() and not infographic_map.empty else map_status
+        if not focus_source.empty and "reservoir_name" in focus_source:
+            focus_options = sorted(focus_source["reservoir_name"].dropna().astype(str).unique())
+            if focus_options:
+                focus_default = focus_options[0]
+                if "display_filling" in focus_source:
+                    top_focus = focus_source.assign(
+                        display_filling=pd.to_numeric(focus_source["display_filling"], errors="coerce")
+                    ).sort_values("display_filling", ascending=False)
+                    if not top_focus.empty:
+                        focus_default = str(top_focus.iloc[0].get("reservoir_name") or focus_default)
+                focus_index = focus_options.index(focus_default) if focus_default in focus_options else 0
+                selected_focus_dam = st.selectbox(
+                    "Infographic Focus Dam",
+                    focus_options,
+                    index=focus_index,
+                    key="infographic_focus_dam",
+                    help="Use this selector to link all Python-side infographic cards and charts to one dam. Map clicks update the in-map linked panel instantly.",
+                )
+                focus_rows = focus_source[focus_source["reservoir_name"].astype(str) == selected_focus_dam].copy()
+                focus_latest = focus_rows.iloc[0] if not focus_rows.empty else pd.Series(dtype=object)
+                focus_history = reservoir_view[
+                    reservoir_view.get("reservoir_name", pd.Series(dtype=str)).astype(str) == selected_focus_dam
+                ].copy() if not reservoir_view.empty else pd.DataFrame()
+                if not focus_history.empty:
+                    focus_history["observed_at"] = pd.to_datetime(focus_history["observed_at"], errors="coerce")
+                    focus_history["water_level_m"] = pd.to_numeric(focus_history["water_level_m"], errors="coerce")
+                    focus_history["filling_percent"] = pd.to_numeric(focus_history["filling_percent"], errors="coerce")
+                    focus_history = focus_history.dropna(subset=["observed_at"]).sort_values("observed_at")
+
+                focus_cols = st.columns([0.42, 0.58])
+                with focus_cols[0]:
+                    focus_alert = str(focus_latest.get("alert_level") or "Normal")
+                    focus_color = {
+                        "Critical": "#ef4444",
+                        "Warning": "#f59e0b",
+                        "Watch": "#eab308",
+                        "Normal": "#2563eb",
+                    }.get(focus_alert, "#2563eb")
+                    st.markdown(
+                        f"""
+                        <div class="infographic-frame" style="border-left:5px solid {focus_color};padding:.8rem">
+                            <div class="infographic-title" style="font-size:1rem">{escape(selected_focus_dam)} Focus</div>
+                            <div class="infographic-grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem">
+                                <div class="infographic-card"><span>District</span><b>{escape(str(focus_latest.get("district_label") or focus_latest.get("map_district") or focus_latest.get("district") or "-"))}</b><small>administrative context</small></div>
+                                <div class="infographic-card"><span>Alert</span><b style="color:{focus_color}">{escape(focus_alert)}</b><small>FRL/filling status</small></div>
+                                <div class="infographic-card"><span>Filling</span><b>{fmt_number(focus_latest.get("display_filling"), "%")}</b><small>latest selected slot</small></div>
+                                <div class="infographic-card"><span>FRL Gap</span><b>{fmt_number(focus_latest.get("frl_gap_m"), " m")}</b><small>headroom to FRL</small></div>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with focus_cols[1]:
+                    if not focus_history.empty:
+                        focus_long = focus_history.melt(
+                            id_vars=["observed_at"],
+                            value_vars=[col for col in ["water_level_m", "filling_percent"] if col in focus_history],
+                            var_name="metric",
+                            value_name="value",
+                        ).dropna(subset=["value"])
+                        focus_chart = (
+                            alt.Chart(focus_long)
+                            .mark_line(point=True, strokeWidth=2.5)
+                            .encode(
+                                x=alt.X("observed_at:T", title="Observation time"),
+                                y=alt.Y("value:Q", title="Water level / filling"),
+                                color=alt.Color(
+                                    "metric:N",
+                                    scale=alt.Scale(
+                                        domain=["water_level_m", "filling_percent"],
+                                        range=["#2563eb", "#f97316"],
+                                    ),
+                                    title="Metric",
+                                ),
+                                tooltip=["observed_at", "metric", "value"],
+                            )
+                            .properties(
+                                height=260,
+                                title=alt.TitleParams(
+                                    text=f"{selected_focus_dam}: Linked Trend",
+                                    subtitle="Water level (m) and filling (%) across selected observations",
+                                    anchor="start",
+                                    fontSize=13,
+                                    subtitleFontSize=11,
+                                    offset=8,
+                                ),
+                            )
+                        )
+                        st.altair_chart(focus_chart, use_container_width=True)
+                    else:
+                        st.info("No time-series history is available for the selected focus dam.")
+
+        if not latest_reservoirs.empty:
+            district_infographic = (
+                latest_reservoirs.assign(
+                    district_label=latest_reservoirs["district"].fillna("Unassigned"),
+                    filling_percent=pd.to_numeric(latest_reservoirs["filling_percent"], errors="coerce"),
+                )
+                .groupby("district_label", as_index=False)
+                .agg(
+                    reservoirs=("reservoir_name", "nunique"),
+                    avg_filling=("filling_percent", "mean"),
+                    max_filling=("filling_percent", "max"),
+                )
+                .sort_values("avg_filling", ascending=False)
+                .head(14)
+            )
+            district_chart = (
+                alt.Chart(district_infographic)
+                .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
+                .encode(
+                    y=alt.Y("district_label:N", sort="-x", title="District"),
+                    x=alt.X("avg_filling:Q", title="Average filling (%)"),
+                    color=alt.Color(
+                        "max_filling:Q",
+                        scale=alt.Scale(domain=[0, 100], range=COOLORS_ALERT_PALETTE),
+                        title="Max filling",
+                    ),
+                    tooltip=["district_label", "reservoirs", "avg_filling", "max_filling"],
+                )
+                .properties(height=260, title="District Reservoir Filling Snapshot")
+            )
+            st.altair_chart(district_chart, use_container_width=True)
+        else:
+            st.info("No latest reservoir rows are available for district infographic.")
+
+        info_cols_2 = st.columns([0.34, 0.33, 0.33])
         with info_cols_2[0]:
             if not reservoir_view.empty:
                 storage_timeline = (
@@ -7248,7 +7948,7 @@ if main_page == "Infographics":
                         y=alt.Y("total_storage_mcm:Q", title="Total live storage (MCM)"),
                         tooltip=["observed_at", "total_storage_mcm", "avg_filling"],
                     )
-                    .properties(height=205, title="Storage Timeline")
+                    .properties(height=235, title="Storage Timeline")
                 )
                 st.altair_chart(storage_chart, use_container_width=True)
         with info_cols_2[1]:
@@ -7269,17 +7969,17 @@ if main_page == "Infographics":
                         ),
                         tooltip=["reservoir_name", "district", "water_level_m", "frl_gap_m", "filling_percent"],
                     )
-                    .properties(height=205, title="Top Filled Reservoirs")
+                    .properties(height=235, title="Top Filled Reservoirs")
                 )
                 st.altair_chart(top_filling_chart, use_container_width=True)
 
-        info_cols_3 = st.columns([0.58, 0.42])
+        info_cols_3 = st.columns([0.50, 0.50])
         all_latest_reservoirs = latest_by_asset(reservoirs, "reservoir_name") if not reservoirs.empty else pd.DataFrame()
         if not all_latest_reservoirs.empty:
             filling_snapshot = all_latest_reservoirs.assign(
                 filling_percent=pd.to_numeric(all_latest_reservoirs["filling_percent"], errors="coerce")
             ).dropna(subset=["filling_percent"])
-            with info_cols_3[0]:
+            with info_cols_2[2]:
                 least_filled = filling_snapshot[filling_snapshot["filling_percent"] < 25].nsmallest(12, "filling_percent")
                 if least_filled.empty:
                     st.success("No reservoirs are below 25% filling in the complete latest reservoir set for the selected reports.")
@@ -7297,10 +7997,10 @@ if main_page == "Infographics":
                             ),
                             tooltip=["reservoir_name", "district", "water_level_m", "frl_gap_m", "filling_percent"],
                         )
-                        .properties(height=220, title="Least Filled Reservoirs Below 25%: All Dams")
+                        .properties(height=235, title="Least Filled Reservoirs Below 25%")
                     )
                     st.altair_chart(least_chart, use_container_width=True)
-            with info_cols_3[1]:
+            with info_cols_3[0]:
                 band_labels = ["0-25%", "25-50%", "50-75%", "75-100%"]
                 band_colors = ["#2563eb", "#06b6d4", "#f59e0b", "#ef4444"]
                 banded = filling_snapshot.assign(
@@ -7326,7 +8026,7 @@ if main_page == "Infographics":
                         color=alt.Color("filling_band:N", scale=alt.Scale(domain=band_labels, range=band_colors), title="Filling Band"),
                         tooltip=["filling_band", "reservoirs", "avg_filling"],
                     )
-                    .properties(height=220, title="Reservoir Filling Bands")
+                    .properties(height=190, title="Reservoir Filling Bands")
                 )
                 band_text = (
                     alt.Chart(band_summary)
@@ -7338,6 +8038,28 @@ if main_page == "Infographics":
                     )
                 )
                 st.altair_chart(band_chart + band_text, use_container_width=True)
+            with info_cols_3[1]:
+                band_summary_rows = "".join(
+                    f"""
+                    <div class="infographic-card" style="border-top-color:{band_colors[index]}">
+                        <span>{escape(str(row.filling_band))} Filled</span>
+                        <b>{int(row.reservoirs)}</b>
+                        <small>Avg {fmt_number(row.avg_filling, "%")}</small>
+                    </div>
+                    """
+                    for index, row in enumerate(band_summary.itertuples(index=False))
+                )
+                st.markdown(
+                    f"""
+                    <div class="infographic-frame" style="padding:.75rem">
+                        <div class="infographic-title" style="font-size:1rem">Reservoir Filling Distribution</div>
+                        <div class="infographic-grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem">
+                            {band_summary_rows}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
             global_lowest = filling_snapshot.sort_values("filling_percent").iloc[0] if not filling_snapshot.empty else None
             st.markdown('<div class="panel-note">Filling band drill-down uses the complete latest reservoir set for the selected reports, not only the visible chart subset.</div>', unsafe_allow_html=True)
@@ -7367,7 +8089,7 @@ if main_page == "Infographics":
                             ),
                             tooltip=["reservoir_name", "district", "water_level_m", "frl_gap_m", "filling_percent"],
                         )
-                        .properties(height=max(220, min(360, 22 * len(band_detail))), title=f"{selected_band} Filled Reservoirs")
+                        .properties(height=max(200, min(310, 20 * len(band_detail))), title=f"{selected_band} Filled Reservoirs")
                     )
                     st.altair_chart(band_detail_chart, use_container_width=True)
                 with drill_cols[1]:
@@ -7394,11 +8116,12 @@ if main_page == "Infographics":
                     "filling_percent",
                     "rainfall_daily_mm",
                 ]
-                st.dataframe(
-                    band_detail[[col for col in detail_cols if col in band_detail.columns]],
-                    use_container_width=True,
-                    hide_index=True,
+                render_colored_dam_table(
+                    band_detail,
+                    "infographic_band_detail",
+                    columns=detail_cols,
                     height=min(240, 64 + 26 * len(band_detail)),
+                    allow_filters=False,
                 )
 
         st.markdown(
@@ -7901,7 +8624,27 @@ if main_page == "Data & Timeseries":
             horizontal=True,
         )
         if data_choice == "Reservoir observations":
-            st.dataframe(reservoir_view.sort_values(["observed_at", "reservoir_name"]), use_container_width=True, hide_index=True, height=360)
+            reservoir_table_cols = [
+                "observed_at",
+                "reservoir_name",
+                "district",
+                "sub_basin",
+                "major_basin",
+                "water_level_m",
+                "frl_m",
+                "frl_gap_m",
+                "current_live_capacity_mcm",
+                "filling_percent",
+                "rainfall_daily_mm",
+                "report_id",
+            ]
+            render_colored_dam_table(
+                reservoir_view.sort_values(["observed_at", "reservoir_name"]),
+                "data_explorer_reservoirs",
+                columns=reservoir_table_cols,
+                height=390,
+                allow_filters=True,
+            )
         elif data_choice == "River observations":
             st.dataframe(river_view.sort_values(["observed_at", "river_name", "gauge_station"]), use_container_width=True, hide_index=True, height=360)
         elif data_choice == "Gate observations":
