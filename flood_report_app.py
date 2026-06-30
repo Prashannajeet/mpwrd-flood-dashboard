@@ -4,12 +4,14 @@ import json
 import math
 import os
 import hmac
+import hashlib
 import smtplib
 import sqlite3
 import sys
 import re
 import subprocess
 import unicodedata
+import uuid
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -32,6 +34,7 @@ GLOFAS_PROJECT_JSON = APP_DIR / "data" / "glofas_mp_project.json"
 GRRR_PROJECT_JSON = APP_DIR / "data" / "grrr_mp_project.json"
 MP_TOWNS_CSV = APP_DIR / "data" / "mp_towns.csv"
 WEATHER_CACHE_DB = APP_DIR / "data" / "weather_cache.sqlite"
+VISITOR_ANALYTICS_DB = APP_DIR / "data" / "visitor_analytics.sqlite"
 WEATHER_REFRESH_HOURS = 3
 RESERVOIR_CAPACITY_ESTIMATES_CSV = APP_DIR / "data" / "reservoir_capacity_estimates.csv"
 RESERVOIR_CAPACITY_CURVES_CSV = APP_DIR / "data" / "reservoir_capacity_curves.csv"
@@ -614,6 +617,39 @@ st.markdown(
         font-weight: 700;
         margin-top: 0.1rem;
     }
+    .visitor-counter-card {
+        margin: 0.75rem 0 1rem;
+        padding: 0.76rem 0.82rem;
+        border: 1px solid #dbeafe;
+        border-radius: 8px;
+        background:
+            linear-gradient(135deg, rgba(255,255,255,0.98), rgba(239,246,255,0.98)),
+            linear-gradient(90deg, rgba(20,125,245,0.12), rgba(10,255,153,0.10));
+        box-shadow: 0 12px 24px rgba(37, 99, 235, 0.08);
+    }
+    .visitor-counter-card span {
+        display: block;
+        color: #7c3aed;
+        font-size: 0.68rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: 0.08em !important;
+    }
+    .visitor-counter-card b {
+        display: block;
+        color: #0f172a;
+        font-size: 1.55rem;
+        line-height: 1.12;
+        font-weight: 900;
+        margin-top: 0.15rem;
+    }
+    .visitor-counter-card small {
+        display: block;
+        color: #64748b;
+        font-size: 0.72rem;
+        font-weight: 700;
+        margin-top: 0.18rem;
+    }
     .dashboard-topnav-title {
         margin: 0.75rem 0 0;
         padding: 0.72rem 0.95rem 0.15rem;
@@ -1029,6 +1065,19 @@ def read_csv(path: Path) -> pd.DataFrame:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_json_url(url: str) -> tuple[dict | list | None, str | None]:
+    if os.name == "nt":
+        try:
+            result = subprocess.run(
+                ["curl.exe", "-s", "--max-time", "18", url],
+                capture_output=True,
+                check=True,
+                text=True,
+                timeout=22,
+            )
+            if result.stdout.strip():
+                return json.loads(result.stdout), None
+        except Exception:
+            pass
     try:
         request = urllib.request.Request(url, headers={"User-Agent": "mpwrd-vbsr-dashboard/1.0"})
         with urllib.request.urlopen(request, timeout=18) as response:
@@ -3924,6 +3973,51 @@ def open_meteo_current_url(latitude: float, longitude: float) -> str:
     )
 
 
+def google_weather_current_url(latitude: float, longitude: float, api_key: str) -> str:
+    params = urllib.parse.urlencode(
+        {
+            "key": api_key,
+            "location.latitude": f"{float(latitude):.5f}",
+            "location.longitude": f"{float(longitude):.5f}",
+            "unitsSystem": "METRIC",
+        }
+    )
+    return f"https://weather.googleapis.com/v1/currentConditions:lookup?{params}"
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_google_weather_current(latitude: float, longitude: float, _api_key: str) -> tuple[dict, str | None]:
+    if not _api_key:
+        return {}, "Google Weather API key is not configured."
+    payload, error = fetch_json_url(google_weather_current_url(latitude, longitude, _api_key))
+    if error or not isinstance(payload, dict):
+        return {}, error or "Google Weather API returned an empty response."
+    api_error = payload.get("error")
+    if isinstance(api_error, dict):
+        return {}, api_error.get("message") or json.dumps(api_error)
+    return payload, None
+
+
+def google_weather_summary(payload: dict) -> dict:
+    def degrees(item: object) -> float | None:
+        if isinstance(item, dict):
+            value = item.get("degrees")
+            return float(value) if value is not None and pd.notna(value) else None
+        return None
+
+    condition = payload.get("weatherCondition") or {}
+    condition_desc = condition.get("description") if isinstance(condition, dict) else {}
+    return {
+        "condition": condition_desc.get("text") if isinstance(condition_desc, dict) else condition.get("type", ""),
+        "temperature_c": degrees(payload.get("temperature")),
+        "feels_like_c": degrees(payload.get("feelsLikeTemperature")),
+        "humidity_percent": payload.get("relativeHumidity"),
+        "wind_speed_kmh": (payload.get("wind") or {}).get("speed", {}).get("value") if isinstance(payload.get("wind"), dict) else None,
+        "uv_index": payload.get("uvIndex"),
+        "current_time": payload.get("currentTime"),
+    }
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_open_meteo_weather(latitude: float, longitude: float) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, str | None]:
     payload, error = fetch_json_url(open_meteo_url(latitude, longitude))
@@ -4029,6 +4123,60 @@ def build_weather_dss_summary(points_key: tuple[tuple[str, str, str, float, floa
 
 
 @st.cache_data(ttl=WEATHER_REFRESH_HOURS * 3600, show_spinner=False)
+def build_weather_forecast_for_points(points_key: tuple[tuple[str, str, float, float], ...]) -> pd.DataFrame:
+    rows = []
+    for point_name, district, latitude, longitude in points_key:
+        daily, hourly, current, error, source = get_cached_open_meteo_weather(float(latitude), float(longitude))
+        if daily.empty:
+            rows.append(
+                {
+                    "town_name": point_name,
+                    "district": district,
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "forecast_rain_mm": math.nan,
+                    "forecast_temp_max_c": math.nan,
+                    "forecast_wind_max_kmh": math.nan,
+                    "forecast_uv_max": math.nan,
+                    "current_rain_mm": math.nan,
+                    "current_temp_c": math.nan,
+                    "weather_risk": "No Data",
+                    "source": source,
+                    "status": error or "No forecast data",
+                }
+            )
+            continue
+        forecast = daily[daily.get("period", pd.Series(dtype=str)) == "Forecast"].head(7).copy()
+        if forecast.empty:
+            forecast = daily.tail(7).copy()
+        forecast_rain = pd.to_numeric(forecast.get("precipitation_sum"), errors="coerce").sum()
+        forecast_temp = pd.to_numeric(forecast.get("temperature_2m_max"), errors="coerce").max()
+        forecast_wind = pd.to_numeric(forecast.get("wind_speed_10m_max"), errors="coerce").max()
+        forecast_uv = pd.to_numeric(forecast.get("uv_index_max"), errors="coerce").max()
+        current_row = current.iloc[0].to_dict() if not current.empty else {}
+        current_rain = pd.to_numeric(pd.Series([current_row.get("precipitation")]), errors="coerce").iloc[0]
+        current_temp = pd.to_numeric(pd.Series([current_row.get("temperature_2m")]), errors="coerce").iloc[0]
+        rows.append(
+            {
+                "town_name": point_name,
+                "district": district,
+                "latitude": latitude,
+                "longitude": longitude,
+                "forecast_rain_mm": round(float(forecast_rain), 2) if pd.notna(forecast_rain) else math.nan,
+                "forecast_temp_max_c": round(float(forecast_temp), 2) if pd.notna(forecast_temp) else math.nan,
+                "forecast_wind_max_kmh": round(float(forecast_wind), 2) if pd.notna(forecast_wind) else math.nan,
+                "forecast_uv_max": round(float(forecast_uv), 2) if pd.notna(forecast_uv) else math.nan,
+                "current_rain_mm": round(float(current_rain), 2) if pd.notna(current_rain) else math.nan,
+                "current_temp_c": round(float(current_temp), 2) if pd.notna(current_temp) else math.nan,
+                "weather_risk": weather_risk_label(forecast_rain, forecast_wind, forecast_uv),
+                "source": source,
+                "status": error or "OK",
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+@st.cache_data(ttl=WEATHER_REFRESH_HOURS * 3600, show_spinner=False)
 def build_current_weather_for_towns(towns_key: tuple[tuple[str, str, float, float], ...]) -> pd.DataFrame:
     rows = []
     for town_name, district, latitude, longitude in towns_key:
@@ -4115,6 +4263,7 @@ def render_weather_town_leaflet_map(
     weather_tile_api_key: str = "",
     district_geojson: dict | None = None,
     map_title: str = "Weather Forecast Map: MP Points",
+    dam_points: pd.DataFrame | None = None,
 ) -> None:
     if towns.empty:
         return
@@ -4138,6 +4287,29 @@ def render_weather_town_leaflet_map(
                 "selected": str(row.get("town_name") or "") == selected_town,
             }
         )
+    dam_records = []
+    if dam_points is not None and not dam_points.empty and {"latitude", "longitude"}.issubset(dam_points.columns):
+        for row in dam_points.dropna(subset=["latitude", "longitude"]).to_dict("records"):
+            risk = str(row.get("weather_risk") or "Dam")
+            dam_records.append(
+                {
+                    "town": str(row.get("town_name") or row.get("reservoir_name") or row.get("dam_name") or "Dam"),
+                    "district": str(row.get("district") or row.get("map_district") or ""),
+                    "basin": str(row.get("basin") or row.get("sub_basin") or row.get("major_basin") or ""),
+                    "priority": str(row.get("priority_flag") or "Dam"),
+                    "lat": float(row["latitude"]),
+                    "lon": float(row["longitude"]),
+                    "risk": risk,
+                    "color": weather_risk_color(risk),
+                    "forecast_rain": round(float(row.get("forecast_rain_mm") or 0), 1),
+                    "max_temp": round(float(row.get("forecast_temp_max_c") or 0), 1),
+                    "max_wind": round(float(row.get("forecast_wind_max_kmh") or 0), 1),
+                    "max_uv": round(float(row.get("forecast_uv_max") or 0), 1),
+                    "source": str(row.get("source") or row.get("status") or "Location layer"),
+                    "has_forecast": pd.notna(row.get("forecast_rain_mm")) if "forecast_rain_mm" in row else False,
+                    "selected": str(row.get("town_name") or row.get("reservoir_name") or "") == selected_town,
+                }
+            )
     map_id = f"weather-town-map-{abs(hash(selected_town)) % 1000000}"
     center = next((item for item in records if item["selected"]), records[0])
     tile_key = weather_tile_api_key.strip()
@@ -4225,7 +4397,7 @@ def render_weather_town_leaflet_map(
             .weather-legend span {{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; }}
         </style>
         <div class="weather-map-title">{escape(map_title)}</div>
-        <div class="weather-map-note">Town markers are colored by 7-day rainfall, wind and UV risk. {escape(layer_note)}</div>
+        <div class="weather-map-note">Markers are colored by 7-day rainfall, wind and UV risk. Dam forecast points are available as a separate map layer. {escape(layer_note)}</div>
         <div class="weather-layer-badges">
             {layer_badges_html}
         </div>
@@ -4234,6 +4406,7 @@ def render_weather_town_leaflet_map(
         <script>
         (() => {{
             const towns = {json.dumps(records)};
+            const dams = {json.dumps(dam_records)};
             const districts = {districts_json};
             const weatherTileApiKey = {json.dumps(tile_key)};
             const map = L.map("{map_id}", {{ zoomControl: true, preferCanvas: true, scrollWheelZoom: true }})
@@ -4341,6 +4514,30 @@ def render_weather_town_leaflet_map(
                 }})
                 .catch(() => {{}});
             const bounds = [];
+            const damLayer = L.layerGroup().addTo(map);
+            dams.forEach((dam) => {{
+                bounds.push([dam.lat, dam.lon]);
+                const marker = L.circleMarker([dam.lat, dam.lon], {{
+                    radius: dam.selected ? 7.4 : 4.4,
+                    color: dam.selected ? "#111827" : "#ffffff",
+                    weight: dam.selected ? 2.2 : 1,
+                    fillColor: dam.has_forecast ? dam.color : "#7c3aed",
+                    fillOpacity: dam.has_forecast ? 0.92 : 0.72
+                }}).addTo(damLayer);
+                marker.bindTooltip(`${{dam.town}} | ${{dam.has_forecast ? dam.risk : "Forecast pending"}}`, {{ sticky: true }});
+                marker.bindPopup(`
+                    <b>${{dam.town}}</b><br/>
+                    District: ${{dam.district}}<br/>
+                    Basin: ${{dam.basin}}<br/>
+                    Weather risk: <b style="color:${{dam.color}}">${{dam.has_forecast ? dam.risk : "Forecast pending"}}</b><br/>
+                    7-day rain: ${{dam.has_forecast ? dam.forecast_rain + " mm" : "Load dam forecasts"}}<br/>
+                    Max temp: ${{dam.has_forecast ? dam.max_temp + " &deg;C" : "-"}}<br/>
+                    Max wind: ${{dam.has_forecast ? dam.max_wind + " km/h" : "-"}}<br/>
+                    Max UV: ${{dam.has_forecast ? dam.max_uv : "-"}}<br/>
+                    Source: ${{dam.source}}
+                `);
+            }});
+            layerControl.addOverlay(damLayer, "Dam forecast points");
             towns.forEach((town) => {{
                 bounds.push([town.lat, town.lon]);
                 const marker = L.circleMarker([town.lat, town.lon], {{
@@ -4900,6 +5097,187 @@ def get_app_secret(name: str, env_name: str, default: str = "") -> str:
         return default
 
 
+def visitor_headers() -> dict:
+    try:
+        return {str(key).lower(): str(value) for key, value in st.context.headers.items()}
+    except Exception:
+        return {}
+
+
+def visitor_device_type(user_agent: str) -> str:
+    agent = (user_agent or "").lower()
+    if any(token in agent for token in ["mobile", "android", "iphone", "ipad"]):
+        return "Mobile / Tablet"
+    if any(token in agent for token in ["windows", "macintosh", "linux", "x11"]):
+        return "Desktop"
+    return "Unknown"
+
+
+def visitor_browser_label(user_agent: str) -> str:
+    agent = (user_agent or "").lower()
+    if "edg/" in agent or "edge/" in agent:
+        return "Microsoft Edge"
+    if "chrome/" in agent and "chromium" not in agent:
+        return "Chrome"
+    if "firefox/" in agent:
+        return "Firefox"
+    if "safari/" in agent and "chrome/" not in agent:
+        return "Safari"
+    return "Other"
+
+
+def init_visitor_analytics_db() -> None:
+    VISITOR_ANALYTICS_DB.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(VISITOR_ANALYTICS_DB) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS visitor_sessions (
+                session_id TEXT PRIMARY KEY,
+                visitor_hash TEXT NOT NULL,
+                first_seen TEXT NOT NULL,
+                last_seen TEXT NOT NULL,
+                page_path TEXT,
+                user_agent TEXT,
+                device_type TEXT,
+                browser TEXT,
+                referrer TEXT,
+                visits INTEGER NOT NULL DEFAULT 1
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_visitor_sessions_first_seen ON visitor_sessions(first_seen)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_visitor_sessions_visitor_hash ON visitor_sessions(visitor_hash)")
+
+
+def record_visitor_session(page_path: str = "dashboard") -> None:
+    init_visitor_analytics_db()
+    if "visitor_session_id" not in st.session_state:
+        st.session_state.visitor_session_id = uuid.uuid4().hex
+    headers = visitor_headers()
+    user_agent = headers.get("user-agent", "Unknown")
+    referrer = headers.get("referer", "")
+    forwarded_for = headers.get("x-forwarded-for", headers.get("x-real-ip", "local"))
+    visitor_hash = hashlib.sha256(f"{forwarded_for}|{user_agent}".encode("utf-8", errors="ignore")).hexdigest()[:24]
+    now = pd.Timestamp.now(tz="Asia/Kolkata").isoformat()
+    session_id = str(st.session_state.visitor_session_id)
+    with sqlite3.connect(VISITOR_ANALYTICS_DB) as conn:
+        conn.execute(
+            """
+            INSERT INTO visitor_sessions
+                (session_id, visitor_hash, first_seen, last_seen, page_path, user_agent, device_type, browser, referrer, visits)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            ON CONFLICT(session_id) DO UPDATE SET
+                last_seen = excluded.last_seen,
+                page_path = excluded.page_path,
+                visits = visitor_sessions.visits + 1
+            """,
+            (
+                session_id,
+                visitor_hash,
+                now,
+                now,
+                page_path,
+                user_agent[:500],
+                visitor_device_type(user_agent),
+                visitor_browser_label(user_agent),
+                referrer[:500],
+            ),
+        )
+
+
+def visitor_analytics_summary(days: int = 30) -> tuple[dict, pd.DataFrame]:
+    init_visitor_analytics_db()
+    with sqlite3.connect(VISITOR_ANALYTICS_DB) as conn:
+        visits = pd.read_sql_query("SELECT * FROM visitor_sessions ORDER BY first_seen DESC", conn)
+    if visits.empty:
+        return {
+            "total_sessions": 0,
+            "unique_visitors": 0,
+            "today_sessions": 0,
+            "total_page_views": 0,
+        }, visits
+    visits["first_seen_dt"] = pd.to_datetime(visits["first_seen"], errors="coerce")
+    visits["last_seen_dt"] = pd.to_datetime(visits["last_seen"], errors="coerce")
+    today = pd.Timestamp.now(tz="Asia/Kolkata").date()
+    recent_cutoff = pd.Timestamp.now(tz="Asia/Kolkata") - pd.Timedelta(days=days)
+    recent = visits[visits["first_seen_dt"] >= recent_cutoff]
+    summary = {
+        "total_sessions": int(len(visits)),
+        "unique_visitors": int(visits["visitor_hash"].nunique()),
+        "today_sessions": int((visits["first_seen_dt"].dt.date == today).sum()),
+        "total_page_views": int(pd.to_numeric(visits["visits"], errors="coerce").fillna(0).sum()),
+        "recent_sessions": int(len(recent)),
+    }
+    return summary, visits
+
+
+def render_public_visitor_counter() -> None:
+    summary, _visits = visitor_analytics_summary()
+    st.markdown(
+        f"""
+        <div class="visitor-counter-card">
+          <span>Site Visitors</span>
+          <b>{summary.get("unique_visitors", 0):,}</b>
+          <small>{summary.get("total_sessions", 0):,} sessions | {summary.get("today_sessions", 0):,} today</small>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_visitor_analytics_admin() -> None:
+    st.markdown(
+        '<div class="panel-note">Monitor dashboard usage from local visitor sessions. Public users only see the compact visitor counter; detailed analytics remain administration-only.</div>',
+        unsafe_allow_html=True,
+    )
+    summary, visits = visitor_analytics_summary()
+    metric_cols = st.columns(5)
+    metric_cols[0].metric("Unique Visitors", f"{summary.get('unique_visitors', 0):,}")
+    metric_cols[1].metric("Visitor Sessions", f"{summary.get('total_sessions', 0):,}")
+    metric_cols[2].metric("Today", f"{summary.get('today_sessions', 0):,}")
+    metric_cols[3].metric("Page Views", f"{summary.get('total_page_views', 0):,}")
+    metric_cols[4].metric("Last 30 Days", f"{summary.get('recent_sessions', 0):,}")
+    if visits.empty:
+        st.info("No visitor sessions have been recorded yet.")
+        return
+
+    visits = visits.copy()
+    visits["visit_date"] = visits["first_seen_dt"].dt.date.astype(str)
+    daily = (
+        visits.groupby("visit_date", as_index=False)
+        .agg(sessions=("session_id", "count"), unique_visitors=("visitor_hash", "nunique"), page_views=("visits", "sum"))
+        .sort_values("visit_date")
+    )
+    chart = (
+        alt.Chart(daily)
+        .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
+        .encode(
+            x=alt.X("visit_date:T", title="Visit Date"),
+            y=alt.Y("sessions:Q", title="Sessions"),
+            color=alt.value("#147df5"),
+            tooltip=["visit_date", "sessions", "unique_visitors", "page_views"],
+        )
+        .properties(height=240)
+    )
+    st.altair_chart(chart, use_container_width=True)
+
+    split_cols = st.columns(2)
+    with split_cols[0]:
+        device_summary = visits.groupby("device_type", as_index=False).agg(sessions=("session_id", "count"))
+        st.dataframe(device_summary.sort_values("sessions", ascending=False), use_container_width=True, hide_index=True, height=170)
+    with split_cols[1]:
+        browser_summary = visits.groupby("browser", as_index=False).agg(sessions=("session_id", "count"))
+        st.dataframe(browser_summary.sort_values("sessions", ascending=False), use_container_width=True, hide_index=True, height=170)
+
+    detail_cols = ["first_seen", "last_seen", "device_type", "browser", "page_path", "visits", "visitor_hash"]
+    st.dataframe(
+        visits[[col for col in detail_cols if col in visits.columns]].head(300),
+        use_container_width=True,
+        hide_index=True,
+        height=260,
+    )
+
+
 ADMIN_USER = get_app_secret("admin_user", "MPWRD_ADMIN_USER", "admin_nitaai")
 ADMIN_PASSWORD = get_app_secret("admin_password", "MPWRD_ADMIN_PASSWORD", "")
 
@@ -5147,6 +5525,11 @@ def admin_login_panel() -> bool:
     return bool(st.session_state.admin_authenticated)
 
 
+if "main_dashboard_page" not in st.session_state:
+    st.session_state.main_dashboard_page = "Infographics"
+
+record_visitor_session(st.session_state.main_dashboard_page)
+
 with st.sidebar:
     st.markdown(
         """
@@ -5162,6 +5545,7 @@ with st.sidebar:
         """,
         unsafe_allow_html=True,
     )
+    render_public_visitor_counter()
     st.header("Report Source")
     is_admin = admin_login_panel()
     if is_admin:
@@ -5694,6 +6078,87 @@ def assistant_table(frame: pd.DataFrame, columns: list[str], limit: int = 12) ->
     return prettify_dataframe_columns(frame[available].head(limit).copy())
 
 
+def local_ai_config() -> dict:
+    enabled = get_app_secret("local_ai_enabled", "LOCAL_AI_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
+    return {
+        "enabled": enabled,
+        "provider": get_app_secret("local_ai_provider", "LOCAL_AI_PROVIDER", "ollama").strip().lower() or "ollama",
+        "base_url": get_app_secret("ollama_base_url", "OLLAMA_BASE_URL", "http://127.0.0.1:11434").strip().rstrip("/"),
+        "model": get_app_secret("ollama_model", "OLLAMA_MODEL", "llama3.2:3b").strip() or "llama3.2:3b",
+    }
+
+
+def call_ollama_chat(prompt: str, config: dict) -> tuple[str, str | None]:
+    url = f"{config['base_url']}/api/chat"
+    payload = {
+        "model": config["model"],
+        "stream": False,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are an MPWRD dam safety DSS assistant. Use only the supplied dashboard facts and table preview. "
+                    "Do not invent reservoir names, dates, values, forecasts, or alerts. If the table is insufficient, say what data is missing. "
+                    "Respond with concise operational interpretation, next checks, and caveats."
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ],
+        "options": {"temperature": 0.2, "num_predict": 450},
+    }
+    try:
+        request = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=45) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        message = data.get("message") or {}
+        content = str(message.get("content") or "").strip()
+        if not content:
+            return "", "Local AI model returned an empty response."
+        return content, None
+    except Exception as exc:
+        return "", f"Local AI unavailable: {exc}"
+
+
+def local_ai_enhance_answer(question: str, answer: dict) -> dict:
+    config = local_ai_config()
+    if not config["enabled"] or config["provider"] != "ollama":
+        return answer
+    table = answer.get("table")
+    table_preview = ""
+    if isinstance(table, pd.DataFrame) and not table.empty:
+        preview = table.head(18).copy()
+        table_preview = preview.to_csv(index=False)
+    prompt = (
+        f"User question:\n{question}\n\n"
+        f"Deterministic dashboard answer:\n{answer.get('text', '')}\n\n"
+        f"Table preview CSV:\n{table_preview if table_preview else 'No table rows returned.'}\n\n"
+        "Improve the final answer for a professional DSS user. Preserve the facts and do not alter table values."
+    )
+    ai_text, error = call_ollama_chat(prompt, config)
+    if error:
+        enriched = dict(answer)
+        enriched["ai_status"] = error
+        return enriched
+    enriched = dict(answer)
+    enriched["text"] = f"{answer.get('text', '')}\n\nLocal AI interpretation:\n{ai_text}"
+    enriched["ai_status"] = f"Enhanced with local {config['model']} via Ollama."
+    return enriched
+
+
+def local_ai_status_text() -> str:
+    config = local_ai_config()
+    if not config["enabled"]:
+        return "Local AI model is optional and currently disabled. Structured DSS queries are active."
+    if config["provider"] != "ollama":
+        return f"Local AI provider '{config['provider']}' is configured but only Ollama is supported in this build."
+    return f"Local AI enabled: Ollama model `{config['model']}` at `{config['base_url']}`."
+
+
 def assistant_match_dam(query: str, map_frame: pd.DataFrame) -> str | None:
     if map_frame.empty or "reservoir_name" not in map_frame:
         return None
@@ -5704,6 +6169,199 @@ def assistant_match_dam(query: str, map_frame: pd.DataFrame) -> str | None:
     return None
 
 
+def assistant_unique_values(frames: list[pd.DataFrame], columns: list[str]) -> list[str]:
+    values: set[str] = set()
+    for frame in frames:
+        if frame.empty:
+            continue
+        for column in columns:
+            if column in frame.columns:
+                values.update(frame[column].dropna().astype(str).str.strip().replace("", pd.NA).dropna().tolist())
+    return sorted(values, key=len, reverse=True)
+
+
+def assistant_query_filters(query: str, map_frame: pd.DataFrame, reservoir_frame: pd.DataFrame, river_frame: pd.DataFrame) -> dict:
+    filters: dict[str, object] = {"districts": [], "reservoirs": [], "gauges": [], "alerts": [], "fill_min": None, "fill_max": None}
+    normalized = normalize_name(query)
+    for district in assistant_unique_values([map_frame, reservoir_frame, river_frame], ["map_district", "district"]):
+        if normalize_name(district) and normalize_name(district) in normalized:
+            filters["districts"].append(district)
+    for reservoir in assistant_unique_values([map_frame, reservoir_frame], ["reservoir_name", "dam_name"]):
+        if normalize_name(reservoir) and normalize_name(reservoir) in normalized:
+            filters["reservoirs"].append(reservoir)
+    for gauge in assistant_unique_values([river_frame], ["gauge_station", "river_name"]):
+        if normalize_name(gauge) and normalize_name(gauge) in normalized:
+            filters["gauges"].append(gauge)
+    for alert in ["Critical", "Warning", "Watch", "Normal"]:
+        if alert.lower() in normalized:
+            filters["alerts"].append(alert)
+    below_match = re.search(r"(?:below|under|less than|<=|<)\s*(\d+(?:\.\d+)?)\s*%?", normalized)
+    above_match = re.search(r"(?:above|over|more than|>=|>)\s*(\d+(?:\.\d+)?)\s*%?", normalized)
+    between_match = re.search(r"between\s*(\d+(?:\.\d+)?)\s*(?:and|to|-)\s*(\d+(?:\.\d+)?)\s*%?", normalized)
+    if between_match:
+        low, high = sorted([float(between_match.group(1)), float(between_match.group(2))])
+        filters["fill_min"], filters["fill_max"] = low, high
+    elif below_match:
+        filters["fill_max"] = float(below_match.group(1))
+    elif above_match:
+        filters["fill_min"] = float(above_match.group(1))
+    return filters
+
+
+def assistant_apply_filters(frame: pd.DataFrame, filters: dict, prefer_map_district: bool = True) -> pd.DataFrame:
+    if frame.empty:
+        return frame
+    result = frame.copy()
+    districts = filters.get("districts") or []
+    reservoirs = filters.get("reservoirs") or []
+    alerts = filters.get("alerts") or []
+    gauges = filters.get("gauges") or []
+    if districts:
+        district_cols = ["map_district", "district"] if prefer_map_district else ["district", "map_district"]
+        district_mask = pd.Series(False, index=result.index)
+        for column in district_cols:
+            if column in result.columns:
+                district_mask = district_mask | result[column].astype(str).isin(districts)
+        result = result[district_mask]
+    if reservoirs:
+        reservoir_mask = pd.Series(False, index=result.index)
+        for column in ["reservoir_name", "dam_name"]:
+            if column in result.columns:
+                reservoir_mask = reservoir_mask | result[column].astype(str).isin(reservoirs)
+        result = result[reservoir_mask]
+    if alerts and "alert_level" in result.columns:
+        result = result[result["alert_level"].astype(str).isin(alerts)]
+    if gauges:
+        gauge_mask = pd.Series(False, index=result.index)
+        for column in ["gauge_station", "river_name"]:
+            if column in result.columns:
+                gauge_mask = gauge_mask | result[column].astype(str).isin(gauges)
+        result = result[gauge_mask]
+    fill_col = "display_filling" if "display_filling" in result.columns else "filling_percent" if "filling_percent" in result.columns else None
+    if fill_col:
+        filling = pd.to_numeric(result[fill_col], errors="coerce")
+        if filters.get("fill_min") is not None:
+            result = result[filling >= float(filters["fill_min"])]
+            filling = pd.to_numeric(result[fill_col], errors="coerce")
+        if filters.get("fill_max") is not None:
+            result = result[filling <= float(filters["fill_max"])]
+    return result
+
+
+def assistant_reservoir_trend_summary(reservoir_frame: pd.DataFrame, filters: dict, limit: int = 12) -> pd.DataFrame:
+    if reservoir_frame.empty or not {"reservoir_name", "observed_at", "water_level_m"}.issubset(reservoir_frame.columns):
+        return pd.DataFrame()
+    frame = assistant_apply_filters(reservoir_frame, filters).copy()
+    if frame.empty:
+        return pd.DataFrame()
+    frame["observed_at"] = pd.to_datetime(frame["observed_at"], errors="coerce")
+    frame["water_level_m"] = pd.to_numeric(frame["water_level_m"], errors="coerce")
+    frame["filling_percent"] = pd.to_numeric(frame.get("filling_percent"), errors="coerce") if "filling_percent" in frame else math.nan
+    frame = frame.dropna(subset=["reservoir_name", "observed_at", "water_level_m"]).sort_values(["reservoir_name", "observed_at"])
+    rows = []
+    for reservoir, group in frame.groupby("reservoir_name"):
+        if len(group) < 2:
+            continue
+        first = group.iloc[0]
+        latest = group.iloc[-1]
+        delta = float(latest["water_level_m"] - first["water_level_m"])
+        direction = "Rising" if delta > 0.05 else "Falling" if delta < -0.05 else "Stable"
+        rows.append(
+            {
+                "reservoir_name": reservoir,
+                "district": latest.get("district", ""),
+                "start_time": first["observed_at"],
+                "latest_time": latest["observed_at"],
+                "start_water_level_m": first["water_level_m"],
+                "latest_water_level_m": latest["water_level_m"],
+                "water_level_change_m": round(delta, 2),
+                "latest_filling_percent": latest.get("filling_percent", math.nan),
+                "trend": direction,
+            }
+        )
+    if not rows:
+        return pd.DataFrame()
+    return pd.DataFrame(rows).sort_values("water_level_change_m", ascending=False).head(limit)
+
+
+def assistant_days_requested(query: str, default: int = 5) -> int:
+    match = re.search(r"(?:last|past|previous)\s+(\d{1,2})\s*(?:day|days|date|dates)", normalize_name(query))
+    if match:
+        return max(1, min(30, int(match.group(1))))
+    return default
+
+
+def assistant_historical_alert_table(
+    query: str,
+    map_frame: pd.DataFrame,
+    reservoir_frame: pd.DataFrame,
+    filters: dict,
+) -> pd.DataFrame:
+    if reservoir_frame.empty or not {"reservoir_name", "observed_at", "water_level_m"}.issubset(reservoir_frame.columns):
+        return pd.DataFrame()
+    days = assistant_days_requested(query, default=5)
+    history = assistant_apply_filters(reservoir_frame, filters).copy()
+    if history.empty:
+        return pd.DataFrame()
+    history["observed_at"] = pd.to_datetime(history["observed_at"], errors="coerce")
+    history["observation_date"] = history["observed_at"].dt.date
+    history["water_level_m"] = pd.to_numeric(history.get("water_level_m"), errors="coerce")
+    history["frl_m"] = pd.to_numeric(history.get("frl_m"), errors="coerce") if "frl_m" in history else math.nan
+    history["filling_percent"] = pd.to_numeric(history.get("filling_percent"), errors="coerce") if "filling_percent" in history else math.nan
+    if "frl_gap_m" not in history.columns:
+        history["frl_gap_m"] = history["frl_m"] - history["water_level_m"]
+    else:
+        history["frl_gap_m"] = pd.to_numeric(history["frl_gap_m"], errors="coerce")
+    history = history.dropna(subset=["reservoir_name", "observed_at", "water_level_m"])
+    if history.empty:
+        return pd.DataFrame()
+    latest_dates = sorted(history["observation_date"].dropna().unique())[-days:]
+    history = history[history["observation_date"].isin(latest_dates)].copy()
+    if history.empty:
+        return pd.DataFrame()
+    if "critical" in normalize_name(query):
+        current_critical = []
+        if not map_frame.empty and {"reservoir_name", "alert_level"}.issubset(map_frame.columns):
+            current_critical = map_frame.loc[
+                map_frame["alert_level"].astype(str) == "Critical",
+                "reservoir_name",
+            ].dropna().astype(str).unique().tolist()
+        if current_critical:
+            history = history[history["reservoir_name"].astype(str).isin(current_critical)]
+        else:
+            history = history[pd.to_numeric(history["frl_gap_m"], errors="coerce") <= 0.5]
+    latest_per_day = (
+        history.sort_values(["reservoir_name", "observation_date", "observed_at"])
+        .groupby(["reservoir_name", "observation_date"], as_index=False)
+        .tail(1)
+    )
+    if latest_per_day.empty:
+        return pd.DataFrame()
+    latest_per_day["computed_alert_level"] = latest_per_day.apply(
+        lambda row: "Critical"
+        if pd.notna(row.get("frl_gap_m")) and row.get("frl_gap_m") <= 0.5
+        else "Warning"
+        if pd.notna(row.get("frl_gap_m")) and row.get("frl_gap_m") <= 1.5
+        else "Watch"
+        if pd.notna(row.get("filling_percent")) and row.get("filling_percent") >= 90
+        else "Normal",
+        axis=1,
+    )
+    columns = [
+        "observation_date",
+        "observed_at",
+        "reservoir_name",
+        "district",
+        "water_level_m",
+        "frl_m",
+        "frl_gap_m",
+        "filling_percent",
+        "computed_alert_level",
+    ]
+    available = [column for column in columns if column in latest_per_day.columns]
+    return latest_per_day[available].sort_values(["reservoir_name", "observation_date"])
+
+
 def dashboard_assistant_answer(
     question: str,
     map_status_frame: pd.DataFrame,
@@ -5712,8 +6370,14 @@ def dashboard_assistant_answer(
     gate_frame: pd.DataFrame,
     page_name: str,
     weather_points_frame: pd.DataFrame | None = None,
+    historical_reservoir_frame: pd.DataFrame | None = None,
 ) -> dict:
     query = normalize_name(question)
+    history_reservoir_frame = (
+        historical_reservoir_frame.copy()
+        if isinstance(historical_reservoir_frame, pd.DataFrame) and not historical_reservoir_frame.empty
+        else reservoir_frame
+    )
     latest_label = "current filter"
     if not reservoir_frame.empty and "observed_at" in reservoir_frame:
         latest_time = pd.to_datetime(reservoir_frame["observed_at"], errors="coerce").dropna()
@@ -5726,6 +6390,127 @@ def dashboard_assistant_answer(
         map_frame["frl_gap_m"] = pd.to_numeric(map_frame.get("frl_gap_m"), errors="coerce")
     else:
         map_frame = pd.DataFrame()
+
+    filters = assistant_query_filters(query, map_frame, history_reservoir_frame, river_frame)
+    advanced_terms = [
+        "query",
+        "get",
+        "filter",
+        "show",
+        "list",
+        "table",
+        "tables",
+        "find",
+        "count",
+        "how many",
+        "compare",
+        "last",
+        "previous",
+        "trend",
+        "history",
+        "past",
+        "day",
+        "days",
+        "rising",
+        "falling",
+        "increase",
+        "decrease",
+    ]
+    if query and any(term in query for term in advanced_terms):
+        if any(term in query for term in ["last", "past", "previous", "history", "day", "days"]) and any(term in query for term in ["critical", "warning", "alert", "frl"]):
+            historical_alerts = assistant_historical_alert_table(query, map_frame, history_reservoir_frame, filters)
+            if not historical_alerts.empty:
+                days = historical_alerts["observation_date"].nunique() if "observation_date" in historical_alerts else assistant_days_requested(query)
+                dams = historical_alerts["reservoir_name"].nunique() if "reservoir_name" in historical_alerts else 0
+                latest_rows = historical_alerts.sort_values("observed_at").groupby("reservoir_name", as_index=False).tail(1)
+                critical_latest = int((latest_rows.get("computed_alert_level", pd.Series(dtype=str)) == "Critical").sum())
+                text = (
+                    f"Historical alert query returned day-wise water-level observations for {dams} critical reservoir(s) "
+                    f"across the latest {days} available observation day(s) in the active data. "
+                    f"{critical_latest} of these remain Critical in their latest row. "
+                    "The table uses the latest observation available per reservoir per day and recomputes alert status from FRL gap/filling where possible."
+                )
+                return {"text": text, "table": prettify_dataframe_columns(historical_alerts.head(80))}
+        if any(term in query for term in ["trend", "history", "past", "rising", "falling", "increase", "decrease"]):
+            trend_table = assistant_reservoir_trend_summary(history_reservoir_frame, filters, limit=15)
+            if not trend_table.empty:
+                rising = int((trend_table["trend"] == "Rising").sum())
+                falling = int((trend_table["trend"] == "Falling").sum())
+                fastest = trend_table.iloc[0]
+                text = (
+                    f"Advanced trend query analysed {len(trend_table)} reservoir time-series record(s) under the active filters. "
+                    f"{rising} are rising and {falling} are falling in the selected report window. "
+                    f"The strongest rise is {fastest['reservoir_name']} with {fastest['water_level_change_m']:+.2f} m change. "
+                    "Use this with FRL gap, filling percentage and gate status before issuing operational advice."
+                )
+                return {"text": text, "table": prettify_dataframe_columns(trend_table)}
+        if any(term in query for term in ["river", "gauge", "station", "danger"]):
+            filtered_rivers = assistant_apply_filters(river_frame, filters, prefer_map_district=False)
+            if not filtered_rivers.empty:
+                if {"water_level_m", "danger_or_max_water_level_m"}.issubset(filtered_rivers.columns):
+                    filtered_rivers = filtered_rivers.copy()
+                    filtered_rivers["danger_gap_m"] = pd.to_numeric(filtered_rivers["danger_or_max_water_level_m"], errors="coerce") - pd.to_numeric(filtered_rivers["water_level_m"], errors="coerce")
+                    filtered_rivers = filtered_rivers.sort_values("danger_gap_m")
+                text = f"Advanced river/gauge query returned {len(filtered_rivers)} observation row(s) under the requested filters."
+                return {
+                    "text": text,
+                    "table": assistant_table(filtered_rivers, ["river_name", "gauge_station", "district", "water_level_m", "danger_or_max_water_level_m", "danger_gap_m", "observed_at"], 20),
+                }
+        if any(term in query for term in ["gate", "gates", "opened", "discharge"]):
+            filtered_gates = assistant_apply_filters(gate_frame, filters, prefer_map_district=False)
+            if not filtered_gates.empty:
+                filtered_gates = filtered_gates.copy()
+                filtered_gates["gate_opened_count"] = pd.to_numeric(filtered_gates.get("gate_opened_count"), errors="coerce").fillna(0)
+                if any(term in query for term in ["open", "opened"]):
+                    filtered_gates = filtered_gates[filtered_gates["gate_opened_count"] > 0]
+                filtered_gates = filtered_gates.sort_values(["gate_opened_count", "reservoir_name"], ascending=[False, True])
+                text = f"Advanced gate query returned {len(filtered_gates)} gate observation row(s)."
+                return {
+                    "text": text,
+                    "table": assistant_table(filtered_gates, ["reservoir_name", "district", "gate_opened_count", "total_no_of_gates", "opening_m", "discharge_cumecs", "discharge_cusec", "report_at"], 20),
+                }
+        filtered_map = assistant_apply_filters(map_frame, filters)
+        if not filtered_map.empty:
+            filtered_map = filtered_map.copy()
+            if "display_filling" in filtered_map:
+                filtered_map["display_filling"] = pd.to_numeric(filtered_map["display_filling"], errors="coerce")
+            if any(term in query for term in ["count", "how many"]):
+                district_col = "map_district" if "map_district" in filtered_map else "district"
+                count_table = (
+                    filtered_map.assign(district_label=filtered_map.get(district_col, pd.Series("Unassigned", index=filtered_map.index)).fillna("Unassigned"))
+                    .groupby("district_label", as_index=False)
+                    .agg(
+                        reservoirs=("reservoir_name", "nunique"),
+                        avg_filling_percent=("display_filling", "mean"),
+                        critical=("alert_level", lambda data: int((data == "Critical").sum())),
+                        warning=("alert_level", lambda data: int((data == "Warning").sum())),
+                        watch=("alert_level", lambda data: int((data == "Watch").sum())),
+                    )
+                    .sort_values(["critical", "warning", "avg_filling_percent"], ascending=False)
+                )
+                text = f"Advanced count query grouped {filtered_map['reservoir_name'].nunique()} reservoir(s) by district under the requested filters."
+                return {"text": text, "table": prettify_dataframe_columns(count_table.head(20))}
+            sort_col = "frl_gap_m" if any(term in query for term in ["frl", "gap", "critical", "warning"]) and "frl_gap_m" in filtered_map else "display_filling"
+            ascending = sort_col == "frl_gap_m" or any(term in query for term in ["least", "low", "below", "falling"])
+            filtered_map = filtered_map.sort_values(sort_col, ascending=ascending, na_position="last")
+            filter_bits = []
+            if filters.get("districts"):
+                filter_bits.append("district: " + ", ".join(filters["districts"]))
+            if filters.get("alerts"):
+                filter_bits.append("alert: " + ", ".join(filters["alerts"]))
+            if filters.get("fill_min") is not None:
+                filter_bits.append(f"filling >= {filters['fill_min']:.0f}%")
+            if filters.get("fill_max") is not None:
+                filter_bits.append(f"filling <= {filters['fill_max']:.0f}%")
+            text = (
+                f"Advanced reservoir query returned {filtered_map['reservoir_name'].nunique()} reservoir(s)"
+                + (f" for {', '.join(filter_bits)}." if filter_bits else ".")
+                + " The result is sorted by the most operationally relevant metric inferred from the question."
+            )
+            return {
+                "text": text,
+                "table": assistant_table(filtered_map, ["reservoir_name", "dam_name", "map_district", "sub_basin", "water_level_m", "frl_gap_m", "display_filling", "alert_level", "observed_at"], 20),
+            }
 
     weather_terms = ["weather", "rain", "rainfall", "forecast", "temperature", "wind", "uv", "cloud", "meteo", "open meteo"]
     if any(term in query for term in weather_terms):
@@ -5797,9 +6582,9 @@ def dashboard_assistant_answer(
     if matched_dam:
         dam_rows = map_frame[map_frame["reservoir_name"].astype(str) == matched_dam].copy()
         latest = dam_rows.iloc[0] if not dam_rows.empty else pd.Series(dtype=object)
-        dam_history = reservoir_frame[
-            reservoir_frame.get("reservoir_name", pd.Series(dtype=str)).astype(str) == matched_dam
-        ].copy() if not reservoir_frame.empty else pd.DataFrame()
+        dam_history = history_reservoir_frame[
+            history_reservoir_frame.get("reservoir_name", pd.Series(dtype=str)).astype(str) == matched_dam
+        ].copy() if not history_reservoir_frame.empty else pd.DataFrame()
         trend_text = "Trend is not available from the selected report window."
         if not dam_history.empty and {"observed_at", "water_level_m"}.issubset(dam_history.columns):
             dam_history["observed_at"] = pd.to_datetime(dam_history["observed_at"], errors="coerce")
@@ -5963,6 +6748,7 @@ def render_dashboard_assistant(
     gate_frame: pd.DataFrame,
     page_name: str,
     weather_points_frame: pd.DataFrame | None = None,
+    historical_reservoir_frame: pd.DataFrame | None = None,
 ) -> None:
     if "assistant_history" not in st.session_state:
         st.session_state.assistant_history = []
@@ -5971,10 +6757,10 @@ def render_dashboard_assistant(
 
     with st.expander("AI DSS Assistant: Ask About Current Dashboard Data", expanded=False):
         st.markdown(
-            '<div class="panel-note">Enhanced hybrid DSS assistant: quick prompts, dam-name lookup, operational brief generation, and local analytics from the currently selected reports and filters. No external AI key is required for these answers.</div>',
+            '<div class="panel-note">Enhanced hybrid DSS assistant: operational briefs, dam-name lookup, weather intelligence, and advanced data queries over the loaded historical report data. Try natural questions using district, dam, alert, filling percentage, gate, river, trend, or last-N-days table filters.</div>',
             unsafe_allow_html=True,
         )
-        prompt_cols = st.columns(7)
+        st.caption(local_ai_status_text())
         quick_prompts = [
             "DSS brief",
             "Weather DSS brief",
@@ -5983,32 +6769,67 @@ def render_dashboard_assistant(
             "Opened gates",
             "Least filled below 25%",
             "River gauges near danger",
+            "Rising reservoir trends",
+            "Critical dams last 5 days water levels",
         ]
-        for col, prompt in zip(prompt_cols, quick_prompts):
-            if col.button(prompt, key=f"assistant_quick_{normalize_name(prompt)}", use_container_width=True):
-                answer = dashboard_assistant_answer(prompt, map_status_frame, reservoir_frame, river_frame, gate_frame, page_name, weather_points_frame)
-                st.session_state.assistant_history.insert(0, {"question": prompt, **answer})
+        for start in range(0, len(quick_prompts), 3):
+            prompt_cols = st.columns(3)
+            for col, prompt in zip(prompt_cols, quick_prompts[start : start + 3]):
+                if col.button(prompt, key=f"assistant_quick_{normalize_name(prompt)}", use_container_width=True):
+                    answer = dashboard_assistant_answer(
+                        prompt,
+                        map_status_frame,
+                        reservoir_frame,
+                        river_frame,
+                        gate_frame,
+                        page_name,
+                        weather_points_frame,
+                        historical_reservoir_frame,
+                    )
+                    answer = local_ai_enhance_answer(prompt, answer)
+                    st.session_state.assistant_history.insert(0, {"question": prompt, **answer})
 
         with st.form("dashboard_assistant_form", clear_on_submit=True):
             question = st.text_input(
                 "Ask a question",
-                placeholder="Example: Which dams are critical today and which district needs attention?",
+                placeholder="Example: Get tables of Critical dams for last 5 days with each day water levels.",
                 key="assistant_question_input",
             )
             submitted = st.form_submit_button("Ask Assistant", type="primary", use_container_width=True)
         if submitted and question.strip():
-            answer = dashboard_assistant_answer(question, map_status_frame, reservoir_frame, river_frame, gate_frame, page_name, weather_points_frame)
+            answer = dashboard_assistant_answer(
+                question,
+                map_status_frame,
+                reservoir_frame,
+                river_frame,
+                gate_frame,
+                page_name,
+                weather_points_frame,
+                historical_reservoir_frame,
+            )
+            answer = local_ai_enhance_answer(question.strip(), answer)
             st.session_state.assistant_history.insert(0, {"question": question.strip(), **answer})
 
         if st.session_state.assistant_history:
             latest = st.session_state.assistant_history[0]
             st.markdown(f"**You asked:** {escape(str(latest.get('question', '')))}")
             st.info(str(latest.get("text", "")))
+            if latest.get("ai_status"):
+                st.caption(str(latest.get("ai_status")))
             table = latest.get("table")
             if isinstance(table, pd.DataFrame) and not table.empty:
                 st.dataframe(table, use_container_width=True, hide_index=True, height=260)
         else:
-            overview = dashboard_assistant_answer("", map_status_frame, reservoir_frame, river_frame, gate_frame, page_name, weather_points_frame)
+            overview = dashboard_assistant_answer(
+                "",
+                map_status_frame,
+                reservoir_frame,
+                river_frame,
+                gate_frame,
+                page_name,
+                weather_points_frame,
+                historical_reservoir_frame,
+            )
             st.info(overview["text"])
 
 
@@ -6343,7 +7164,7 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
                 st.error("Invalid admin credentials.")
         return
 
-    admin_tabs = st.tabs(["PDF Upload & Data Refresh", "Manual Data Entry", "Messaging Alerts", "Database Sync", "Audit Log"])
+    admin_tabs = st.tabs(["PDF Upload & Data Refresh", "Manual Data Entry", "Messaging Alerts", "Database Sync", "Audit Log", "Visitor Analytics"])
     with admin_tabs[0]:
         st.markdown(
             '<div class="panel-note">Upload official MP WRD flood report PDFs. The parser creates a new parsed report folder that becomes available in the dashboard report selector.</div>',
@@ -6740,6 +7561,9 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
         if audit_log.empty and alert_log.empty:
             st.info("No administration actions have been recorded in this session.")
 
+    with admin_tabs[5]:
+        render_visitor_analytics_admin()
+
 
 if "main_dashboard_page" not in st.session_state:
     st.session_state.main_dashboard_page = "Infographics"
@@ -6782,7 +7606,7 @@ assistant_weather_points = (
     if assistant_weather_frames
     else pd.DataFrame(columns=["point_type", "point_name", "district", "latitude", "longitude"])
 )
-render_dashboard_assistant(map_status, reservoir_view, river_view, gate_view_all, main_page, assistant_weather_points)
+render_dashboard_assistant(map_status, reservoir_view, river_view, gate_view_all, main_page, assistant_weather_points, reservoirs)
 
 if main_page == "Administration":
     render_admin_operations(is_admin, map_status, dirs)
@@ -7461,8 +8285,9 @@ if main_page == "Weather Forecast":
         towns_master["latitude"] = pd.to_numeric(towns_master["latitude"], errors="coerce")
         towns_master["longitude"] = pd.to_numeric(towns_master["longitude"], errors="coerce")
         towns_master = towns_master.dropna(subset=["latitude", "longitude"]).sort_values(["district", "town_name"]).reset_index(drop=True)
-    dam_weather_points = weather_points_from_dams(dam_locations)
-    district_weather_points = weather_points_from_districts(dam_locations, towns_master)
+    dam_weather_source = map_status if not map_status.empty else dam_locations
+    dam_weather_points = weather_points_from_dams(dam_weather_source)
+    district_weather_points = weather_points_from_districts(dam_weather_source, towns_master)
     weather_point_sets = {
         "Towns": towns_master,
         "Dams": dam_weather_points,
@@ -7476,6 +8301,28 @@ if main_page == "Weather Forecast":
         with weather_top[0]:
             selected_weather_set = st.selectbox("Weather coverage", available_weather_sets, key="weather_point_set")
         weather_points = weather_point_sets[selected_weather_set].copy()
+        dam_layer_weather = dam_weather_points.copy()
+        if not dam_weather_points.empty:
+            dam_layer_controls = st.columns([0.32, 0.68])
+            with dam_layer_controls[0]:
+                if st.button("Load all dam forecasts", use_container_width=True, key="load_all_dam_weather_button"):
+                    st.session_state["load_all_dam_weather"] = True
+            with dam_layer_controls[1]:
+                st.caption(
+                    "Dam weather layer is visible on the map. Load all dam forecasts to color every dam by 7-day weather risk and view the dam-wise forecast table."
+                )
+            if st.session_state.get("load_all_dam_weather"):
+                dam_points_key = tuple(
+                    (
+                        str(row.town_name),
+                        str(row.district),
+                        round(float(row.latitude), 5),
+                        round(float(row.longitude), 5),
+                    )
+                    for row in dam_weather_points.dropna(subset=["latitude", "longitude"]).itertuples(index=False)
+                )
+                with st.spinner("Fetching cached weather forecasts for dam locations..."):
+                    dam_layer_weather = build_weather_forecast_for_points(dam_points_key)
         with weather_top[1]:
             district_filter_options = ["All districts"] + sorted(weather_points["district"].dropna().astype(str).unique())
             selected_weather_district = st.selectbox("Weather district", district_filter_options, key="weather_district_filter")
@@ -7507,6 +8354,28 @@ if main_page == "Weather Forecast":
                 force_refresh=force_weather_refresh,
             )
             st.caption(f"Selected {selected_weather_set.lower()} weather source: {weather_source}.")
+            google_weather_api_key = get_app_secret("google_weather_api_key", "GOOGLE_WEATHER_API_KEY", "")
+            if is_admin:
+                with st.expander("Google Weather API demo check", expanded=False):
+                    if not google_weather_api_key:
+                        st.info("Configure Streamlit secret google_weather_api_key or environment variable GOOGLE_WEATHER_API_KEY to test Google Weather API for the selected point.")
+                    else:
+                        st.caption("Runs a current-condition lookup for the selected weather point without displaying the configured API key.")
+                        if st.button("Test Google Weather API for selected point", use_container_width=True, key="test_google_weather_api"):
+                            google_payload, google_error = fetch_google_weather_current(
+                                float(selected_town["latitude"]),
+                                float(selected_town["longitude"]),
+                                google_weather_api_key,
+                            )
+                            if google_error:
+                                st.error(google_error)
+                            else:
+                                st.success("Google Weather API responded successfully for the selected point.")
+                                st.dataframe(
+                                    pd.DataFrame([google_weather_summary(google_payload)]),
+                                    use_container_width=True,
+                                    hide_index=True,
+                                )
             if weather_error and daily_weather.empty:
                 st.error(weather_error)
             elif daily_weather.empty:
@@ -7562,6 +8431,15 @@ if main_page == "Weather Forecast":
                 summary_towns.loc[selected_mask, "forecast_wind_max_kmh"] = forecast_wind_max
                 summary_towns.loc[selected_mask, "forecast_uv_max"] = forecast_uv_max
                 summary_towns.loc[selected_mask, "weather_risk"] = selected_weather_risk
+                if not dam_layer_weather.empty and not st.session_state.get("load_all_dam_weather"):
+                    selected_dam_mask = dam_layer_weather["town_name"].astype(str) == selected_town_name
+                    if selected_weather_set == "Dams" and selected_dam_mask.any():
+                        dam_layer_weather.loc[selected_dam_mask, "forecast_rain_mm"] = forecast_rain_total
+                        dam_layer_weather.loc[selected_dam_mask, "forecast_temp_max_c"] = forecast_temp_max
+                        dam_layer_weather.loc[selected_dam_mask, "forecast_wind_max_kmh"] = forecast_wind_max
+                        dam_layer_weather.loc[selected_dam_mask, "forecast_uv_max"] = forecast_uv_max
+                        dam_layer_weather.loc[selected_dam_mask, "weather_risk"] = selected_weather_risk
+                        dam_layer_weather.loc[selected_dam_mask, "source"] = weather_source
 
                 st.markdown(
                     f"""
@@ -7608,7 +8486,26 @@ if main_page == "Weather Forecast":
                     weather_tile_api_key,
                     weather_district_geojson,
                     f"Weather Forecast Map: MP {selected_weather_set}",
+                    dam_layer_weather,
                 )
+
+                if st.session_state.get("load_all_dam_weather") and not dam_layer_weather.empty:
+                    dam_forecast_display = dam_layer_weather[
+                        [
+                            "town_name",
+                            "district",
+                            "forecast_rain_mm",
+                            "forecast_temp_max_c",
+                            "forecast_wind_max_kmh",
+                            "forecast_uv_max",
+                            "current_rain_mm",
+                            "current_temp_c",
+                            "weather_risk",
+                            "status",
+                        ]
+                    ].sort_values(["weather_risk", "forecast_rain_mm", "town_name"], ascending=[True, False, True])
+                    st.markdown("**Dam-wise Weather Forecast Layer**")
+                    st.dataframe(dam_forecast_display, use_container_width=True, hide_index=True, height=260)
 
                 weather_cols = st.columns([1.05, 0.95])
                 with weather_cols[0]:

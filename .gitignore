@@ -1,0 +1,7 @@
+.streamlit/secrets.toml
+data/*.sqlite
+data/*.sqlite-*
+__pycache__/
+*.pyc
+.venv/
+admin_alert_outbox/
