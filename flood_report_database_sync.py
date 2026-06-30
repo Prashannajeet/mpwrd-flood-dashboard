@@ -4,6 +4,7 @@ import argparse
 import json
 import math
 import os
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ except ImportError as exc:  # pragma: no cover - shown as CLI message
 
 
 APP_DIR = Path(__file__).resolve().parent
+RIVER_FLOW_FORECAST_DB = APP_DIR / "data" / "river_flow_forecasts.sqlite"
 
 
 POSTGRES_DDL = [
@@ -107,6 +109,33 @@ POSTGRES_DDL = [
         PRIMARY KEY (report_key, reservoir_name, district)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS ai_river_flow_forecasts (
+        forecast_id VARCHAR(64) PRIMARY KEY,
+        generated_at TIMESTAMP NOT NULL,
+        river_name VARCHAR(160),
+        gauge_station VARCHAR(255),
+        district VARCHAR(160),
+        basin VARCHAR(160),
+        observed_at TIMESTAMP,
+        forecast_time TIMESTAMP,
+        lead_day INTEGER,
+        water_level_m NUMERIC(10,3),
+        danger_gap_m NUMERIC(10,3),
+        wl_delta_m NUMERIC(10,3),
+        glofas_flow_cms NUMERIC(14,3),
+        grrr_flow_cms NUMERIC(14,3),
+        predicted_discharge_cumecs NUMERIC(14,3),
+        watch_cms NUMERIC(14,3),
+        flood_cms NUMERIC(14,3),
+        danger_cms NUMERIC(14,3),
+        risk_band VARCHAR(40),
+        source_model VARCHAR(120),
+        prediction_confidence NUMERIC(6,3),
+        model_status VARCHAR(500),
+        synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
 ]
 
 
@@ -124,6 +153,7 @@ TABLE_KEYS = {
     "reservoir_observations": ["reservoir_name", "district", "observed_at"],
     "river_observations": ["river_name", "gauge_station", "district", "observed_at"],
     "reservoir_gate_observations": ["report_key", "reservoir_name", "district"],
+    "ai_river_flow_forecasts": ["forecast_id"],
 }
 
 
@@ -212,6 +242,23 @@ def create_schema(engine) -> None:
             conn.execute(text(ddl))
 
 
+def read_ai_river_flow_forecasts(parsed_root: Path = APP_DIR) -> pd.DataFrame:
+    db_path = parsed_root / "data" / "river_flow_forecasts.sqlite"
+    if not db_path.exists():
+        db_path = RIVER_FLOW_FORECAST_DB
+    if not db_path.exists():
+        return pd.DataFrame()
+    try:
+        with sqlite3.connect(db_path) as conn:
+            frame = pd.read_sql_query("SELECT * FROM river_flow_forecasts", conn)
+    except Exception:
+        return pd.DataFrame()
+    for column in ["generated_at", "observed_at", "forecast_time"]:
+        if column in frame:
+            frame[column] = pd.to_datetime(frame[column], errors="coerce")
+    return frame
+
+
 def upsert_frame(engine, table_name: str, frame: pd.DataFrame) -> int:
     if frame.empty:
         return 0
@@ -248,8 +295,9 @@ def sync_reports(database_url: str, parsed_root: Path = APP_DIR) -> dict[str, in
     totals = {table: 0 for table in TABLE_KEYS}
     for folder in parsed_report_dirs(parsed_root):
         payload = read_report_folder(folder)
-        for table_name in TABLE_KEYS:
+        for table_name in [table for table in TABLE_KEYS if table != "ai_river_flow_forecasts"]:
             totals[table_name] += upsert_frame(engine, table_name, payload[table_name])  # type: ignore[arg-type]
+    totals["ai_river_flow_forecasts"] += upsert_frame(engine, "ai_river_flow_forecasts", read_ai_river_flow_forecasts(parsed_root))
     return totals
 
 

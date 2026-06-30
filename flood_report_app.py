@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import math
@@ -33,8 +33,24 @@ DAM_SHAPEFILE = APP_DIR / "dam_shapefile" / "Dams_EinC_54_R2.shp"
 GLOFAS_PROJECT_JSON = APP_DIR / "data" / "glofas_mp_project.json"
 GRRR_PROJECT_JSON = APP_DIR / "data" / "grrr_mp_project.json"
 MP_TOWNS_CSV = APP_DIR / "data" / "mp_towns.csv"
+RIVER_FORECAST_SERVICE_CACHE_JSON = APP_DIR / "data" / "river_forecast_service_status.json"
+LOCAL_NARMADA_OBSERVED_CSV = Path(r"D:\01 Project\03 MPWRD\14 Digitial Atlas\01 Data\06 Excel CSV\GD Sites\Corrected\narmada_data.csv")
+LOCAL_GD_SITES_SWEDES_ZIP = Path(r"D:\01 Project\03 MPWRD\14 Digitial Atlas\01 Data\01 SHP\Deliverables\Task 5\GD Sites SWEDES.zip")
+NARMADA_OBSERVED_CSV = (
+    APP_DIR / "data" / "narmada_observed.csv"
+    if (APP_DIR / "data" / "narmada_observed.csv").exists()
+    else LOCAL_NARMADA_OBSERVED_CSV
+)
+GD_SITES_SWEDES_LAYER = (
+    APP_DIR / "data" / "gd_sites_swedes.geojson"
+    if (APP_DIR / "data" / "gd_sites_swedes.geojson").exists()
+    else LOCAL_GD_SITES_SWEDES_ZIP
+)
 WEATHER_CACHE_DB = APP_DIR / "data" / "weather_cache.sqlite"
 VISITOR_ANALYTICS_DB = APP_DIR / "data" / "visitor_analytics.sqlite"
+RIVER_FLOW_FORECAST_DB = APP_DIR / "data" / "river_flow_forecasts.sqlite"
+GD_SITE_FORECAST_DB = APP_DIR / "data" / "gd_site_forecasts.sqlite"
+RIVER_FLOW_MODEL_DIR = APP_DIR / "models" / "river_flow_tensorflow"
 WEATHER_REFRESH_HOURS = 3
 RESERVOIR_CAPACITY_ESTIMATES_CSV = APP_DIR / "data" / "reservoir_capacity_estimates.csv"
 RESERVOIR_CAPACITY_CURVES_CSV = APP_DIR / "data" / "reservoir_capacity_curves.csv"
@@ -1426,6 +1442,1083 @@ def attach_dam_locations(dams: pd.DataFrame, reservoir_names: list[str]) -> pd.D
     return pd.DataFrame(rows)
 
 
+def parse_dms_coordinate(value: object) -> float | None:
+    if value is None or pd.isna(value):
+        return None
+    text = unicodedata.normalize("NFKD", str(value)).replace("�", " ").replace("°", " ")
+    parts = re.findall(r"-?\d+(?:\.\d+)?", text)
+    if not parts:
+        return None
+    numbers = [float(part) for part in parts[:3]]
+    sign = -1 if str(value).strip().startswith("-") else 1
+    degrees = abs(numbers[0])
+    minutes = numbers[1] if len(numbers) > 1 else 0.0
+    seconds = numbers[2] if len(numbers) > 2 else 0.0
+    return sign * (degrees + minutes / 60.0 + seconds / 3600.0)
+
+
+@st.cache_data(show_spinner=False)
+def load_gd_sites_swedes(zip_path: str) -> pd.DataFrame:
+    path = Path(zip_path)
+    if not path.exists():
+        return pd.DataFrame()
+    try:
+        import geopandas as gpd
+
+        gdf = gpd.read_file(f"zip://{path}" if path.suffix.lower() == ".zip" else path)
+    except Exception:
+        return pd.DataFrame()
+
+    sites = pd.DataFrame(gdf.drop(columns="geometry", errors="ignore")).copy()
+    sites["station_code"] = sites.get("Station Co", pd.Series(dtype=str)).astype(str).str.strip()
+    sites["station_name"] = sites.get("Station Na", pd.Series(dtype=str)).astype(str).str.strip()
+    sites["district"] = sites.get("District", pd.Series(dtype=str)).astype(str).str.strip()
+    sites["river"] = sites.get("River", pd.Series(dtype=str)).astype(str).str.strip()
+    sites["tributary"] = sites.get("Tributary", pd.Series(dtype=str)).astype(str).str.strip()
+    sites["zero_rl_m"] = pd.to_numeric(sites.get("Zero RL"), errors="coerce")
+    sites["site_type"] = sites.get("SW_Station", sites.get("Site_Type", pd.Series(dtype=str))).astype(str)
+    sites["station_operational"] = sites.get("Station_Op", pd.Series(dtype=str)).astype(str)
+    sites["latitude"] = pd.Series([None] * len(sites), dtype="float64")
+    sites["longitude"] = pd.Series([None] * len(sites), dtype="float64")
+    if "geometry" in gdf:
+        valid_geom = ~gdf.geometry.isna()
+        sites.loc[valid_geom, "latitude"] = gdf.loc[valid_geom].geometry.y.astype(float)
+        sites.loc[valid_geom, "longitude"] = gdf.loc[valid_geom].geometry.x.astype(float)
+    lat_from_field = sites.get("Lat", pd.Series(index=sites.index, dtype=object)).map(parse_dms_coordinate)
+    lon_from_field = sites.get("Long", pd.Series(index=sites.index, dtype=object)).map(parse_dms_coordinate)
+    sites["latitude"] = pd.to_numeric(sites["latitude"], errors="coerce").fillna(pd.to_numeric(lat_from_field, errors="coerce"))
+    sites["longitude"] = pd.to_numeric(sites["longitude"], errors="coerce").fillna(pd.to_numeric(lon_from_field, errors="coerce"))
+    sites["has_location"] = sites["latitude"].notna() & sites["longitude"].notna()
+    useful_cols = [
+        "station_code",
+        "station_name",
+        "district",
+        "river",
+        "tributary",
+        "zero_rl_m",
+        "latitude",
+        "longitude",
+        "has_location",
+        "site_type",
+        "station_operational",
+    ]
+    return sites[useful_cols].dropna(subset=["station_code"]).drop_duplicates("station_code").reset_index(drop=True)
+
+
+@st.cache_data(show_spinner=False)
+def load_latest_gd_observed(csv_path: str) -> pd.DataFrame:
+    path = Path(csv_path)
+    if not path.exists():
+        return pd.DataFrame()
+    try:
+        observed = pd.read_csv(path)
+    except Exception:
+        return pd.DataFrame()
+    observed.columns = [str(column).strip() for column in observed.columns]
+    required = {"Station Code", "Reading Date Time", "WL"}
+    if not required.issubset(observed.columns):
+        return pd.DataFrame()
+    observed["observed_at"] = pd.to_datetime(observed["Reading Date Time"], errors="coerce")
+    observed["water_level_m"] = pd.to_numeric(observed["WL"], errors="coerce")
+    observed["station_code"] = observed["Station Code"].astype(str).str.strip()
+    observed["entry_type"] = observed.get("Entry Type", "").astype(str)
+    observed["data_type"] = observed.get("Data Type", "").astype(str)
+    observed["zero_rl_observed_m"] = pd.to_numeric(observed.get("Zero RL"), errors="coerce")
+    valid = observed.dropna(subset=["station_code", "observed_at", "water_level_m"]).copy()
+    if valid.empty:
+        return pd.DataFrame()
+    valid = valid.sort_values(["station_code", "observed_at"])
+    valid["wl_delta_m"] = valid.groupby("station_code")["water_level_m"].diff()
+    latest = valid.groupby("station_code", dropna=False).tail(1)
+    return latest[
+        ["station_code", "observed_at", "water_level_m", "wl_delta_m", "entry_type", "data_type", "zero_rl_observed_m"]
+    ].reset_index(drop=True)
+
+
+@st.cache_data(show_spinner=False)
+def load_gd_observed_history(csv_path: str, days: int = 31) -> pd.DataFrame:
+    path = Path(csv_path)
+    if not path.exists():
+        return pd.DataFrame()
+    try:
+        observed = pd.read_csv(path)
+    except Exception:
+        return pd.DataFrame()
+    observed.columns = [str(column).strip() for column in observed.columns]
+    required = {"Station Code", "Reading Date Time", "WL"}
+    if not required.issubset(observed.columns):
+        return pd.DataFrame()
+    observed["station_code"] = observed["Station Code"].astype(str).str.strip()
+    observed["observed_at"] = pd.to_datetime(observed["Reading Date Time"], errors="coerce")
+    observed["water_level_m"] = pd.to_numeric(observed["WL"], errors="coerce")
+    observed["data_type"] = observed.get("Data Type", "").astype(str)
+    observed["entry_type"] = observed.get("Entry Type", "").astype(str)
+    valid = observed.dropna(subset=["station_code", "observed_at", "water_level_m"]).copy()
+    if valid.empty:
+        return pd.DataFrame()
+    max_time = valid["observed_at"].max()
+    start_time = max_time - pd.Timedelta(days=days)
+    history = valid[valid["observed_at"] >= start_time].sort_values(["station_code", "observed_at"]).copy()
+    history["water_level_change_m"] = history.groupby("station_code")["water_level_m"].diff()
+    return history[["station_code", "observed_at", "water_level_m", "water_level_change_m", "entry_type", "data_type"]].reset_index(drop=True)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_online_river_forecast_time() -> pd.Timestamp | None:
+    payload = None
+    url = f"{GEOGLOWS_MEDIUM_URL}/0?f=json"
+    try:
+        with urllib.request.urlopen(url, timeout=4) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        try:
+            result = subprocess.run(
+                ["curl.exe", "-s", "--max-time", "8", url],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                payload = json.loads(result.stdout)
+        except Exception:
+            payload = None
+    if not payload:
+        try:
+            if RIVER_FORECAST_SERVICE_CACHE_JSON.exists():
+                payload = json.loads(RIVER_FORECAST_SERVICE_CACHE_JSON.read_text(encoding="utf-8"))
+        except Exception:
+            payload = None
+    if not payload:
+        return None
+    extent = payload.get("timeInfo", {}).get("timeExtent") or []
+    values = [value for value in extent if isinstance(value, (int, float))]
+    if not values:
+        return None
+    now_ms = pd.Timestamp.now(tz="UTC").timestamp() * 1000
+    selected = min(values, key=lambda value: abs(float(value) - now_ms))
+    return pd.to_datetime(selected, unit="ms", utc=True).tz_convert("Asia/Kolkata")
+
+
+def build_gd_site_forecast_rows(
+    gd_sites: pd.DataFrame,
+    latest_observed: pd.DataFrame,
+    basin_nodes: list[dict] | None = None,
+    runoff_nodes: list[dict] | None = None,
+    forecast_days: int = 7,
+    online_now_time: pd.Timestamp | None = None,
+) -> pd.DataFrame:
+    if gd_sites.empty:
+        return pd.DataFrame()
+    sites = gd_sites.copy()
+    latest = latest_observed.copy() if not latest_observed.empty else pd.DataFrame(columns=["station_code"])
+    merged = sites.merge(latest, on="station_code", how="left")
+    rows = []
+    if online_now_time is not None and pd.notna(online_now_time):
+        base_date = pd.Timestamp(online_now_time).tz_convert("Asia/Kolkata").normalize()
+        current_timestamp = pd.Timestamp(online_now_time).tz_convert("Asia/Kolkata")
+        online_status = "Online current signal"
+    else:
+        current_timestamp = pd.Timestamp.now(tz="Asia/Kolkata")
+        base_date = current_timestamp.normalize()
+        online_status = "Current generated signal"
+    for record in merged.to_dict("records"):
+        context = pd.Series(
+            {
+                "basin": record.get("river") or record.get("tributary") or "Madhya Pradesh",
+                "river_name": record.get("river"),
+                "district": record.get("district"),
+            }
+        )
+        basin_node = match_forecast_node(context, basin_nodes or [])
+        runoff_node = match_forecast_node(context, runoff_nodes or [])
+        basin_flow = latest_node_flow(basin_node, ["glofas_p50_cms", "reservoir_attenuated_cms", "chirps_hindcast_cms"]) if basin_node else float("nan")
+        river_flow = latest_node_flow(runoff_node, ["reforecast_p50_cms", "reservoir_adjusted_cms", "reanalysis_discharge_cms"]) if runoff_node else float("nan")
+        wl = pd.to_numeric(pd.Series([record.get("water_level_m")]), errors="coerce").iloc[0]
+        wl_delta = pd.to_numeric(pd.Series([record.get("wl_delta_m")]), errors="coerce").iloc[0]
+        zero_rl = pd.to_numeric(pd.Series([record.get("zero_rl_observed_m")]), errors="coerce").iloc[0]
+        if pd.isna(zero_rl):
+            zero_rl = pd.to_numeric(pd.Series([record.get("zero_rl_m")]), errors="coerce").iloc[0]
+        external_values = [float(value) for value in [basin_flow, river_flow] if not pd.isna(value)]
+        external_base = sum(external_values) / len(external_values) if external_values else float("nan")
+        observed_at = record.get("observed_at")
+        observed_age_days = None
+        if pd.notna(observed_at):
+            observed_age_days = (current_timestamp.tz_convert("UTC") - pd.Timestamp(observed_at).tz_convert("UTC")).days
+        for lead_day in range(0, forecast_days + 1):
+            forecast_time = current_timestamp if lead_day == 0 else base_date + pd.Timedelta(days=lead_day)
+            if pd.isna(external_base):
+                forecast_flow = float("nan")
+            else:
+                stage_signal = max(0.0, float(wl or 0) - float(zero_rl or 0)) * 12.0 if not pd.isna(wl) and not pd.isna(zero_rl) else 0.0
+                trend_signal = (0.0 if pd.isna(wl_delta) else float(wl_delta)) * 18.0
+                lead_factor = 1.0 + lead_day * 0.025
+                forecast_flow = max(0.0, external_base * lead_factor + stage_signal + trend_signal)
+            rows.append(
+                {
+                    "station_code": record.get("station_code"),
+                    "station_name": record.get("station_name"),
+                    "district": record.get("district"),
+                    "river": record.get("river"),
+                    "tributary": record.get("tributary"),
+                    "latitude": record.get("latitude"),
+                    "longitude": record.get("longitude"),
+                    "has_location": record.get("has_location"),
+                    "observed_at": observed_at,
+                    "observed_age_days": observed_age_days,
+                    "current_water_level_m": wl,
+                    "water_level_change_m": wl_delta,
+                    "zero_rl_m": zero_rl,
+                    "forecast_time": forecast_time,
+                    "lead_day": lead_day,
+                    "current_flow_cms": round(external_base, 3) if lead_day == 0 and external_values else None,
+                    "river_forecast_flow_cms": river_flow,
+                    "basin_forecast_flow_cms": basin_flow,
+                    "combined_forecast_flow_cms": round(forecast_flow, 3) if not pd.isna(forecast_flow) else None,
+                    "data_period": "Now Data" if lead_day == 0 else "Forecasted Data",
+                    "forecast_status": online_status if external_values else "Observed only",
+                }
+            )
+    out = pd.DataFrame(rows)
+    for column in ["current_water_level_m", "water_level_change_m", "zero_rl_m", "observed_age_days", "current_flow_cms", "river_forecast_flow_cms", "basin_forecast_flow_cms", "combined_forecast_flow_cms"]:
+        if column in out:
+            out[column] = pd.to_numeric(out[column], errors="coerce")
+    return out
+
+
+def gd_forecast_slot(timestamp: pd.Timestamp | None = None) -> tuple[str, str, pd.Timestamp]:
+    ts = pd.Timestamp(timestamp if timestamp is not None else pd.Timestamp.now(tz="Asia/Kolkata"))
+    if ts.tzinfo is None:
+        ts = ts.tz_localize("Asia/Kolkata")
+    else:
+        ts = ts.tz_convert("Asia/Kolkata")
+    slot_hours = [8, 12, 16, 20]
+    slot_hour = max([hour for hour in slot_hours if hour <= ts.hour], default=20)
+    slot_date = ts.normalize()
+    if ts.hour < 8:
+        slot_date = (ts - pd.Timedelta(days=1)).normalize()
+    slot_ts = slot_date + pd.Timedelta(hours=slot_hour)
+    return slot_date.strftime("%Y-%m-%d"), f"{slot_hour:02d}:00", slot_ts
+
+
+def init_gd_site_forecast_db() -> None:
+    GD_SITE_FORECAST_DB.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(GD_SITE_FORECAST_DB) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS gd_site_forecasts (
+                forecast_id TEXT PRIMARY KEY,
+                slot_date TEXT NOT NULL,
+                slot_time TEXT NOT NULL,
+                generated_at TEXT NOT NULL,
+                station_code TEXT,
+                station_name TEXT,
+                district TEXT,
+                river TEXT,
+                tributary TEXT,
+                latitude REAL,
+                longitude REAL,
+                observed_at TEXT,
+                observed_age_days REAL,
+                forecast_time TEXT,
+                data_period TEXT,
+                current_flow_cms REAL,
+                current_water_level_m REAL,
+                water_level_change_m REAL,
+                river_forecast_flow_cms REAL,
+                basin_forecast_flow_cms REAL,
+                combined_forecast_flow_cms REAL,
+                linked_comid TEXT,
+                streamorder REAL,
+                return_period REAL,
+                forecast_status TEXT
+            )
+            """
+        )
+        for column_name, column_type in [
+            ("linked_comid", "TEXT"),
+            ("streamorder", "REAL"),
+            ("return_period", "REAL"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE gd_site_forecasts ADD COLUMN {column_name} {column_type}")
+            except sqlite3.OperationalError:
+                pass
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gd_site_forecasts_slot ON gd_site_forecasts(slot_date, slot_time)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gd_site_forecasts_station_time ON gd_site_forecasts(station_code, forecast_time)")
+
+
+def save_gd_site_forecasts(forecast_df: pd.DataFrame, slot_timestamp: pd.Timestamp | None = None) -> int:
+    if forecast_df.empty:
+        return 0
+    init_gd_site_forecast_db()
+    slot_date, slot_time, slot_ts = gd_forecast_slot(slot_timestamp)
+    generated_at = pd.Timestamp.now(tz="Asia/Kolkata").isoformat()
+    rows = forecast_df.copy()
+    rows["slot_date"] = slot_date
+    rows["slot_time"] = slot_time
+    rows["generated_at"] = generated_at
+    rows["forecast_id"] = rows.apply(
+        lambda row: hashlib.sha256(
+            "|".join(
+                str(row.get(column) or "")
+                for column in ["slot_date", "slot_time", "station_code", "forecast_time", "data_period"]
+            ).encode("utf-8", errors="ignore")
+        ).hexdigest()[:32],
+        axis=1,
+    )
+    cols = [
+        "forecast_id",
+        "slot_date",
+        "slot_time",
+        "generated_at",
+        "station_code",
+        "station_name",
+        "district",
+        "river",
+        "tributary",
+        "latitude",
+        "longitude",
+        "observed_at",
+        "observed_age_days",
+        "forecast_time",
+        "data_period",
+        "current_flow_cms",
+        "linked_comid",
+        "streamorder",
+        "return_period",
+        "current_water_level_m",
+        "water_level_change_m",
+        "river_forecast_flow_cms",
+        "basin_forecast_flow_cms",
+        "combined_forecast_flow_cms",
+        "linked_comid",
+        "streamorder",
+        "return_period",
+        "forecast_status",
+    ]
+    rows = rows.reindex(columns=cols)
+    for datetime_col in ["generated_at", "observed_at", "forecast_time"]:
+        rows[datetime_col] = pd.to_datetime(rows[datetime_col], errors="coerce").apply(
+            lambda value: value.isoformat() if not pd.isna(value) else None
+        )
+    with sqlite3.connect(GD_SITE_FORECAST_DB) as conn:
+        conn.executemany(
+            f"""
+            INSERT OR REPLACE INTO gd_site_forecasts ({", ".join(cols)})
+            VALUES ({", ".join(["?"] * len(cols))})
+            """,
+            [tuple(None if pd.isna(value) else value for value in record) for record in rows.to_numpy()],
+        )
+    return len(rows)
+
+
+def load_gd_site_forecast_cache() -> pd.DataFrame:
+    if not GD_SITE_FORECAST_DB.exists():
+        return pd.DataFrame()
+    try:
+        with sqlite3.connect(GD_SITE_FORECAST_DB) as conn:
+            cached = pd.read_sql_query("SELECT * FROM gd_site_forecasts", conn)
+    except Exception:
+        return pd.DataFrame()
+    for column in ["generated_at", "observed_at", "forecast_time"]:
+        if column in cached:
+            cached[column] = pd.to_datetime(cached[column], errors="coerce")
+    return cached
+
+
+def load_latest_gd_site_forecast_slot() -> pd.DataFrame:
+    cached = load_gd_site_forecast_cache()
+    if cached.empty or not {"slot_date", "slot_time"}.issubset(cached.columns):
+        return pd.DataFrame()
+    latest = cached.sort_values(["slot_date", "slot_time", "generated_at"]).tail(1)
+    if latest.empty:
+        return pd.DataFrame()
+    slot_date = latest.iloc[0].get("slot_date")
+    slot_time = latest.iloc[0].get("slot_time")
+    return cached[(cached["slot_date"] == slot_date) & (cached["slot_time"] == slot_time)].copy()
+
+
+def gd_return_period_alert(return_period: object, flow: object = None) -> tuple[str, str]:
+    rp = pd.to_numeric(pd.Series([return_period]), errors="coerce").iloc[0]
+    flow_value = pd.to_numeric(pd.Series([flow]), errors="coerce").iloc[0]
+    if pd.notna(rp):
+        if rp >= 25:
+            return "Critical", "#ef4444"
+        if rp >= 10:
+            return "Warning", "#f59e0b"
+        if rp >= 2:
+            return "Watch", "#eab308"
+        return "Normal", "#2563eb"
+    if pd.notna(flow_value):
+        if flow_value >= 500:
+            return "Critical", "#ef4444"
+        if flow_value >= 250:
+            return "Warning", "#f59e0b"
+        if flow_value >= 100:
+            return "Watch", "#eab308"
+    return "Normal", "#2563eb"
+
+
+def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFrame) -> None:
+    if gd_sites.empty or not {"latitude", "longitude"}.issubset(gd_sites.columns):
+        return
+    gd_now = gd_forecasts[gd_forecasts["data_period"] == "Now Data"].copy() if not gd_forecasts.empty else pd.DataFrame()
+    site_latest = gd_now.drop_duplicates("station_code").set_index("station_code") if not gd_now.empty else pd.DataFrame()
+    site_series: dict[str, list[dict]] = {}
+    if not gd_forecasts.empty:
+        for station_code, group in gd_forecasts.sort_values("forecast_time").groupby("station_code"):
+            points = []
+            for item in group.head(24).to_dict("records"):
+                flow_value = pd.to_numeric(pd.Series([item.get("combined_forecast_flow_cms")]), errors="coerce").iloc[0]
+                if pd.isna(flow_value):
+                    continue
+                return_period_value = pd.to_numeric(pd.Series([item.get("return_period")]), errors="coerce").iloc[0]
+                points.append(
+                    {
+                        "time": time_label(item.get("forecast_time")),
+                        "flow": round(float(flow_value), 2),
+                        "period": str(item.get("data_period") or ""),
+                        "return_period": None if pd.isna(return_period_value) else round(float(return_period_value), 0),
+                    }
+                )
+            site_series[str(station_code)] = points
+    records = []
+    for row in gd_sites.dropna(subset=["latitude", "longitude"]).to_dict("records"):
+        station_code = str(row.get("station_code") or "")
+        now = site_latest.loc[station_code].to_dict() if not site_latest.empty and station_code in site_latest.index else {}
+        flow = pd.to_numeric(pd.Series([now.get("current_flow_cms")]), errors="coerce").iloc[0]
+        status = str(now.get("forecast_status") or "Layer pending")
+        return_period_value = pd.to_numeric(pd.Series([now.get("return_period")]), errors="coerce").iloc[0]
+        level, color = gd_return_period_alert(return_period_value, flow)
+        wl_delta = pd.to_numeric(pd.Series([now.get("water_level_change_m")]), errors="coerce").iloc[0]
+        if pd.notna(wl_delta) and wl_delta > 0.03:
+            trend = "Rising"
+        elif pd.notna(wl_delta) and wl_delta < -0.03:
+            trend = "Falling"
+        else:
+            series = site_series.get(station_code, [])
+            trend = "Stable"
+            if len(series) >= 2:
+                if series[1]["flow"] > series[0]["flow"]:
+                    trend = "Rising"
+                elif series[1]["flow"] < series[0]["flow"]:
+                    trend = "Falling"
+        records.append(
+            {
+                "station_code": station_code,
+                "station_name": str(row.get("station_name") or station_code or "GD Site"),
+                "district": str(row.get("district") or "-"),
+                "river": str(row.get("river") or "-"),
+                "lat": float(row.get("latitude")),
+                "lon": float(row.get("longitude")),
+                "current_flow": None if pd.isna(flow) else round(float(flow), 2),
+                "water_level": None if pd.isna(pd.to_numeric(pd.Series([now.get("current_water_level_m")]), errors="coerce").iloc[0]) else round(float(pd.to_numeric(pd.Series([now.get("current_water_level_m")]), errors="coerce").iloc[0]), 2),
+                "observed_age_days": None if pd.isna(pd.to_numeric(pd.Series([now.get("observed_age_days")]), errors="coerce").iloc[0]) else round(float(pd.to_numeric(pd.Series([now.get("observed_age_days")]), errors="coerce").iloc[0]), 0),
+                "forecast_time": time_label(now.get("forecast_time")),
+                "linked_comid": str(now.get("linked_comid") or "-"),
+                "streamorder": None if pd.isna(pd.to_numeric(pd.Series([now.get("streamorder")]), errors="coerce").iloc[0]) else round(float(pd.to_numeric(pd.Series([now.get("streamorder")]), errors="coerce").iloc[0]), 0),
+                "return_period": None if pd.isna(return_period_value) else round(float(return_period_value), 0),
+                "forecast_status": status,
+                "alert_level": level,
+                "trend": trend,
+                "color": color,
+                "series": site_series.get(station_code, []),
+            }
+        )
+    if not records:
+        return
+    map_id = f"gd-site-leaflet-{abs(hash(json.dumps(records[:10], sort_keys=True))) % 1000000}"
+    records_json = json.dumps(records)
+    service_url = json.dumps(GEOGLOWS_MEDIUM_URL)
+    center_lat = sum(item["lat"] for item in records) / len(records)
+    center_lon = sum(item["lon"] for item in records) / len(records)
+    components.html(
+        f"""
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <style>
+          #{map_id} {{
+            height: 520px;
+            width: 100%;
+            border: 1px solid #dbe6f4;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 14px 32px rgba(15,23,42,0.08);
+          }}
+          .gd-map-title {{
+            font: 800 13px Roboto, Inter, Segoe UI, sans-serif;
+            color: #172033;
+            margin: 0 0 6px;
+          }}
+          .gd-map-note {{
+            font: 11px Roboto, Inter, Segoe UI, sans-serif;
+            color: #64748b;
+            margin: 0 0 8px;
+          }}
+          .gd-popup {{
+            font: 12px Roboto, Inter, Segoe UI, sans-serif;
+            color: #334155;
+            line-height: 1.35;
+          }}
+          .gd-popup b {{ color:#0f172a; font-size:13px; }}
+          .gd-info-panel {{
+            position: absolute;
+            top: 58px;
+            right: 12px;
+            z-index: 850;
+            width: min(430px, calc(100% - 30px));
+            max-height: none;
+            overflow: visible;
+            background: rgba(255,255,255,0.96);
+            border: 1px solid #dbe6f4;
+            border-radius: 8px;
+            box-shadow: 0 18px 42px rgba(15,23,42,0.20);
+            padding: 10px;
+            display: none;
+            font: 12px Roboto, Inter, Segoe UI, sans-serif;
+            color: #334155;
+          }}
+          .gd-info-panel.open {{ display: block; }}
+          .gd-info-close {{
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            border: 0;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            background: #f1f5f9;
+            color: #0f172a;
+            font-weight: 900;
+          }}
+          .gd-info-panel h4 {{
+            margin: 0 28px 2px 0;
+            color: #0f172a;
+            font-size: 14px;
+            line-height: 1.2;
+          }}
+          .gd-info-sub {{
+            color: #64748b;
+            font-size: 10px;
+            margin-bottom: 6px;
+          }}
+          .gd-alert-badge {{
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: 999px;
+            padding: 4px 8px;
+            color: #fff;
+            font-weight: 900;
+            font-size: 10px;
+            margin-bottom: 6px;
+          }}
+          .gd-info-grid {{
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 5px;
+          }}
+          .gd-info-chip {{
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 7px;
+            padding: 5px 6px;
+            min-width: 0;
+          }}
+          .gd-info-chip span {{
+            display: block;
+            color: #64748b;
+            font-size: 8px;
+            text-transform: uppercase;
+            font-weight: 900;
+            letter-spacing: .04em;
+          }}
+          .gd-info-chip strong {{
+            display: block;
+            color: #0f172a;
+            font-size: 11px;
+            margin-top: 2px;
+            line-height: 1.15;
+            overflow-wrap: anywhere;
+          }}
+          .gd-mini-chart {{
+            margin-top: 7px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 7px;
+            padding: 6px;
+          }}
+          .gd-blink-critical {{
+            animation: gdCriticalBlink 1s infinite;
+          }}
+          .gd-blink-warning {{
+            animation: gdWarningBlink 1.25s infinite;
+          }}
+          @keyframes gdCriticalBlink {{
+            0%,100% {{ filter: drop-shadow(0 0 0 rgba(239,68,68,0)); }}
+            50% {{ filter: drop-shadow(0 0 12px rgba(239,68,68,0.95)); }}
+          }}
+          @keyframes gdWarningBlink {{
+            0%,100% {{ filter: drop-shadow(0 0 0 rgba(245,158,11,0)); }}
+            50% {{ filter: drop-shadow(0 0 10px rgba(245,158,11,0.90)); }}
+          }}
+        </style>
+        <div class="gd-map-title">GD Sites and River Forecast Layer</div>
+        <div class="gd-map-note">GD station points are overlaid on ArcGIS basemaps. The river forecast layer is loaded dynamically from the online MapServer and can be toggled from the layer control.</div>
+        <div id="{map_id}"><div id="{map_id}-info" class="gd-info-panel"></div></div>
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script src="https://unpkg.com/esri-leaflet@3.0.12/dist/esri-leaflet.js"></script>
+        <script>
+        (() => {{
+            const sites = {records_json};
+            const serviceUrl = {service_url};
+            const map = L.map("{map_id}", {{ zoomControl: true, scrollWheelZoom: true, preferCanvas: true }}).setView([{center_lat:.5f}, {center_lon:.5f}], 7);
+            const topo = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{{z}}/{{y}}/{{x}}", {{ maxZoom: 16, attribution: "Tiles &copy; Esri" }}).addTo(map);
+            const imagery = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}", {{ maxZoom: 16, attribution: "Tiles &copy; Esri" }});
+            const light = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{{z}}/{{y}}/{{x}}", {{ maxZoom: 16, attribution: "Tiles &copy; Esri" }});
+            const riverLayer = L.esri.dynamicMapLayer({{
+                url: serviceUrl,
+                layers: [0],
+                opacity: 0.78,
+                useCors: false
+            }}).addTo(map);
+            const gdLayer = L.layerGroup().addTo(map);
+            const fmt = (value) => value === null || value === undefined || Number.isNaN(Number(value)) ? "-" : Number(value).toFixed(2);
+            const infoPanel = document.getElementById("{map_id}-info");
+            const alertColor = (level) => level === "Critical" ? "#ef4444" : level === "Warning" ? "#f59e0b" : level === "Watch" ? "#eab308" : "#2563eb";
+            const returnPeriodAlert = (rp, flow) => {{
+                const returnPeriod = Number(rp);
+                const flowValue = Number(flow);
+                if (Number.isFinite(returnPeriod)) {{
+                    if (returnPeriod >= 25) return "Critical";
+                    if (returnPeriod >= 10) return "Warning";
+                    if (returnPeriod >= 2) return "Watch";
+                    return "Normal";
+                }}
+                if (Number.isFinite(flowValue)) {{
+                    if (flowValue >= 500) return "Critical";
+                    if (flowValue >= 250) return "Warning";
+                    if (flowValue >= 100) return "Watch";
+                }}
+                return "Normal";
+            }};
+            const formatForecastTime = (value) => {{
+                const date = new Date(Number(value));
+                if (Number.isNaN(date.getTime())) return "-";
+                return date.toLocaleString("en-GB", {{ day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }});
+            }};
+            const fetchLiveReachSeries = async (comid) => {{
+                if (!comid || comid === "-") return [];
+                const metaUrl = `${{serviceUrl}}/0?f=json`;
+                const meta = await fetch(metaUrl).then((response) => response.json());
+                const extent = meta?.timeInfo?.timeExtent || [];
+                if (extent.length < 2) return [];
+                const start = Number(extent[0]);
+                const end = Math.min(Number(extent[1]), start + 7 * 24 * 60 * 60 * 1000);
+                const params = new URLSearchParams({{
+                    f: "json",
+                    where: `comid=${{String(comid).replace(/[^0-9]/g, "")}}`,
+                    outFields: "comid,streamorder,timevalue,meanflow,returnperiod,upstreamarea",
+                    returnGeometry: "false",
+                    time: `${{start}},${{end}}`,
+                    resultRecordCount: "2000"
+                }});
+                const payload = await fetch(`${{serviceUrl}}/0/query?${{params.toString()}}`).then((response) => response.json());
+                return (payload.features || [])
+                    .map((feature) => feature.attributes || {{}})
+                    .filter((attrs) => Number.isFinite(Number(attrs.meanflow)))
+                    .sort((a, b) => Number(a.timevalue) - Number(b.timevalue))
+                    .map((attrs) => ({{
+                        time: formatForecastTime(attrs.timevalue),
+                        flow: Number(attrs.meanflow),
+                        return_period: attrs.returnperiod ?? null,
+                        streamorder: attrs.streamorder ?? null
+                    }}));
+            }};
+            const miniChart = (series, color) => {{
+                if (!series || series.length < 2) return "<div class='gd-mini-chart'>Forecast graph will appear after series data is available.</div>";
+                const values = series.map((d) => Number(d.flow)).filter((v) => Number.isFinite(v));
+                const min = Math.min(...values);
+                const max = Math.max(...values);
+                const width = 405;
+                const height = 78;
+                const pad = 12;
+                const x = (i) => pad + (i / Math.max(1, series.length - 1)) * (width - pad * 2);
+                const y = (v) => height - pad - ((v - min) / Math.max(1, max - min)) * (height - pad * 2);
+                const points = series.map((d, i) => `${{x(i).toFixed(1)}},${{y(Number(d.flow)).toFixed(1)}}`).join(" ");
+                const circles = series.map((d, i) => `<circle cx="${{x(i).toFixed(1)}}" cy="${{y(Number(d.flow)).toFixed(1)}}" r="2.6" fill="${{color}}"><title>${{d.time}}: ${{fmt(d.flow)}} cumecs | RP ${{d.return_period ?? "Normal"}}</title></circle>`).join("");
+                return `
+                  <div class="gd-mini-chart">
+                    <div style="font-weight:900;color:#0f172a;margin-bottom:2px;font-size:11px;">Forecast flow graph</div>
+                    <svg viewBox="0 0 ${{width}} ${{height}}" width="100%" height="${{height}}">
+                      <line x1="${{pad}}" y1="${{height-pad}}" x2="${{width-pad}}" y2="${{height-pad}}" stroke="#cbd5e1" />
+                      <line x1="${{pad}}" y1="${{pad}}" x2="${{pad}}" y2="${{height-pad}}" stroke="#cbd5e1" />
+                      <polyline points="${{points}}" fill="none" stroke="${{color}}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+                      ${{circles}}
+                      <text x="${{pad}}" y="10" fill="#64748b" font-size="9">${{fmt(max)}} cumecs</text>
+                      <text x="${{pad}}" y="${{height-2}}" fill="#64748b" font-size="9">${{fmt(min)}} cumecs</text>
+                    </svg>
+                  </div>
+                `;
+            }};
+            const openInfo = (site, skipLiveFetch = false) => {{
+                const color = alertColor(site.alert_level);
+                infoPanel.innerHTML = `
+                  <button class="gd-info-close" type="button" title="Close">X</button>
+                  <h4>${{site.station_name}}</h4>
+                  <div class="gd-info-sub">${{site.station_code}} | ${{site.river}} | ${{site.district}}</div>
+                  <div class="gd-alert-badge" style="background:${{color}}">${{site.alert_level}} Alert</div>
+                  <div class="gd-info-grid">
+                    <div class="gd-info-chip"><span>Current Flow</span><strong>${{fmt(site.current_flow)}} cumecs</strong></div>
+                    <div class="gd-info-chip"><span>Trend</span><strong>${{site.trend}}</strong></div>
+                    <div class="gd-info-chip"><span>Water Level</span><strong>${{fmt(site.water_level)}} m</strong></div>
+                    <div class="gd-info-chip"><span>Observed Age</span><strong>${{site.observed_age_days ?? "-"}} days</strong></div>
+                    <div class="gd-info-chip"><span>Forecast Time</span><strong>${{site.forecast_time || "-"}}</strong></div>
+                    <div class="gd-info-chip"><span>Stream Order</span><strong>${{site.streamorder ?? "-"}}</strong></div>
+                    <div class="gd-info-chip"><span>Return Period</span><strong>${{site.return_period ?? "Normal"}}</strong></div>
+                  </div>
+                  ${{miniChart(site.series, color)}}
+                `;
+                infoPanel.classList.add("open");
+                infoPanel.querySelector(".gd-info-close").addEventListener("click", () => infoPanel.classList.remove("open"));
+                if (!skipLiveFetch && site.linked_comid && site.linked_comid !== "-") {{
+                    const chartBlock = infoPanel.querySelector(".gd-mini-chart");
+                    if (chartBlock) chartBlock.innerHTML = "<b>Loading live forecast curve...</b>";
+                    fetchLiveReachSeries(site.linked_comid)
+                        .then((series) => {{
+                            if (series.length >= 2) {{
+                                const first = series[0];
+                                const last = series[series.length - 1];
+                                site.series = series;
+                                site.current_flow = first.flow;
+                                site.return_period = first.return_period ?? site.return_period;
+                                site.streamorder = first.streamorder ?? site.streamorder;
+                                site.forecast_time = first.time;
+                                site.trend = last.flow > first.flow ? "Rising" : last.flow < first.flow ? "Falling" : "Stable";
+                                site.alert_level = returnPeriodAlert(site.return_period, site.current_flow);
+                                site.color = alertColor(site.alert_level);
+                                openInfo(site, true);
+                            }}
+                        }})
+                        .catch(() => {{
+                            const chartBlock = infoPanel.querySelector(".gd-mini-chart");
+                            if (chartBlock) chartBlock.innerHTML = "Live forecast curve is unavailable from the map service right now.";
+                        }});
+                }}
+            }};
+            sites.forEach((site) => {{
+                const marker = L.circleMarker([site.lat, site.lon], {{
+                    radius: site.alert_level === "Critical" ? 7.5 : site.alert_level === "Warning" ? 7 : 5.5,
+                    color: "#ffffff",
+                    weight: site.alert_level === "Critical" || site.alert_level === "Warning" ? 2 : 1.2,
+                    fillColor: site.color,
+                    fillOpacity: 0.95
+                }}).addTo(gdLayer);
+                marker.bindTooltip(`${{site.station_name}} | ${{site.alert_level}} | ${{fmt(site.current_flow)}} cumecs`, {{ sticky: true }});
+                marker.on("click", () => openInfo(site));
+                setTimeout(() => {{
+                    const el = marker.getElement && marker.getElement();
+                    if (!el) return;
+                    if (site.alert_level === "Critical") el.classList.add("gd-blink-critical");
+                    if (site.alert_level === "Warning") el.classList.add("gd-blink-warning");
+                }}, 80);
+            }});
+            const bounds = L.latLngBounds(sites.map((site) => [site.lat, site.lon]));
+            if (bounds.isValid()) map.fitBounds(bounds.pad(0.12), {{ maxZoom: 7 }});
+            L.control.layers({{
+                "Topo": topo,
+                "Satellite": imagery,
+                "Light gray": light
+            }}, {{
+                "River forecast layer": riverLayer,
+                "GD Sites": gdLayer
+            }}, {{ collapsed: true }}).addTo(map);
+        }})();
+        </script>
+        """,
+        height=590,
+    )
+
+
+def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFrame) -> None:
+    st.subheader("GD Site Analytics")
+    st.markdown(
+        '<div class="panel-note">Observed GD station water levels are linked with river and basin forecast signals. This page is separated from Dam DSS so more GD-site modules can be added independently.</div>',
+        unsafe_allow_html=True,
+    )
+    gd_sites = load_gd_sites_swedes(str(GD_SITES_SWEDES_LAYER))
+    gd_latest_observed = load_latest_gd_observed(str(NARMADA_OBSERVED_CSV))
+    online_now_time = fetch_online_river_forecast_time()
+    cached_gd = load_latest_gd_site_forecast_slot()
+    if not cached_gd.empty and cached_gd["current_flow_cms"].notna().any():
+        gd_forecasts = cached_gd.copy()
+        gd_source_mode = "Cached station-specific drainage refresh"
+    else:
+        gd_forecasts = build_gd_site_forecast_rows(
+            gd_sites,
+            gd_latest_observed,
+            [],
+            [],
+            forecast_days=7,
+            online_now_time=online_now_time,
+        )
+        gd_source_mode = "Pending station-specific drainage refresh"
+    if not gd_forecasts.empty:
+        gd_forecasts = gd_forecasts.copy()
+        gd_forecasts["forecast_alert_level"] = gd_forecasts.apply(
+            lambda row: gd_return_period_alert(row.get("return_period"), row.get("combined_forecast_flow_cms"))[0],
+            axis=1,
+        )
+    gd_kpis = st.columns(5)
+    gd_kpis[0].metric("GD Sites", int(len(gd_sites)))
+    gd_kpis[1].metric("Located Sites", int(gd_sites["has_location"].sum()) if not gd_sites.empty and "has_location" in gd_sites else 0)
+    gd_kpis[2].metric("Observed Sites", int(gd_latest_observed["station_code"].nunique()) if not gd_latest_observed.empty else 0)
+    gd_kpis[3].metric("Forecast Rows", int(len(gd_forecasts)))
+    gd_kpis[4].metric("Current Signal", time_label(online_now_time) if online_now_time is not None else "Generated")
+    if gd_sites.empty:
+        st.warning("GD Sites layer is not available from the configured app data folder.")
+        return
+    if gd_forecasts.empty:
+        st.warning("GD Sites are available, but no observed/forecast rows could be prepared.")
+        return
+    slot_date, slot_time, _slot_ts = gd_forecast_slot()
+    cache_note = f"GD source mode: {gd_source_mode}. Reporting slot: {slot_date} {slot_time}."
+    if not cached_gd.empty:
+        latest_cache = cached_gd.sort_values(["slot_date", "slot_time", "generated_at"]).tail(1)
+        cache_note += f" Latest cached generation: {time_label(latest_cache.iloc[0].get('generated_at'))}; cached rows: {len(cached_gd):,}."
+    else:
+        cache_note += " Run the GD refresh job to populate station-specific drainage discharge values."
+    st.markdown(f'<div class="panel-note">{escape(cache_note)}</div>', unsafe_allow_html=True)
+
+    render_gd_site_leaflet_map(gd_sites, gd_forecasts)
+
+    filter_cols = st.columns([0.22, 0.22, 0.32, 0.24])
+    gd_filtered = gd_forecasts.copy()
+    with filter_cols[0]:
+        district_options = ["All districts"] + sorted(gd_filtered["district"].dropna().astype(str).unique())
+        selected_district = st.selectbox("District", district_options, key="gd_page_district")
+    if selected_district != "All districts":
+        gd_filtered = gd_filtered[gd_filtered["district"].astype(str) == selected_district]
+    with filter_cols[1]:
+        river_options = ["All rivers"] + sorted(gd_filtered["river"].dropna().astype(str).unique())
+        selected_river = st.selectbox("River", river_options, key="gd_page_river")
+    if selected_river != "All rivers":
+        gd_filtered = gd_filtered[gd_filtered["river"].astype(str) == selected_river]
+    with filter_cols[2]:
+        station_rows = gd_filtered.drop_duplicates("station_code").sort_values("station_code")
+        station_options = ["All GD sites"] + [
+            f"{row.station_code} | {row.station_name}"
+            for row in station_rows.itertuples(index=False)
+        ]
+        selected_station = st.selectbox("GD Site", station_options, key="gd_page_station")
+    if selected_station != "All GD sites":
+        gd_filtered = gd_filtered[gd_filtered["station_code"] == selected_station.split(" | ", 1)[0]]
+    with filter_cols[3]:
+        selected_periods = st.multiselect(
+            "Data period",
+            ["Now Data", "Forecasted Data"],
+            default=["Now Data", "Forecasted Data"],
+            key="gd_page_periods",
+        )
+    if selected_periods:
+        gd_filtered = gd_filtered[gd_filtered["data_period"].isin(selected_periods)]
+
+    gd_history = load_gd_observed_history(str(NARMADA_OBSERVED_CSV), days=31)
+    if selected_station != "All GD sites":
+        selected_station_code = selected_station.split(" | ", 1)[0]
+    else:
+        selected_station_code = (
+            gd_filtered.dropna(subset=["combined_forecast_flow_cms"])
+            .sort_values("combined_forecast_flow_cms", ascending=False)["station_code"]
+            .dropna()
+            .astype(str)
+            .head(1)
+            .iloc[0]
+            if not gd_filtered.dropna(subset=["combined_forecast_flow_cms"]).empty
+            else ""
+        )
+    if selected_station_code:
+        station_forecast = gd_forecasts[gd_forecasts["station_code"].astype(str) == selected_station_code].copy()
+        station_history = gd_history[gd_history["station_code"].astype(str) == selected_station_code].copy()
+        station_name = (
+            station_forecast["station_name"].dropna().astype(str).head(1).iloc[0]
+            if not station_forecast.empty and station_forecast["station_name"].notna().any()
+            else selected_station_code
+        )
+        st.markdown(
+            f'<div class="panel-note"><b>{escape(station_name)}</b>: latest available one-month GD observed archive is shown with the linked forecast values. The observed archive may be older than the forecast signal where live GD observations are not available.</div>',
+            unsafe_allow_html=True,
+        )
+        hist_cols = st.columns([0.58, 0.42])
+        with hist_cols[0]:
+            forecast_plot = station_forecast.dropna(subset=["forecast_time", "combined_forecast_flow_cms"]).copy()
+            history_plot = station_history.dropna(subset=["observed_at", "water_level_m"]).copy()
+            layers = []
+            if not history_plot.empty:
+                history_chart = (
+                    alt.Chart(history_plot)
+                    .mark_line(point=True, color="#147df5", strokeWidth=2.5)
+                    .encode(
+                        x=alt.X("observed_at:T", title="Date"),
+                        y=alt.Y("water_level_m:Q", title="Historical water level (m)"),
+                        tooltip=["station_code", "observed_at", "water_level_m", "water_level_change_m"],
+                    )
+                    .properties(height=260)
+                )
+                layers.append(history_chart)
+            if not forecast_plot.empty:
+                forecast_chart = (
+                    alt.Chart(forecast_plot)
+                    .mark_line(point=True, color="#ff8700", strokeWidth=2.5)
+                    .encode(
+                        x=alt.X("forecast_time:T", title="Date"),
+                        y=alt.Y("combined_forecast_flow_cms:Q", title="Forecast discharge (cumecs)"),
+                        tooltip=["station_code", "forecast_time", "data_period", "combined_forecast_flow_cms", "linked_comid", "streamorder"],
+                    )
+                    .properties(height=260)
+                )
+                if layers:
+                    st.altair_chart(alt.hconcat(layers[0], forecast_chart).resolve_scale(y="independent"), use_container_width=True)
+                else:
+                    st.altair_chart(forecast_chart, use_container_width=True)
+            elif layers:
+                st.altair_chart(layers[0], use_container_width=True)
+            else:
+                st.info("No historical archive or linked forecast values are available for the selected GD site.")
+        with hist_cols[1]:
+            latest_forecast_row = station_forecast.sort_values("forecast_time").head(1)
+            linked_summary = "-"
+            if not latest_forecast_row.empty:
+                linked_summary = (
+                    f"Reach {latest_forecast_row.iloc[0].get('linked_comid', '-')}, "
+                    f"stream order {fmt_number(latest_forecast_row.iloc[0].get('streamorder'))}, "
+                    f"flow {fmt_number(latest_forecast_row.iloc[0].get('current_flow_cms'), ' cumecs')}"
+                )
+            st.markdown(
+                f"""
+                <div class="selected-dam-panel">
+                    <span class="district-gauge-title">Selected GD Site Data Window</span>
+                    <span class="district-gauge-meta">Site: {escape(station_name)}</span>
+                    <span class="district-gauge-meta">Historical rows: {len(station_history):,}</span>
+                    <span class="district-gauge-meta">Forecast rows: {len(station_forecast):,}</span>
+                    <span class="district-gauge-meta">Linked drainage: {escape(linked_summary)}</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            preview_frames = []
+            if not station_history.empty:
+                preview_frames.append(
+                    station_history.tail(8).assign(source="Historical GD archive").rename(
+                        columns={"observed_at": "time", "water_level_m": "water_level_m"}
+                    )[["source", "time", "water_level_m", "water_level_change_m"]]
+                )
+            if not station_forecast.empty:
+                preview_frames.append(
+                    station_forecast.head(8).assign(source="Forecasted values").rename(
+                        columns={"forecast_time": "time", "combined_forecast_flow_cms": "forecast_flow_cms"}
+                    )[["source", "time", "forecast_flow_cms", "data_period"]]
+                )
+            if preview_frames:
+                st.dataframe(pd.concat(preview_frames, ignore_index=True), use_container_width=True, hide_index=True, height=230)
+
+    chart_cols = st.columns([0.64, 0.36])
+    with chart_cols[0]:
+        chart_source = gd_filtered.dropna(subset=["combined_forecast_flow_cms"]).copy()
+        if selected_station == "All GD sites" and not chart_source.empty:
+            selected_codes = (
+                chart_source.groupby(["station_code", "station_name"], dropna=False)["combined_forecast_flow_cms"]
+                .max()
+                .sort_values(ascending=False)
+                .head(10)
+                .reset_index()["station_code"]
+                .tolist()
+            )
+            chart_source = chart_source[chart_source["station_code"].isin(selected_codes)]
+        if chart_source.empty:
+            st.info("No forecast-flow values are available for the selected GD filters.")
+        else:
+            gd_chart = (
+                alt.Chart(chart_source)
+                .mark_line(point=True, strokeWidth=2.5)
+                .encode(
+                    x=alt.X("forecast_time:T", title="Date"),
+                    y=alt.Y("combined_forecast_flow_cms:Q", title="Flow (cumecs)"),
+                    color=alt.Color("station_name:N", title="GD Site"),
+                    strokeDash=alt.StrokeDash("data_period:N", title="Data period"),
+                    tooltip=[
+                        "station_code",
+                        "station_name",
+                        "district",
+                        "river",
+                        "forecast_time",
+                        "data_period",
+                        "current_water_level_m",
+                        "combined_forecast_flow_cms",
+                        "forecast_alert_level",
+                        "forecast_status",
+                    ],
+                )
+                .properties(height=330)
+            )
+            st.altair_chart(gd_chart, use_container_width=True)
+    with chart_cols[1]:
+        now_rows = gd_filtered[gd_filtered["data_period"] == "Now Data"].sort_values(["forecast_time", "current_flow_cms"], ascending=[False, False])
+        st.dataframe(
+            now_rows[
+                [
+                    "station_code",
+                    "station_name",
+                    "district",
+                    "river",
+                    "forecast_time",
+                    "current_flow_cms",
+                    "forecast_alert_level",
+                    "current_water_level_m",
+                    "observed_at",
+                    "observed_age_days",
+                    "forecast_status",
+                    "data_period",
+                ]
+            ].head(20),
+            use_container_width=True,
+            hide_index=True,
+            height=330,
+        )
+
+    table_cols = [
+        "station_code",
+        "station_name",
+        "district",
+        "river",
+        "tributary",
+        "observed_at",
+        "observed_age_days",
+        "forecast_time",
+        "data_period",
+        "current_flow_cms",
+        "forecast_alert_level",
+        "linked_comid",
+        "streamorder",
+        "return_period",
+        "current_water_level_m",
+        "water_level_change_m",
+        "river_forecast_flow_cms",
+        "basin_forecast_flow_cms",
+        "combined_forecast_flow_cms",
+        "forecast_status",
+        "latitude",
+        "longitude",
+    ]
+    st.dataframe(
+        gd_filtered[[col for col in table_cols if col in gd_filtered.columns]].sort_values(["station_code", "forecast_time"]),
+        use_container_width=True,
+        hide_index=True,
+        height=360,
+    )
+
+
 def load_dataset(parsed_dir: Path) -> tuple[dict, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     meta = pd.read_json(parsed_dir / "report_meta.json", typ="series").to_dict()
     river_master = read_csv(parsed_dir / "river_gauge_stations.csv")
@@ -1833,6 +2926,288 @@ def fetch_dynamic_nodes(endpoint: str, kind: str) -> tuple[list[dict], str | Non
             }
         )
     return nodes, None
+
+
+def latest_node_flow(node: dict, fields: list[str]) -> float:
+    series = node.get("series") or []
+    if not isinstance(series, list):
+        return float("nan")
+    for row in reversed(series):
+        if not isinstance(row, dict):
+            continue
+        for field in fields:
+            value = pd.to_numeric(pd.Series([row.get(field)]), errors="coerce").iloc[0]
+            if not pd.isna(value):
+                return float(value)
+    return float("nan")
+
+
+def match_forecast_node(row: pd.Series, nodes: list[dict]) -> dict | None:
+    if not nodes:
+        return None
+    candidates = [
+        str(row.get("basin") or ""),
+        str(row.get("river_name") or ""),
+        str(row.get("district") or ""),
+    ]
+    normalized_candidates = [candidate.casefold() for candidate in candidates if candidate and candidate != "nan"]
+    for node in nodes:
+        node_text = " ".join(str(node.get(key) or "") for key in ["basin", "name"]).casefold()
+        if any(candidate and (candidate in node_text or node_text in candidate) for candidate in normalized_candidates):
+            return node
+    return nodes[0]
+
+
+def river_flow_model_status() -> dict:
+    metadata_path = RIVER_FLOW_MODEL_DIR / "model_metadata.json"
+    keras_path = RIVER_FLOW_MODEL_DIR / "river_flow_model.keras"
+    h5_path = RIVER_FLOW_MODEL_DIR / "river_flow_model.h5"
+    saved_model_path = RIVER_FLOW_MODEL_DIR / "saved_model"
+    model_path = next((path for path in [keras_path, h5_path, saved_model_path] if path.exists()), None)
+    metadata = {}
+    if metadata_path.exists():
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except Exception:
+            metadata = {}
+    try:
+        import tensorflow as tf  # type: ignore
+        tf_available = True
+        tf_version = getattr(tf, "__version__", "available")
+    except Exception as exc:
+        tf_available = False
+        tf_version = str(exc)
+    return {
+        "model_path": str(model_path) if model_path else "",
+        "metadata_path": str(metadata_path) if metadata_path.exists() else "",
+        "metadata": metadata,
+        "tensorflow_available": tf_available,
+        "tensorflow_status": tf_version,
+        "ready": bool(model_path and tf_available),
+    }
+
+
+@st.cache_resource(show_spinner=False)
+def load_river_flow_tensorflow_model(model_path: str):
+    import tensorflow as tf  # type: ignore
+
+    return tf.keras.models.load_model(model_path)
+
+
+def nita_ai_fallback_flow(row: pd.Series) -> float:
+    water_level = pd.to_numeric(pd.Series([row.get("water_level_m")]), errors="coerce").iloc[0]
+    danger_gap = pd.to_numeric(pd.Series([row.get("danger_gap_m")]), errors="coerce").iloc[0]
+    wl_delta = pd.to_numeric(pd.Series([row.get("wl_delta_m")]), errors="coerce").iloc[0]
+    glofas = pd.to_numeric(pd.Series([row.get("glofas_flow_cms")]), errors="coerce").iloc[0]
+    grrr = pd.to_numeric(pd.Series([row.get("grrr_flow_cms")]), errors="coerce").iloc[0]
+    lead_day = pd.to_numeric(pd.Series([row.get("lead_day")]), errors="coerce").iloc[0]
+    water_level = 0.0 if pd.isna(water_level) else float(water_level)
+    danger_gap = 4.0 if pd.isna(danger_gap) else float(danger_gap)
+    wl_delta = 0.0 if pd.isna(wl_delta) else float(wl_delta)
+    external_values = [float(value) for value in [glofas, grrr] if not pd.isna(value)]
+    external_signal = sum(external_values) / len(external_values) if external_values else max(20.0, water_level * 7.5)
+    lead_factor = 1.0 + min(max(float(lead_day or 1), 1.0), 10.0) * 0.025
+    danger_pressure = max(0.0, 4.0 - danger_gap) * 11.5
+    trend_pressure = max(-3.0, min(3.0, wl_delta)) * 24.0
+    level_pressure = max(0.0, water_level - 300.0) * 1.25
+    flow = external_signal * 0.72 + level_pressure + danger_pressure + trend_pressure
+    return round(max(0.0, flow * lead_factor), 3)
+
+
+def build_nita_ai_river_flow_forecasts(
+    river_frame: pd.DataFrame,
+    glofas_nodes: list[dict] | None = None,
+    grrr_nodes: list[dict] | None = None,
+    forecast_days: int = 7,
+) -> tuple[pd.DataFrame, dict]:
+    if river_frame.empty:
+        return pd.DataFrame(), river_flow_model_status()
+
+    status = river_flow_model_status()
+    work = river_frame.copy()
+    work["observed_at"] = pd.to_datetime(work.get("observed_at"), errors="coerce")
+    work["water_level_m"] = pd.to_numeric(work.get("water_level_m"), errors="coerce")
+    if "danger_gap_m" not in work.columns and "danger_or_max_water_level_m" in work.columns:
+        work["danger_gap_m"] = pd.to_numeric(work["danger_or_max_water_level_m"], errors="coerce") - work["water_level_m"]
+    work["danger_gap_m"] = pd.to_numeric(work.get("danger_gap_m"), errors="coerce")
+    sort_cols = [column for column in ["river_name", "gauge_station", "district", "observed_at"] if column in work.columns]
+    work = work.dropna(subset=["observed_at", "water_level_m"]).sort_values(sort_cols)
+    if work.empty:
+        return pd.DataFrame(), status
+    key_cols = [column for column in ["river_name", "gauge_station", "district"] if column in work.columns]
+    work["wl_delta_m"] = work.groupby(key_cols)["water_level_m"].diff() if key_cols else work["water_level_m"].diff()
+    latest = work.groupby(key_cols, dropna=False).tail(1) if key_cols else work.tail(1)
+    latest_forecast_date = latest["observed_at"].max().normalize()
+
+    rows = []
+    for latest_row in latest.itertuples(index=False):
+        row = pd.Series(latest_row._asdict())
+        glofas_node = match_forecast_node(row, glofas_nodes or [])
+        grrr_node = match_forecast_node(row, grrr_nodes or [])
+        glofas_flow = latest_node_flow(glofas_node, ["glofas_p50_cms", "reservoir_attenuated_cms", "chirps_hindcast_cms"]) if glofas_node else float("nan")
+        grrr_flow = latest_node_flow(grrr_node, ["reforecast_p50_cms", "reservoir_adjusted_cms", "reanalysis_discharge_cms"]) if grrr_node else float("nan")
+        for lead_day in range(1, forecast_days + 1):
+            forecast_row = row.copy()
+            forecast_row["lead_day"] = lead_day
+            forecast_row["glofas_flow_cms"] = glofas_flow
+            forecast_row["grrr_flow_cms"] = grrr_flow
+            forecast_row["forecast_time"] = (latest_forecast_date + pd.Timedelta(days=lead_day)).isoformat()
+            forecast_row["source_model"] = "nita_ai_tensorflow" if status["ready"] else "nita_ai_fallback_ensemble"
+            forecast_row["prediction_confidence"] = 0.82 if status["ready"] else 0.58
+            rows.append(forecast_row.to_dict())
+    feature_rows = pd.DataFrame(rows)
+    if feature_rows.empty:
+        return feature_rows, status
+
+    default_features = ["water_level_m", "danger_gap_m", "wl_delta_m", "glofas_flow_cms", "grrr_flow_cms", "lead_day"]
+    metadata = status.get("metadata") or {}
+    feature_cols = metadata.get("features") if isinstance(metadata.get("features"), list) else default_features
+    if status["ready"]:
+        try:
+            model = load_river_flow_tensorflow_model(status["model_path"])
+            model_input = feature_rows.reindex(columns=feature_cols).apply(pd.to_numeric, errors="coerce").fillna(0.0)
+            input_mean = metadata.get("input_mean") if isinstance(metadata.get("input_mean"), dict) else {}
+            input_std = metadata.get("input_std") if isinstance(metadata.get("input_std"), dict) else {}
+            for column in model_input.columns:
+                if column in input_mean:
+                    std = float(input_std.get(column) or 1.0)
+                    model_input[column] = (model_input[column] - float(input_mean[column])) / (std if std else 1.0)
+            predictions = model.predict(model_input.to_numpy(dtype="float32"), verbose=0)
+            feature_rows["predicted_discharge_cumecs"] = [round(max(0.0, float(value)), 3) for value in pd.Series(predictions.reshape(-1))]
+            feature_rows["model_status"] = "TensorFlow model applied"
+        except Exception as exc:
+            feature_rows["predicted_discharge_cumecs"] = feature_rows.apply(nita_ai_fallback_flow, axis=1)
+            feature_rows["source_model"] = "nita_ai_fallback_ensemble"
+            feature_rows["prediction_confidence"] = 0.52
+            feature_rows["model_status"] = f"TensorFlow fallback used: {exc}"
+    else:
+        feature_rows["predicted_discharge_cumecs"] = feature_rows.apply(nita_ai_fallback_flow, axis=1)
+        feature_rows["model_status"] = "Awaiting TensorFlow model artifact"
+
+    external_baseline = feature_rows[["glofas_flow_cms", "grrr_flow_cms"]].apply(pd.to_numeric, errors="coerce").mean(axis=1)
+    external_baseline = external_baseline.fillna(feature_rows["predicted_discharge_cumecs"] * 0.72).clip(lower=25.0)
+    feature_rows["watch_cms"] = (external_baseline * 1.12).round(3)
+    feature_rows["flood_cms"] = (external_baseline * 1.45).round(3)
+    feature_rows["danger_cms"] = (external_baseline * 1.82).round(3)
+    feature_rows["risk_band"] = "Normal"
+    feature_rows.loc[feature_rows["predicted_discharge_cumecs"] >= feature_rows["watch_cms"], "risk_band"] = "Watch"
+    feature_rows.loc[feature_rows["predicted_discharge_cumecs"] >= feature_rows["flood_cms"], "risk_band"] = "Flood"
+    feature_rows.loc[feature_rows["predicted_discharge_cumecs"] >= feature_rows["danger_cms"], "risk_band"] = "Danger"
+    keep_cols = [
+        "river_name",
+        "gauge_station",
+        "district",
+        "basin",
+        "observed_at",
+        "forecast_time",
+        "lead_day",
+        "water_level_m",
+        "danger_gap_m",
+        "wl_delta_m",
+        "glofas_flow_cms",
+        "grrr_flow_cms",
+        "predicted_discharge_cumecs",
+        "watch_cms",
+        "flood_cms",
+        "danger_cms",
+        "risk_band",
+        "source_model",
+        "prediction_confidence",
+        "model_status",
+    ]
+    return feature_rows[[col for col in keep_cols if col in feature_rows.columns]], status
+
+
+def init_river_flow_forecast_db() -> None:
+    RIVER_FLOW_FORECAST_DB.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(RIVER_FLOW_FORECAST_DB) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS river_flow_forecasts (
+                forecast_id TEXT PRIMARY KEY,
+                generated_at TEXT NOT NULL,
+                river_name TEXT,
+                gauge_station TEXT,
+                district TEXT,
+                basin TEXT,
+                observed_at TEXT,
+                forecast_time TEXT,
+                lead_day INTEGER,
+                water_level_m REAL,
+                danger_gap_m REAL,
+                wl_delta_m REAL,
+                glofas_flow_cms REAL,
+                grrr_flow_cms REAL,
+                predicted_discharge_cumecs REAL,
+                watch_cms REAL,
+                flood_cms REAL,
+                danger_cms REAL,
+                risk_band TEXT,
+                source_model TEXT,
+                prediction_confidence REAL,
+                model_status TEXT
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_river_flow_forecasts_gauge_time ON river_flow_forecasts(gauge_station, forecast_time)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_river_flow_forecasts_generated_at ON river_flow_forecasts(generated_at)")
+
+
+def save_river_flow_forecasts(forecast_df: pd.DataFrame) -> int:
+    if forecast_df.empty:
+        return 0
+    init_river_flow_forecast_db()
+    generated_at = pd.Timestamp.now(tz="Asia/Kolkata").isoformat()
+    rows = forecast_df.copy()
+    rows["generated_at"] = generated_at
+    rows["forecast_id"] = rows.apply(
+        lambda row: hashlib.sha256(
+            "|".join(
+                str(row.get(column) or "")
+                for column in ["river_name", "gauge_station", "district", "observed_at", "forecast_time", "source_model"]
+            ).encode("utf-8", errors="ignore")
+        ).hexdigest()[:32],
+        axis=1,
+    )
+    cols = [
+        "forecast_id",
+        "generated_at",
+        "river_name",
+        "gauge_station",
+        "district",
+        "basin",
+        "observed_at",
+        "forecast_time",
+        "lead_day",
+        "water_level_m",
+        "danger_gap_m",
+        "wl_delta_m",
+        "glofas_flow_cms",
+        "grrr_flow_cms",
+        "predicted_discharge_cumecs",
+        "watch_cms",
+        "flood_cms",
+        "danger_cms",
+        "risk_band",
+        "source_model",
+        "prediction_confidence",
+        "model_status",
+    ]
+    rows = rows.reindex(columns=cols)
+    for datetime_col in ["generated_at", "observed_at", "forecast_time"]:
+        if datetime_col in rows:
+            rows[datetime_col] = pd.to_datetime(rows[datetime_col], errors="coerce").apply(
+                lambda value: value.isoformat() if not pd.isna(value) else None
+            )
+    with sqlite3.connect(RIVER_FLOW_FORECAST_DB) as conn:
+        conn.executemany(
+            f"""
+            INSERT OR REPLACE INTO river_flow_forecasts ({", ".join(cols)})
+            VALUES ({", ".join(["?"] * len(cols))})
+            """,
+            [tuple(None if pd.isna(value) else value for value in record) for record in rows.to_numpy()],
+        )
+    return len(rows)
 
 
 RESERVOIR_METRICS = {
@@ -5087,6 +6462,20 @@ def save_uploaded_pdf(uploaded_file) -> Path:
     return target
 
 
+def save_uploaded_river_flow_model(uploaded_file) -> Path:
+    RIVER_FLOW_MODEL_DIR.mkdir(parents=True, exist_ok=True)
+    suffix = Path(uploaded_file.name).suffix.lower()
+    if suffix == ".json":
+        target = RIVER_FLOW_MODEL_DIR / "model_metadata.json"
+    elif suffix == ".h5":
+        target = RIVER_FLOW_MODEL_DIR / "river_flow_model.h5"
+    else:
+        target = RIVER_FLOW_MODEL_DIR / "river_flow_model.keras"
+    target.write_bytes(uploaded_file.getbuffer())
+    load_river_flow_tensorflow_model.clear()
+    return target
+
+
 def get_app_secret(name: str, env_name: str, default: str = "") -> str:
     value = os.getenv(env_name, "")
     if value:
@@ -7209,6 +8598,45 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
             ).sort_values("modified", ascending=False)
             st.dataframe(report_inventory, use_container_width=True, hide_index=True, height=220)
 
+        st.markdown("#### Nita AI River Flow TensorFlow Model")
+        tf_status = river_flow_model_status()
+        tf_cols = st.columns([0.34, 0.33, 0.33])
+        tf_cols[0].metric("TensorFlow Runtime", "Available" if tf_status.get("tensorflow_available") else "Not installed")
+        tf_cols[1].metric("Model Artifact", "Loaded" if tf_status.get("model_path") else "Not uploaded")
+        tf_cols[2].metric("Model Mode", "TensorFlow" if tf_status.get("ready") else "Fallback ensemble")
+        if tf_status.get("model_path"):
+            st.success(f"Current model artifact: {tf_status.get('model_path')}")
+        else:
+            st.caption(f"Expected model folder: {RIVER_FLOW_MODEL_DIR}")
+        model_upload_cols = st.columns([0.55, 0.45])
+        with model_upload_cols[0]:
+            uploaded_model = st.file_uploader(
+                "Upload river-flow TensorFlow model",
+                type=["keras", "h5", "json"],
+                key="admin_river_flow_model_upload",
+                help="Upload river_flow_model.keras or river_flow_model.h5. Upload model_metadata.json separately if feature scaling is required.",
+            )
+            if uploaded_model is not None:
+                model_target = save_uploaded_river_flow_model(uploaded_model)
+                st.session_state.setdefault("admin_audit_log", []).insert(
+                    0,
+                    {
+                        "time": pd.Timestamp.now(tz="Asia/Kolkata").strftime("%d %b %Y %I:%M %p"),
+                        "module": "AI Model",
+                        "action": f"Uploaded {uploaded_model.name}",
+                        "status": f"Saved to {model_target.name}",
+                    },
+                )
+                st.success(f"Saved model file: {model_target.name}. Refresh the page to apply the updated model status.")
+        with model_upload_cols[1]:
+            st.markdown(
+                """
+                **Supported files:** `river_flow_model.keras`, `river_flow_model.h5`, `model_metadata.json`.
+
+                **Input features:** water level, danger gap, level trend, GloFAS flow, GRRR flow, and forecast lead day.
+                """
+            )
+
     with admin_tabs[1]:
         st.markdown(
             '<div class="panel-note">Use this as a secondary source when a PDF is delayed or OCR needs correction. Saved rows are written in the same parsed-report format as uploaded PDFs.</div>',
@@ -7568,7 +8996,7 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
 if "main_dashboard_page" not in st.session_state:
     st.session_state.main_dashboard_page = "Infographics"
 
-nav_pages = ["Infographics", "Dam DSS & Analytics", "Weather Forecast", "3D Flood Scenarios", "Data & Timeseries", "Report Generation", "Administration"]
+nav_pages = ["Infographics", "Dam DSS & Analytics", "GD Site Analytics", "Weather Forecast", "3D Flood Scenarios", "Data & Timeseries", "Report Generation", "Administration"]
 st.markdown('<div class="dashboard-topnav-title">Dashboard Navigation</div>', unsafe_allow_html=True)
 nav_cols = st.columns(len(nav_pages))
 for nav_col, page in zip(nav_cols, nav_pages):
@@ -7725,6 +9153,9 @@ if main_page == "Report Generation":
                 ],
             )
             st.download_button("Download Season Data Report", season_pdf, "mpwrd_monsoon_season_data_report.pdf", "application/pdf", use_container_width=True)
+
+if main_page == "GD Site Analytics":
+    render_gd_site_analytics(map_status, reservoir_view)
 
 if main_page == "Dam DSS & Analytics":
     st.subheader("Dam Locations and District Status")
@@ -8266,6 +9697,124 @@ if main_page == "Dam DSS & Analytics":
                     unsafe_allow_html=True,
                 )
                 st.dataframe(grrr_rows, use_container_width=True, hide_index=True, height=285)
+
+        st.subheader("Nita AI TensorFlow River Flow DSS")
+        st.markdown(
+            '<div class="panel-note">Model-ready river discharge forecasting for MP river gauge sites. The panel integrates current gauge water levels with linked river and basin forecast context and stores generated forecasts in the application database for future analytics.</div>',
+            unsafe_allow_html=True,
+        )
+        flow_forecasts, flow_model_status = build_nita_ai_river_flow_forecasts(
+            river_view,
+            glofas_nodes if "glofas_nodes" in locals() else [],
+            grrr_nodes if "grrr_nodes" in locals() else [],
+            forecast_days=7,
+        )
+        model_ready = bool(flow_model_status.get("ready"))
+        model_status_cols = st.columns(4)
+        model_status_cols[0].metric("Gauge Sites", int(flow_forecasts["gauge_station"].nunique()) if not flow_forecasts.empty and "gauge_station" in flow_forecasts else 0)
+        model_status_cols[1].metric("Forecast Rows", len(flow_forecasts))
+        model_status_cols[2].metric("TensorFlow", "Ready" if model_ready else "Pending")
+        model_status_cols[3].metric("Forecast Lead", "7 days")
+        if model_ready:
+            st.success(f"TensorFlow model loaded from {flow_model_status.get('model_path')}")
+        else:
+            st.markdown(
+                (
+                    '<div class="panel-note">'
+                    '<b>Model-ready mode:</b> Nita AI is generating river-flow guidance from the fallback ensemble until the trained TensorFlow artifact is uploaded by administration. '
+                    f'Upload <code>river_flow_model.keras</code> or <code>river_flow_model.h5</code> from Administration, or place it in <code>{escape(str(RIVER_FLOW_MODEL_DIR))}</code>.'
+                    '</div>'
+                ),
+                unsafe_allow_html=True,
+            )
+
+        if flow_forecasts.empty:
+            st.warning("No river gauge observations are available under the current filters for river-flow prediction.")
+        else:
+            risk_order = {"Danger": 0, "Flood": 1, "Watch": 2, "Normal": 3}
+            flow_forecasts = flow_forecasts.sort_values(
+                by=["risk_band", "predicted_discharge_cumecs"],
+                key=lambda series: series.map(risk_order).fillna(4) if series.name == "risk_band" else series,
+                ascending=[True, False],
+            )
+            top_flow = flow_forecasts.dropna(subset=["predicted_discharge_cumecs"]).sort_values("predicted_discharge_cumecs", ascending=False).head(12)
+            flow_left, flow_right = st.columns([1.25, 0.75])
+            with flow_left:
+                flow_chart = (
+                    alt.Chart(top_flow)
+                    .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
+                    .encode(
+                        x=alt.X("predicted_discharge_cumecs:Q", title="Predicted discharge (cumecs)"),
+                        y=alt.Y("gauge_station:N", sort="-x", title="Gauge station"),
+                        color=alt.Color(
+                            "risk_band:N",
+                            title="AI risk",
+                            scale=alt.Scale(domain=["Normal", "Watch", "Flood", "Danger"], range=["#147df5", "#ffd300", "#ff8700", "#ff0000"]),
+                        ),
+                        tooltip=["river_name", "gauge_station", "district", "forecast_time", "predicted_discharge_cumecs", "glofas_flow_cms", "grrr_flow_cms", "risk_band"],
+                    )
+                    .properties(height=320)
+                )
+                st.altair_chart(flow_chart, use_container_width=True)
+            with flow_right:
+                gauge_labels = [
+                    f"{row.gauge_station} | {row.river_name} | {row.district}"
+                    for row in flow_forecasts.drop_duplicates(["gauge_station", "river_name", "district"]).itertuples(index=False)
+                ]
+                selected_flow_label = st.selectbox("AI forecast gauge", gauge_labels, key="nita_ai_flow_gauge") if gauge_labels else ""
+                if selected_flow_label:
+                    selected_station = selected_flow_label.split(" | ")[0]
+                    station_rows = flow_forecasts[flow_forecasts["gauge_station"].astype(str) == selected_station].copy()
+                    station_rows["forecast_time"] = pd.to_datetime(station_rows["forecast_time"], errors="coerce")
+                    station_chart = (
+                        alt.Chart(station_rows)
+                        .mark_line(point=True, strokeWidth=3)
+                        .encode(
+                            x=alt.X("forecast_time:T", title="Forecast date"),
+                            y=alt.Y("predicted_discharge_cumecs:Q", title="Predicted discharge (cumecs)"),
+                            color=alt.Color("risk_band:N", legend=None, scale=alt.Scale(domain=["Normal", "Watch", "Flood", "Danger"], range=["#147df5", "#ffd300", "#ff8700", "#ff0000"])),
+                            tooltip=["forecast_time", "lead_day", "predicted_discharge_cumecs", "risk_band", "prediction_confidence"],
+                        )
+                        .properties(height=180)
+                    )
+                    st.altair_chart(station_chart, use_container_width=True)
+                    latest_station = station_rows.sort_values("lead_day").iloc[0]
+                    st.markdown(
+                        f"""
+                        <div class="selected-dam-panel">
+                            <span class="district-gauge-title">{escape(str(latest_station.get('gauge_station')))}</span>
+                            <span class="district-gauge-meta">River: {escape(str(latest_station.get('river_name')))} | District: {escape(str(latest_station.get('district')))}</span>
+                            <span class="district-gauge-meta">Current WL: {fmt_number(latest_station.get('water_level_m'), ' m')} | Danger gap: {fmt_number(latest_station.get('danger_gap_m'), ' m')}</span>
+                            <span class="district-gauge-meta">Basin Forecast: {fmt_number(latest_station.get('glofas_flow_cms'), ' cumecs')} | River Forecast: {fmt_number(latest_station.get('grrr_flow_cms'), ' cumecs')}</span>
+                            <span class="district-gauge-meta">Model: {escape(str(latest_station.get('source_model')))} | Confidence {fmt_number(float(latest_station.get('prediction_confidence') or 0) * 100, '%')}</span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+            action_cols = st.columns([0.24, 0.76])
+            with action_cols[0]:
+                if st.button("Save AI Flow Forecasts", type="primary", use_container_width=True, key="save_ai_flow_forecasts"):
+                    saved_rows = save_river_flow_forecasts(flow_forecasts)
+                    st.success(f"Saved {saved_rows} river-flow forecast rows to {RIVER_FLOW_FORECAST_DB.name}.")
+            with action_cols[1]:
+                st.caption("Saved rows use one record per gauge, forecast date, and model source. These can later be synced to PostgreSQL/MySQL through the database sync layer.")
+            table_cols = [
+                "river_name",
+                "gauge_station",
+                "district",
+                "observed_at",
+                "forecast_time",
+                "lead_day",
+                "water_level_m",
+                "danger_gap_m",
+                "glofas_flow_cms",
+                "grrr_flow_cms",
+                "predicted_discharge_cumecs",
+                "risk_band",
+                "source_model",
+                "prediction_confidence",
+            ]
+            st.dataframe(flow_forecasts[[col for col in table_cols if col in flow_forecasts.columns]], use_container_width=True, hide_index=True, height=260)
 
 
 if main_page == "Weather Forecast":
