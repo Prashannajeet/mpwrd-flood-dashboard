@@ -10027,6 +10027,85 @@ if main_page == "Weather Forecast":
                     unsafe_allow_html=True,
                 )
 
+                three_day_rain_total = pd.to_numeric(forecast_daily.head(3).get("precipitation_sum"), errors="coerce").sum()
+                ai_weather_risk_score = 0
+                if pd.notna(past_24h_rainfall) and past_24h_rainfall >= 50:
+                    ai_weather_risk_score += 2
+                elif pd.notna(past_24h_rainfall) and past_24h_rainfall >= 25:
+                    ai_weather_risk_score += 1
+                if pd.notna(three_day_rain_total) and three_day_rain_total >= 150:
+                    ai_weather_risk_score += 3
+                elif pd.notna(three_day_rain_total) and three_day_rain_total >= 75:
+                    ai_weather_risk_score += 2
+                elif pd.notna(three_day_rain_total) and three_day_rain_total >= 35:
+                    ai_weather_risk_score += 1
+                if pd.notna(forecast_wind_max) and forecast_wind_max >= 50:
+                    ai_weather_risk_score += 1
+                if pd.notna(forecast_uv_max) and forecast_uv_max >= 8:
+                    ai_weather_risk_score += 1
+                if ai_weather_risk_score >= 5:
+                    ai_weather_signal = "Severe meteorological trigger"
+                elif ai_weather_risk_score >= 3:
+                    ai_weather_signal = "High rainfall-watch trigger"
+                elif ai_weather_risk_score >= 2:
+                    ai_weather_signal = "Moderate watch trigger"
+                else:
+                    ai_weather_signal = "Routine monitoring trigger"
+                ai_weather_inputs = pd.DataFrame(
+                    [
+                        {
+                            "Input Layer": "Past 24h rainfall",
+                            "Current Value": fmt_number(past_24h_rainfall, " mm"),
+                            "DSS Use": "Immediate runoff and urban/flash-flood sensitivity",
+                        },
+                        {
+                            "Input Layer": "Next 3-day rainfall",
+                            "Current Value": fmt_number(three_day_rain_total, " mm"),
+                            "DSS Use": "Reservoir inflow pressure and GD site vigilance",
+                        },
+                        {
+                            "Input Layer": "Next 7-day rainfall",
+                            "Current Value": fmt_number(forecast_rain_total, " mm"),
+                            "DSS Use": "Medium-range dam operation planning",
+                        },
+                        {
+                            "Input Layer": "Max wind speed",
+                            "Current Value": fmt_number(forecast_wind_max, " km/h"),
+                            "DSS Use": "Severe weather and communication readiness",
+                        },
+                        {
+                            "Input Layer": "Max temperature / UV",
+                            "Current Value": f"{fmt_number(forecast_temp_max, ' deg C')} / {fmt_number(forecast_uv_max, '')}",
+                            "DSS Use": "Field safety and heat-stress context",
+                        },
+                        {
+                            "Input Layer": "AI weather trigger",
+                            "Current Value": ai_weather_signal,
+                            "DSS Use": "Can be replaced or enriched by GraphCast-derived 10-day weather signals",
+                        },
+                    ]
+                )
+                st.markdown(
+                    f"""
+                    <div class="infographic-frame">
+                        <div class="infographic-title">AI Weather Intelligence Inputs</div>
+                        <div class="infographic-subtitle">Operational weather variables prepared for dam, GD site, and basin DSS. The same schema can accept GraphCast-derived 10-day forecast grids when a backend source is connected.</div>
+                        <div class="infographic-grid">
+                            <div class="infographic-card"><span>AI Weather Signal</span><b>{escape(ai_weather_signal)}</b><small>Composite rainfall, wind, UV, and current rainfall trigger</small></div>
+                            <div class="infographic-card"><span>Next 3-Day Rain</span><b>{fmt_number(three_day_rain_total, " mm")}</b><small>Short-range inflow pressure indicator</small></div>
+                            <div class="infographic-card"><span>Next 7-Day Rain</span><b>{fmt_number(forecast_rain_total, " mm")}</b><small>Medium-range DSS planning input</small></div>
+                            <div class="infographic-card"><span>Suggested Backend</span><b>AI forecast ready</b><small>GraphCast / Weather API / local model compatible schema</small></div>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                with st.expander("Review AI weather input schema for DSS", expanded=False):
+                    st.dataframe(ai_weather_inputs, use_container_width=True, hide_index=True, height=250)
+                    st.caption(
+                        "These are dashboard-ready decision inputs. A future GraphCast data service can populate the same fields from 0.25-degree forecast grids clipped to MP districts, dam catchments, and GD site basins."
+                    )
+
                 weather_tile_api_key = get_app_secret("openweather_api_key", "OPENWEATHER_API_KEY", "")
                 weather_district_geojson = load_light_district_geojson(str(MP_DISTRICTS_GEOJSON))
                 render_weather_town_leaflet_map(

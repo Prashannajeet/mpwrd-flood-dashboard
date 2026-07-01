@@ -5,6 +5,7 @@ __pycache__/
 *.pyc
 .venv/
 admin_alert_outbox/
+logs/
 models/river_flow_tensorflow/*.keras
 models/river_flow_tensorflow/*.h5
 models/river_flow_tensorflow/*.hdf5
