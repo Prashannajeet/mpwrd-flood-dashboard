@@ -1784,6 +1784,149 @@ def fetch_online_river_forecast_time() -> pd.Timestamp | None:
     return pd.to_datetime(selected, unit="ms", utc=True).tz_convert("Asia/Kolkata")
 
 
+def fetch_json_with_fallback(url: str, timeout_seconds: int = 12) -> dict:
+    try:
+        request = urllib.request.Request(url, headers={"User-Agent": "MPWRD-GD-Forecast/1.0"})
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except Exception:
+        pass
+    try:
+        result = subprocess.run(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-Command",
+                f"(Invoke-WebRequest -UseBasicParsing -TimeoutSec {int(timeout_seconds)} -Uri {json.dumps(url)}).Content",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds + 5,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return json.loads(result.stdout)
+    except Exception:
+        pass
+    try:
+        result = subprocess.run(
+            ["curl.exe", "-s", "--max-time", str(int(timeout_seconds)), url],
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds + 5,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return json.loads(result.stdout)
+    except Exception:
+        pass
+    return {}
+
+
+@st.cache_data(ttl=6 * 3600, show_spinner=False)
+def fetch_live_gd_river_series(comids: tuple[str, ...]) -> pd.DataFrame:
+    clean_comids = sorted({re.sub(r"\D", "", str(comid)) for comid in comids if re.sub(r"\D", "", str(comid))})
+    if not clean_comids:
+        return pd.DataFrame()
+    metadata = fetch_json_with_fallback(f"{GEOGLOWS_MEDIUM_URL}/0?f=json", timeout_seconds=15)
+    if metadata:
+        try:
+            RIVER_FORECAST_SERVICE_CACHE_JSON.write_text(json.dumps(metadata), encoding="utf-8")
+        except Exception:
+            pass
+    elif RIVER_FORECAST_SERVICE_CACHE_JSON.exists():
+        try:
+            metadata = json.loads(RIVER_FORECAST_SERVICE_CACHE_JSON.read_text(encoding="utf-8"))
+        except Exception:
+            metadata = {}
+    extent = (metadata or {}).get("timeInfo", {}).get("timeExtent") or []
+    if len(extent) < 2:
+        return pd.DataFrame()
+    start_ms = int(float(extent[0]))
+    end_ms = min(int(float(extent[1])), start_ms + 7 * 24 * 60 * 60 * 1000)
+    rows: list[dict] = []
+    for index in range(0, len(clean_comids), 20):
+        group = clean_comids[index : index + 20]
+        params = urllib.parse.urlencode(
+            {
+                "f": "json",
+                "where": "comid IN (" + ",".join(group) + ")",
+                "outFields": "comid,streamorder,timevalue,meanflow,returnperiod,upstreamarea",
+                "returnGeometry": "false",
+                "time": f"{start_ms},{end_ms}",
+                "orderByFields": "comid ASC,timevalue ASC",
+                "resultRecordCount": "2000",
+            }
+        )
+        payload = fetch_json_with_fallback(f"{GEOGLOWS_MEDIUM_URL}/0/query?{params}", timeout_seconds=25)
+        if payload.get("error"):
+            continue
+        for feature in payload.get("features") or []:
+            attrs = feature.get("attributes") or {}
+            if attrs:
+                rows.append(attrs)
+    if not rows:
+        return pd.DataFrame()
+    series = pd.DataFrame(rows)
+    series["linked_comid"] = series["comid"].astype(str)
+    series["forecast_time"] = pd.to_datetime(series["timevalue"], unit="ms", utc=True, errors="coerce")
+    for column in ["meanflow", "returnperiod", "streamorder", "upstreamarea"]:
+        if column in series:
+            series[column] = pd.to_numeric(series[column], errors="coerce")
+    return (
+        series.dropna(subset=["linked_comid", "forecast_time", "meanflow"])
+        .drop_duplicates(["linked_comid", "forecast_time"])
+        .sort_values(["linked_comid", "forecast_time"])
+        .reset_index(drop=True)
+    )
+
+
+def enrich_gd_forecasts_with_live_series(gd_forecasts: pd.DataFrame) -> pd.DataFrame:
+    if gd_forecasts.empty or "linked_comid" not in gd_forecasts.columns:
+        return gd_forecasts
+    forecast_rows = gd_forecasts[gd_forecasts.get("data_period", pd.Series(dtype=str)).astype(str).eq("Forecasted Data")]
+    if not forecast_rows.empty and gd_forecasts["forecast_time"].nunique(dropna=True) > 2:
+        return gd_forecasts
+    base_rows = gd_forecasts.sort_values("forecast_time").drop_duplicates("station_code", keep="last").copy()
+    comids = tuple(base_rows["linked_comid"].dropna().astype(str).tolist())
+    live_series = fetch_live_gd_river_series(comids)
+    if live_series.empty:
+        return gd_forecasts
+    enriched_rows: list[dict] = []
+    for base in base_rows.to_dict("records"):
+        comid = re.sub(r"\D", "", str(base.get("linked_comid") or ""))
+        if not comid:
+            enriched_rows.append(base)
+            continue
+        station_series = live_series[live_series["linked_comid"].astype(str) == comid].copy()
+        if station_series.empty:
+            enriched_rows.append(base)
+            continue
+        first_time = station_series["forecast_time"].min()
+        for index, point in enumerate(station_series.head(57).to_dict("records")):
+            row = dict(base)
+            forecast_time = point.get("forecast_time")
+            flow = pd.to_numeric(pd.Series([point.get("meanflow")]), errors="coerce").iloc[0]
+            row["forecast_time"] = forecast_time
+            row["data_period"] = "Now Data" if index == 0 else "Forecasted Data"
+            row["current_flow_cms"] = float(flow) if index == 0 and pd.notna(flow) else None
+            row["river_forecast_flow_cms"] = float(flow) if pd.notna(flow) else None
+            row["combined_forecast_flow_cms"] = float(flow) if pd.notna(flow) else None
+            row["return_period"] = point.get("returnperiod")
+            row["streamorder"] = point.get("streamorder")
+            row["linked_comid"] = comid
+            row["forecast_status"] = "Linked live river forecast reach"
+            row["lead_day"] = (
+                int(max(0, (pd.Timestamp(forecast_time) - pd.Timestamp(first_time)).total_seconds()) // 86400)
+                if pd.notna(forecast_time) and pd.notna(first_time)
+                else index
+            )
+            enriched_rows.append(row)
+    if not enriched_rows:
+        return gd_forecasts
+    return pd.DataFrame(enriched_rows)
+
+
 def build_gd_site_forecast_rows(
     gd_sites: pd.DataFrame,
     latest_observed: pd.DataFrame,
@@ -2504,6 +2647,10 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
             online_now_time=online_now_time,
         )
         gd_source_mode = "Pending station-specific operational refresh"
+    original_gd_row_count = len(gd_forecasts)
+    gd_forecasts = enrich_gd_forecasts_with_live_series(gd_forecasts)
+    if len(gd_forecasts) > original_gd_row_count:
+        gd_source_mode = "Live station-specific operational forecast series"
     if not gd_forecasts.empty:
         gd_forecasts = gd_forecasts.copy()
         gd_forecasts["forecast_alert_level"] = gd_forecasts.apply(
