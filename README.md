@@ -29,6 +29,44 @@ API:
 uvicorn flood_report_api:app --host 0.0.0.0 --port 8600
 ```
 
+## 3-Hour Rainfall Database
+
+The app now includes a backend-ready satellite rainfall store for MP rain gauges, dams, and GD sites:
+
+```bash
+python satellite_rainfall_refresh.py --include-dams --include-gd-sites
+```
+
+For a continuously running local refresh service:
+
+```bash
+run_satellite_rainfall_refresh.bat
+```
+
+The script creates `data/satellite_rainfall_timeseries.sqlite` with:
+
+- `rainfall_station_master`
+- `rainfall_3hour_observations`
+- `rainfall_refresh_log`
+
+To add official MP rain-gauge stations, place `data/mp_raingauge_stations.csv` with these columns:
+
+```text
+station_id,station_name,district,basin,latitude,longitude
+```
+
+To import extracted 3-hour rainfall values from NASA IMERG or another approved source:
+
+```bash
+python satellite_rainfall_refresh.py --import-csv data/imerg_3hour_station_extract.csv --source-product IMERG_EARLY_3H
+```
+
+Import CSV columns:
+
+```text
+station_id,observed_at,rainfall_3h_mm,rainfall_24h_mm,source_latency_hours,quality_flag
+```
+
 ## Render Deployment
 
 This repo includes `render.yaml` with two web services:
