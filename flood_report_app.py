@@ -5917,6 +5917,55 @@ def weather_points_from_districts(dams: pd.DataFrame, towns: pd.DataFrame) -> pd
     return districts[["town_name", "district", "latitude", "longitude", "basin", "priority_flag"]]
 
 
+def district_weather_from_dam_forecasts(dam_weather: pd.DataFrame, fallback_districts: pd.DataFrame) -> pd.DataFrame:
+    if dam_weather.empty or "district" not in dam_weather.columns:
+        return fallback_districts
+    frame = dam_weather.copy()
+    frame["latitude"] = pd.to_numeric(frame.get("latitude"), errors="coerce")
+    frame["longitude"] = pd.to_numeric(frame.get("longitude"), errors="coerce")
+    for column in [
+        "forecast_rain_mm",
+        "forecast_temp_max_c",
+        "forecast_wind_max_kmh",
+        "forecast_uv_max",
+        "current_rain_mm",
+        "current_temp_c",
+    ]:
+        frame[column] = pd.to_numeric(frame.get(column), errors="coerce")
+    frame = frame.dropna(subset=["district", "latitude", "longitude"]).copy()
+    if frame.empty:
+        return fallback_districts
+    risk_rank = {"No Data": 0, "Low": 1, "Moderate": 2, "High": 3, "Severe": 4}
+    frame["risk_score"] = frame.get("weather_risk", pd.Series("No Data", index=frame.index)).map(risk_rank).fillna(0)
+    district_rows = []
+    for district, group in frame.groupby(frame["district"].astype(str)):
+        worst_risk_score = int(group["risk_score"].max()) if not group.empty else 0
+        worst_risk = next((label for label, score in risk_rank.items() if score == worst_risk_score), "No Data")
+        district_rows.append(
+            {
+                "town_name": f"{district} District",
+                "district": district,
+                "latitude": group["latitude"].mean(),
+                "longitude": group["longitude"].mean(),
+                "basin": "Dam-linked district weather",
+                "priority_flag": f"{group['town_name'].nunique()} dam point(s)",
+                "dam_count": int(group["town_name"].nunique()),
+                "forecast_rain_mm": group["forecast_rain_mm"].mean(),
+                "max_dam_rain_mm": group["forecast_rain_mm"].max(),
+                "forecast_temp_max_c": group["forecast_temp_max_c"].max(),
+                "forecast_wind_max_kmh": group["forecast_wind_max_kmh"].max(),
+                "forecast_uv_max": group["forecast_uv_max"].max(),
+                "current_rain_mm": group["current_rain_mm"].mean(),
+                "current_temp_c": group["current_temp_c"].mean(),
+                "weather_risk": worst_risk,
+                "source": "district aggregate from cached dam forecasts",
+                "status": f"Aggregated from {group['town_name'].nunique()} dam forecast point(s)",
+            }
+        )
+    districts = pd.DataFrame(district_rows).sort_values(["weather_risk", "forecast_rain_mm", "district"], ascending=[False, False, True])
+    return districts.reset_index(drop=True)
+
+
 def render_weather_town_leaflet_map(
     towns: pd.DataFrame,
     selected_town: str,
@@ -10122,7 +10171,20 @@ if main_page == "Weather Forecast":
         towns_master = towns_master.dropna(subset=["latitude", "longitude"]).sort_values(["district", "town_name"]).reset_index(drop=True)
     dam_weather_source = map_status if not map_status.empty else dam_locations
     dam_weather_points = weather_points_from_dams(dam_weather_source)
-    district_weather_points = weather_points_from_districts(dam_weather_source, towns_master)
+    fallback_district_weather_points = weather_points_from_districts(dam_weather_source, towns_master)
+    dam_layer_weather = dam_weather_points.copy()
+    if not dam_weather_points.empty:
+        dam_points_key = tuple(
+            (
+                str(row.town_name),
+                str(row.district),
+                round(float(row.latitude), 5),
+                round(float(row.longitude), 5),
+            )
+            for row in dam_weather_points.dropna(subset=["latitude", "longitude"]).itertuples(index=False)
+        )
+        dam_layer_weather = build_cached_weather_forecast_for_points(dam_points_key)
+    district_weather_points = district_weather_from_dam_forecasts(dam_layer_weather, fallback_district_weather_points)
     weather_point_sets = {
         "Towns": towns_master,
         "Dams": dam_weather_points,
@@ -10136,18 +10198,7 @@ if main_page == "Weather Forecast":
         with weather_top[0]:
             selected_weather_set = st.selectbox("Weather coverage", available_weather_sets, key="weather_point_set")
         weather_points = weather_point_sets[selected_weather_set].copy()
-        dam_layer_weather = dam_weather_points.copy()
         if not dam_weather_points.empty:
-            dam_points_key = tuple(
-                (
-                    str(row.town_name),
-                    str(row.district),
-                    round(float(row.latitude), 5),
-                    round(float(row.longitude), 5),
-                )
-                for row in dam_weather_points.dropna(subset=["latitude", "longitude"]).itertuples(index=False)
-            )
-            dam_layer_weather = build_cached_weather_forecast_for_points(dam_points_key)
             cached_count = int(dam_layer_weather["forecast_rain_mm"].notna().sum()) if "forecast_rain_mm" in dam_layer_weather else 0
             st.caption(
                 f"Dam forecast layer loads by default from the daily weather database. "
@@ -10251,17 +10302,68 @@ if main_page == "Weather Forecast":
                         past_24h_window_label = f"{window_start.strftime('%d %b %I:%M %p')} to {window_end.strftime('%d %b %I:%M %p')}"
 
                 summary_towns = weather_points.copy()
-                summary_towns["forecast_rain_mm"] = 0.0
-                summary_towns["forecast_temp_max_c"] = 0.0
-                summary_towns["forecast_wind_max_kmh"] = 0.0
-                summary_towns["forecast_uv_max"] = 0.0
-                summary_towns["weather_risk"] = "Low"
+                for column in ["forecast_rain_mm", "forecast_temp_max_c", "forecast_wind_max_kmh", "forecast_uv_max"]:
+                    if column in summary_towns.columns:
+                        summary_towns[column] = pd.to_numeric(summary_towns[column], errors="coerce").fillna(0.0)
+                    else:
+                        summary_towns[column] = 0.0
+                if "weather_risk" not in summary_towns.columns:
+                    summary_towns["weather_risk"] = "Low"
+                summary_towns["weather_risk"] = summary_towns["weather_risk"].fillna("Low")
                 selected_mask = summary_towns["town_name"] == selected_town_name
-                summary_towns.loc[selected_mask, "forecast_rain_mm"] = forecast_rain_total
-                summary_towns.loc[selected_mask, "forecast_temp_max_c"] = forecast_temp_max
-                summary_towns.loc[selected_mask, "forecast_wind_max_kmh"] = forecast_wind_max
-                summary_towns.loc[selected_mask, "forecast_uv_max"] = forecast_uv_max
-                summary_towns.loc[selected_mask, "weather_risk"] = selected_weather_risk
+                if selected_weather_set != "Districts":
+                    summary_towns.loc[selected_mask, "forecast_rain_mm"] = forecast_rain_total
+                    summary_towns.loc[selected_mask, "forecast_temp_max_c"] = forecast_temp_max
+                    summary_towns.loc[selected_mask, "forecast_wind_max_kmh"] = forecast_wind_max
+                    summary_towns.loc[selected_mask, "forecast_uv_max"] = forecast_uv_max
+                    summary_towns.loc[selected_mask, "weather_risk"] = selected_weather_risk
+                if selected_weather_set == "Districts" and "dam_count" in weather_points.columns:
+                    district_summary_display = weather_points.copy()
+                    district_summary_display["forecast_rain_mm"] = pd.to_numeric(district_summary_display.get("forecast_rain_mm"), errors="coerce")
+                    district_summary_display["max_dam_rain_mm"] = pd.to_numeric(district_summary_display.get("max_dam_rain_mm"), errors="coerce")
+                    district_summary_display["forecast_wind_max_kmh"] = pd.to_numeric(district_summary_display.get("forecast_wind_max_kmh"), errors="coerce")
+                    district_summary_display = district_summary_display.sort_values(["weather_risk", "forecast_rain_mm"], ascending=[False, False])
+                    district_cols = st.columns([0.52, 0.48])
+                    with district_cols[0]:
+                        district_chart = (
+                            alt.Chart(district_summary_display.head(18))
+                            .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
+                            .encode(
+                                y=alt.Y("district:N", sort="-x", title="District"),
+                                x=alt.X("forecast_rain_mm:Q", title="Avg dam-point 7-day rainfall (mm)"),
+                                color=alt.Color(
+                                    "weather_risk:N",
+                                    title="District risk",
+                                    scale=alt.Scale(domain=["Low", "Moderate", "High", "Severe", "No Data"], range=["#14b8a6", "#f59e0b", "#f97316", "#dc2626", "#94a3b8"]),
+                                ),
+                                tooltip=[
+                                    "district",
+                                    alt.Tooltip("dam_count:Q", title="Dam points"),
+                                    alt.Tooltip("forecast_rain_mm:Q", title="Avg rainfall (mm)", format=".2f"),
+                                    alt.Tooltip("max_dam_rain_mm:Q", title="Max dam rainfall (mm)", format=".2f"),
+                                    "weather_risk",
+                                ],
+                            )
+                            .properties(height=300, title="District Weather Exposure from Linked Dams")
+                        )
+                        st.altair_chart(district_chart, use_container_width=True)
+                    with district_cols[1]:
+                        st.dataframe(
+                            district_summary_display[
+                                [
+                                    "district",
+                                    "dam_count",
+                                    "forecast_rain_mm",
+                                    "max_dam_rain_mm",
+                                    "forecast_wind_max_kmh",
+                                    "weather_risk",
+                                    "status",
+                                ]
+                            ],
+                            use_container_width=True,
+                            hide_index=True,
+                            height=300,
+                        )
                 if not dam_layer_weather.empty:
                     selected_dam_mask = dam_layer_weather["town_name"].astype(str) == selected_town_name
                     if selected_weather_set == "Dams" and selected_dam_mask.any():
@@ -10308,6 +10410,23 @@ if main_page == "Weather Forecast":
                     """,
                     unsafe_allow_html=True,
                 )
+                if selected_weather_set == "Districts" and "dam_count" in selected_town.index:
+                    st.markdown(
+                        f"""
+                        <div class="infographic-frame">
+                            <div class="infographic-title">District Dam-Linked Weather: {escape(str(selected_town['district']))}</div>
+                            <div class="infographic-subtitle">District weather exposure is aggregated from cached forecasts at the dams located in the selected district.</div>
+                            <div class="infographic-grid">
+                                <div class="infographic-card"><span>Linked Dams</span><b>{int(pd.to_numeric(pd.Series([selected_town.get('dam_count')]), errors='coerce').fillna(0).iloc[0])}</b><small>Dam forecast points in district</small></div>
+                                <div class="infographic-card"><span>Avg 7-Day Rain</span><b>{fmt_number(selected_town.get('forecast_rain_mm'), " mm")}</b><small>Average across linked dams</small></div>
+                                <div class="infographic-card"><span>Max Dam Rain</span><b>{fmt_number(selected_town.get('max_dam_rain_mm'), " mm")}</b><small>Highest dam-side rainfall signal</small></div>
+                                <div class="infographic-card"><span>Max Wind</span><b>{fmt_number(selected_town.get('forecast_wind_max_kmh'), " km/h")}</b><small>Maximum across linked dams</small></div>
+                                <div class="infographic-card"><span>District Risk</span><b>{escape(str(selected_town.get('weather_risk') or 'No Data'))}</b><small>{escape(str(selected_town.get('status') or 'Dam forecast aggregate'))}</small></div>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
                 three_day_rain_total = pd.to_numeric(forecast_daily.head(3).get("precipitation_sum"), errors="coerce").sum()
                 ai_weather_risk_score = 0
