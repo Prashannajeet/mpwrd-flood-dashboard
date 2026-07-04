@@ -8742,44 +8742,71 @@ def render_dashboard_assistant(
             unsafe_allow_html=True,
         )
         st.caption(local_ai_status_text())
-        quick_prompts = [
-            "DSS brief",
-            "Weather DSS brief",
-            "Critical dams",
-            "District ranking",
-            "Opened gates",
-            "Least filled below 25%",
-            "River gauges near danger",
-            "Rising reservoir trends",
-            "Critical dams last 5 days water levels",
-        ]
-        for start in range(0, len(quick_prompts), 3):
-            prompt_cols = st.columns(3)
-            for col, prompt in zip(prompt_cols, quick_prompts[start : start + 3]):
-                if col.button(prompt, key=f"assistant_quick_{normalize_name(prompt)}", use_container_width=True):
-                    answer = dashboard_assistant_answer(
-                        prompt,
-                        map_status_frame,
-                        reservoir_frame,
-                        river_frame,
-                        gate_frame,
-                        page_name,
-                        weather_points_frame,
-                        historical_reservoir_frame,
-                    )
-                    answer = local_ai_enhance_answer(prompt, answer)
-                    st.session_state.assistant_history.insert(0, {"question": prompt, **answer})
-
-        with st.form("dashboard_assistant_form", clear_on_submit=True):
-            question = st.text_input(
-                "Ask a question",
-                placeholder="Example: Get tables of Critical dams for last 5 days with each day water levels.",
-                key="assistant_question_input",
+        st.markdown(
+            """
+            <div class="selected-dam-panel" style="margin: 8px 0 12px;">
+                <span class="district-gauge-title">AI Command Desk</span>
+                <span class="district-gauge-meta">Choose an intent, refine the command, and run structured analysis over the active dashboard data.</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        command_library = {
+            "Operational Brief": [
+                "DSS brief",
+                "Summarise current critical and warning reservoirs with recommended action.",
+                "Prepare a district-wise operational brief for the latest report slot.",
+            ],
+            "Dam Alerts": [
+                "Critical dams",
+                "Critical dams last 5 days water levels",
+                "Show dams below 25% filling with district and alert status.",
+            ],
+            "Weather Intelligence": [
+                "Weather DSS brief",
+                "Show rainfall and weather context for high-alert dam districts.",
+                "Summarise forecast weather risk for the selected dashboard view.",
+            ],
+            "River & Gate Status": [
+                "River gauges near danger",
+                "Opened gates",
+                "Show river and gate status requiring operational attention.",
+            ],
+            "Trends & Tables": [
+                "Rising reservoir trends",
+                "District ranking",
+                "Create a last 5 days table for critical dams with water levels.",
+            ],
+        }
+        command_cols = st.columns([0.24, 0.36, 0.40])
+        with command_cols[0]:
+            intent = st.selectbox("Intent", list(command_library.keys()), key="assistant_intent")
+        with command_cols[1]:
+            suggested_command = st.selectbox("Suggested command", command_library[intent], key="assistant_suggested_command")
+        with command_cols[2]:
+            output_style = st.radio(
+                "Output",
+                ["Brief", "Table", "Action"],
+                horizontal=True,
+                key="assistant_output_style",
             )
-            submitted = st.form_submit_button("Ask Assistant", type="primary", use_container_width=True)
-        if submitted and question.strip():
+        with st.form("dashboard_assistant_form", clear_on_submit=True):
+            question = st.text_area(
+                "Command",
+                value=suggested_command,
+                placeholder="Ask for a brief, table, trend, district filter, dam lookup, weather context, river status, or last-N-days analysis.",
+                key="assistant_question_input",
+                height=86,
+            )
+            submitted = st.form_submit_button("Run AI DSS Analysis", type="primary", use_container_width=True)
+        if submitted:
+            command = question.strip() or suggested_command
+            if output_style == "Table" and "table" not in normalize_name(command):
+                command = f"{command}. Return as table where possible."
+            if output_style == "Action" and not any(term in normalize_name(command) for term in ["action", "recommend", "priority"]):
+                command = f"{command}. Include recommended operational actions."
             answer = dashboard_assistant_answer(
-                question,
+                command,
                 map_status_frame,
                 reservoir_frame,
                 river_frame,
@@ -8788,12 +8815,21 @@ def render_dashboard_assistant(
                 weather_points_frame,
                 historical_reservoir_frame,
             )
-            answer = local_ai_enhance_answer(question.strip(), answer)
-            st.session_state.assistant_history.insert(0, {"question": question.strip(), **answer})
+            answer = local_ai_enhance_answer(command, answer)
+            st.session_state.assistant_history.insert(0, {"question": command, "intent": intent, "output_style": output_style, **answer})
 
         if st.session_state.assistant_history:
             latest = st.session_state.assistant_history[0]
-            st.markdown(f"**You asked:** {escape(str(latest.get('question', '')))}")
+            st.markdown(
+                f"""
+                <div class="selected-dam-panel" style="margin-top: 10px;">
+                    <span class="district-gauge-title">Latest AI Result</span>
+                    <span class="district-gauge-meta">Intent: {escape(str(latest.get('intent', 'Structured Query')))} | Output: {escape(str(latest.get('output_style', 'Brief')))}</span>
+                    <span class="district-gauge-meta">Command: {escape(str(latest.get('question', '')))}</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
             st.info(str(latest.get("text", "")))
             if latest.get("ai_status"):
                 st.caption(str(latest.get("ai_status")))
