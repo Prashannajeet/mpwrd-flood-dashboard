@@ -20,3 +20,11 @@ services:
     schedule: "0 19 * * *"
     buildCommand: pip install -r requirements.txt
     startCommand: python weather_cache_refresh.py --forecast-all --include-dams
+
+  - type: cron
+    name: mpwrd-gd-site-forecast-refresh
+    runtime: python
+    plan: starter
+    schedule: "0 */6 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python refresh_gd_site_online_forecasts_node.py && python refresh_gd_site_forecasts.py --retention-days 7

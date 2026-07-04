@@ -4,6 +4,7 @@ import hashlib
 import json
 import sqlite3
 import subprocess
+import argparse
 from pathlib import Path
 
 import geopandas as gpd
@@ -17,6 +18,7 @@ SERVICE_CACHE = APP_DIR / "data" / "river_forecast_service_status.json"
 ONLINE_FORECAST_CSV = APP_DIR / "data" / "gd_site_online_forecasts.csv"
 DB = APP_DIR / "data" / "gd_site_forecasts.sqlite"
 SERVICE_URL = "https://livefeeds3.arcgis.com/arcgis/rest/services/GEOGLOWS/GlobalWaterModel_Medium/MapServer"
+RETENTION_DAYS = 7
 
 
 def slot(timestamp: pd.Timestamp | None = None) -> tuple[str, str, pd.Timestamp]:
@@ -25,9 +27,9 @@ def slot(timestamp: pd.Timestamp | None = None) -> tuple[str, str, pd.Timestamp]
         ts = ts.tz_localize("Asia/Kolkata")
     else:
         ts = ts.tz_convert("Asia/Kolkata")
-    slot_hour = max([hour for hour in [8, 12, 16, 20] if hour <= ts.hour], default=20)
+    slot_hour = max([hour for hour in [0, 6, 12, 18] if hour <= ts.hour], default=18)
     slot_date = ts.normalize()
-    if ts.hour < 8:
+    if ts.hour < 0:
         slot_date = (ts - pd.Timedelta(days=1)).normalize()
     return slot_date.strftime("%Y-%m-%d"), f"{slot_hour:02d}:00", slot_date + pd.Timedelta(hours=slot_hour)
 
@@ -108,9 +110,23 @@ def init_db() -> None:
             except sqlite3.OperationalError:
                 pass
         conn.execute("CREATE INDEX IF NOT EXISTS idx_gd_site_forecasts_slot ON gd_site_forecasts(slot_date, slot_time)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gd_site_forecasts_generated_at ON gd_site_forecasts(generated_at)")
+
+
+def prune_old_rows(retention_days: int = RETENTION_DAYS) -> int:
+    cutoff = (pd.Timestamp.now(tz="Asia/Kolkata") - pd.Timedelta(days=int(retention_days))).isoformat()
+    with sqlite3.connect(DB) as conn:
+        cursor = conn.execute("DELETE FROM gd_site_forecasts WHERE generated_at < ?", (cutoff,))
+        deleted = cursor.rowcount if cursor.rowcount is not None else 0
+        conn.commit()
+    return int(deleted)
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Refresh cached GD site forecast rows.")
+    parser.add_argument("--retention-days", type=int, default=RETENTION_DAYS, help="Keep only this many days of cached GD rows.")
+    args = parser.parse_args()
+
     forecast_time = service_time()
     slot_date, slot_time, _ = slot()
     sites = gpd.read_file(GD_SITES).to_crs(4326)
@@ -219,7 +235,8 @@ def main() -> None:
             f"INSERT OR REPLACE INTO gd_site_forecasts ({', '.join(cols)}) VALUES ({', '.join(['?'] * len(cols))})",
             rows,
         )
-    print(f"Saved {len(rows)} GD site forecast rows for {slot_date} {slot_time} to {DB}")
+    deleted = prune_old_rows(args.retention_days)
+    print(f"Saved {len(rows)} GD site forecast rows for {slot_date} {slot_time} to {DB}; pruned {deleted} rows older than {args.retention_days} days.")
 
 
 if __name__ == "__main__":

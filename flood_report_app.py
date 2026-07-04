@@ -1876,10 +1876,10 @@ def gd_forecast_slot(timestamp: pd.Timestamp | None = None) -> tuple[str, str, p
         ts = ts.tz_localize("Asia/Kolkata")
     else:
         ts = ts.tz_convert("Asia/Kolkata")
-    slot_hours = [8, 12, 16, 20]
-    slot_hour = max([hour for hour in slot_hours if hour <= ts.hour], default=20)
+    slot_hours = [0, 6, 12, 18]
+    slot_hour = max([hour for hour in slot_hours if hour <= ts.hour], default=18)
     slot_date = ts.normalize()
-    if ts.hour < 8:
+    if ts.hour < 0:
         slot_date = (ts - pd.Timedelta(days=1)).normalize()
     slot_ts = slot_date + pd.Timedelta(hours=slot_hour)
     return slot_date.strftime("%Y-%m-%d"), f"{slot_hour:02d}:00", slot_ts
@@ -1930,6 +1930,7 @@ def init_gd_site_forecast_db() -> None:
                 pass
         conn.execute("CREATE INDEX IF NOT EXISTS idx_gd_site_forecasts_slot ON gd_site_forecasts(slot_date, slot_time)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_gd_site_forecasts_station_time ON gd_site_forecasts(station_code, forecast_time)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_gd_site_forecasts_generated_at ON gd_site_forecasts(generated_at)")
 
 
 def save_gd_site_forecasts(forecast_df: pd.DataFrame, slot_timestamp: pd.Timestamp | None = None) -> int:
@@ -2012,15 +2013,39 @@ def load_gd_site_forecast_cache() -> pd.DataFrame:
 
 
 def load_latest_gd_site_forecast_slot() -> pd.DataFrame:
-    cached = load_gd_site_forecast_cache()
-    if cached.empty or not {"slot_date", "slot_time"}.issubset(cached.columns):
+    if not GD_SITE_FORECAST_DB.exists():
         return pd.DataFrame()
-    latest = cached.sort_values(["slot_date", "slot_time", "generated_at"]).tail(1)
-    if latest.empty:
+    try:
+        with sqlite3.connect(GD_SITE_FORECAST_DB) as conn:
+            latest = pd.read_sql_query(
+                """
+                SELECT slot_date, slot_time
+                FROM gd_site_forecasts
+                ORDER BY slot_date DESC, slot_time DESC, generated_at DESC
+                LIMIT 1
+                """,
+                conn,
+            )
+            if latest.empty:
+                return pd.DataFrame()
+            slot_date = latest.iloc[0].get("slot_date")
+            slot_time = latest.iloc[0].get("slot_time")
+            cached = pd.read_sql_query(
+                """
+                SELECT *
+                FROM gd_site_forecasts
+                WHERE slot_date = ? AND slot_time = ?
+                ORDER BY station_name, forecast_time
+                """,
+                conn,
+                params=(slot_date, slot_time),
+            )
+    except Exception:
         return pd.DataFrame()
-    slot_date = latest.iloc[0].get("slot_date")
-    slot_time = latest.iloc[0].get("slot_time")
-    return cached[(cached["slot_date"] == slot_date) & (cached["slot_time"] == slot_time)].copy()
+    for column in ["generated_at", "observed_at", "forecast_time"]:
+        if column in cached:
+            cached[column] = pd.to_datetime(cached[column], errors="coerce")
+    return cached
 
 
 def gd_return_period_alert(return_period: object, flow: object = None) -> tuple[str, str]:
@@ -2508,7 +2533,7 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
     if selected_periods:
         gd_filtered = gd_filtered[gd_filtered["data_period"].isin(selected_periods)]
 
-    gd_history = load_gd_observed_history(str(NARMADA_OBSERVED_CSV), days=31)
+    gd_history = load_gd_observed_history(str(NARMADA_OBSERVED_CSV), days=7)
     if selected_station != "All GD sites":
         selected_station_code = selected_station.split(" | ", 1)[0]
     else:
@@ -2531,7 +2556,7 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
             else selected_station_code
         )
         st.markdown(
-            f'<div class="panel-note"><b>{escape(station_name)}</b>: latest available one-month GD observed archive is shown with forecast values. The observed archive may be older than the forecast signal where live GD observations are not available.</div>',
+            f'<div class="panel-note"><b>{escape(station_name)}</b>: latest available 7-day GD observed archive is shown with forecast values. The observed archive may be older than the forecast signal where live GD observations are not available.</div>',
             unsafe_allow_html=True,
         )
         hist_cols = st.columns([0.58, 0.42])

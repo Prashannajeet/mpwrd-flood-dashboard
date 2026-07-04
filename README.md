@@ -57,6 +57,12 @@ run_daily_dam_weather_refresh.bat
 
 Hosted deployment includes a scheduled job equivalent to `12:30 AM IST` to refresh town + dam weather forecast cache daily.
 
+GD site forecasts are cached separately for dashboard speed. The operational refresh is designed to run every 6 hours and keep approximately 7 days of cached GD rows:
+
+```bash
+run_gd_site_forecast_refresh.bat
+```
+
 The script creates `data/satellite_rainfall_timeseries.sqlite` with:
 
 - `rainfall_station_master`

@@ -21,7 +21,7 @@ if errorlevel 1 (
   echo [%date% %time%] GD online linkage refresh completed.>> "%LOG_FILE%"
 )
 
-%PY_CMD% "%~dp0refresh_gd_site_forecasts.py" >> "%LOG_FILE%" 2>&1
+%PY_CMD% "%~dp0refresh_gd_site_forecasts.py" --retention-days 7 >> "%LOG_FILE%" 2>&1
 if errorlevel 1 (
   echo [%date% %time%] GD SQLite database refresh failed.>> "%LOG_FILE%"
 ) else (
@@ -32,8 +32,8 @@ echo [%date% %time%] GD refresh cycle finished.>> "%LOG_FILE%"
 
 if /I "%~1"=="--once" goto finished
 
-echo Waiting 3 hours before next GD refresh cycle...
-timeout /t 10800 /nobreak
+echo Waiting 6 hours before next GD refresh cycle...
+timeout /t 21600 /nobreak
 goto refresh_loop
 
 :finished
