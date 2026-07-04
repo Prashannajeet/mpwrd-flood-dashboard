@@ -47,6 +47,7 @@ GD_SITES_SWEDES_LAYER = (
     else LOCAL_GD_SITES_SWEDES_ZIP
 )
 WEATHER_CACHE_DB = APP_DIR / "data" / "weather_cache.sqlite"
+SATELLITE_RAINFALL_DB = APP_DIR / "data" / "satellite_rainfall_timeseries.sqlite"
 VISITOR_ANALYTICS_DB = APP_DIR / "data" / "visitor_analytics.sqlite"
 RIVER_FLOW_FORECAST_DB = APP_DIR / "data" / "river_flow_forecasts.sqlite"
 GD_SITE_FORECAST_DB = APP_DIR / "data" / "gd_site_forecasts.sqlite"
@@ -1229,6 +1230,189 @@ def get_weather_cache_summary() -> dict:
         ).fetchone()
     latest = latest_row[0] if latest_row and latest_row[0] else ""
     return {"forecast_locations": forecast_count, "current_locations": current_count, "latest_refresh": latest}
+
+
+def get_satellite_rainfall_summary() -> dict:
+    if not SATELLITE_RAINFALL_DB.exists():
+        return {
+            "station_count": 0,
+            "observation_count": 0,
+            "latest_observed_at": "",
+            "latest_refresh": "",
+            "latest_status": "Database not initialized",
+        }
+    with sqlite3.connect(SATELLITE_RAINFALL_DB) as conn:
+        station_count = conn.execute("SELECT COUNT(*) FROM rainfall_station_master WHERE active = 1").fetchone()[0]
+        observation_count = conn.execute("SELECT COUNT(*) FROM rainfall_3hour_observations").fetchone()[0]
+        latest_observed_at = conn.execute("SELECT MAX(observed_at) FROM rainfall_3hour_observations").fetchone()[0] or ""
+        latest_log = conn.execute(
+            """
+            SELECT finished_at, status
+            FROM rainfall_refresh_log
+            ORDER BY COALESCE(finished_at, started_at) DESC
+            LIMIT 1
+            """
+        ).fetchone()
+    return {
+        "station_count": station_count,
+        "observation_count": observation_count,
+        "latest_observed_at": latest_observed_at,
+        "latest_refresh": latest_log[0] if latest_log else "",
+        "latest_status": latest_log[1] if latest_log else "No refresh log",
+    }
+
+
+def read_satellite_rainfall_tables(limit: int = 600) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    if not SATELLITE_RAINFALL_DB.exists():
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+    with sqlite3.connect(SATELLITE_RAINFALL_DB) as conn:
+        stations = pd.read_sql_query(
+            """
+            SELECT station_id, station_name, station_type, district, basin, latitude, longitude, source, updated_at
+            FROM rainfall_station_master
+            WHERE active = 1
+            ORDER BY station_type, district, station_name
+            """,
+            conn,
+        )
+        observations = pd.read_sql_query(
+            """
+            SELECT s.station_name, s.station_type, s.district, s.basin, o.station_id, o.observed_at,
+                   o.rainfall_3h_mm, o.rainfall_24h_mm, o.source_product, o.quality_flag, o.fetched_at
+            FROM rainfall_3hour_observations o
+            JOIN rainfall_station_master s ON s.station_id = o.station_id
+            ORDER BY o.observed_at DESC, s.station_type, s.station_name
+            LIMIT ?
+            """,
+            conn,
+            params=(int(limit),),
+        )
+        logs = pd.read_sql_query(
+            """
+            SELECT started_at, finished_at, source_product, requested_slot, station_count,
+                   observation_count, status, message
+            FROM rainfall_refresh_log
+            ORDER BY COALESCE(finished_at, started_at) DESC
+            LIMIT 20
+            """,
+            conn,
+        )
+    if not observations.empty:
+        observations["observed_at"] = pd.to_datetime(observations["observed_at"], errors="coerce")
+        observations["rainfall_3h_mm"] = pd.to_numeric(observations["rainfall_3h_mm"], errors="coerce")
+        observations["rainfall_24h_mm"] = pd.to_numeric(observations["rainfall_24h_mm"], errors="coerce")
+    return stations, observations, logs
+
+
+def render_satellite_rainfall_dss(is_admin_user: bool) -> None:
+    summary = get_satellite_rainfall_summary()
+    stations, observations, logs = read_satellite_rainfall_tables()
+    pps_username_configured = bool(get_app_secret("nasa_pps_username", "NASA_PPS_USERNAME", ""))
+    pps_password_configured = bool(get_app_secret("nasa_pps_password", "NASA_PPS_PASSWORD", ""))
+    pps_ready = pps_username_configured and pps_password_configured
+
+    st.markdown(
+        """
+        <div class="infographic-frame">
+            <div class="infographic-title">Satellite Rainfall Intelligence</div>
+            <div class="infographic-subtitle">Three-hour precipitation database for rain gauges, dams, GD sites, and future catchment-level rainfall analytics.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    kpi_cols = st.columns(5)
+    kpi_cols[0].metric("Rainfall Points", int(summary.get("station_count", 0)))
+    kpi_cols[1].metric("3-Hour Records", int(summary.get("observation_count", 0)))
+    kpi_cols[2].metric("Latest Rain Slot", summary.get("latest_observed_at") or "Pending")
+    kpi_cols[3].metric("Refresh Status", summary.get("latest_status") or "Pending")
+    kpi_cols[4].metric("NASA Access", "Ready" if pps_ready else "Not configured")
+
+    if not pps_ready:
+        st.info(
+            "Configure NASA PPS credentials as Streamlit secrets or environment variables "
+            "`NASA_PPS_USERNAME` and `NASA_PPS_PASSWORD`. Credentials are intentionally not stored in GitHub."
+        )
+
+    if observations.empty:
+        st.warning(
+            "Rainfall station master is ready, but 3-hour satellite rainfall observations have not been imported or extracted yet. "
+            "Run `satellite_rainfall_refresh.py --include-dams --include-gd-sites` to refresh stations, then import or extract IMERG station values."
+        )
+    else:
+        latest_slot = observations["observed_at"].dropna().max()
+        latest_obs = observations[observations["observed_at"] == latest_slot].copy() if pd.notna(latest_slot) else observations.copy()
+        latest_obs = latest_obs.sort_values("rainfall_3h_mm", ascending=False)
+        rain_cols = st.columns([0.52, 0.48])
+        with rain_cols[0]:
+            chart = (
+                alt.Chart(latest_obs.head(20))
+                .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
+                .encode(
+                    y=alt.Y("station_name:N", sort="-x", title="Station"),
+                    x=alt.X("rainfall_3h_mm:Q", title="3-hour rainfall (mm)"),
+                    color=alt.Color("station_type:N", title="Point type"),
+                    tooltip=[
+                        alt.Tooltip("station_name:N", title="Station"),
+                        alt.Tooltip("station_type:N", title="Type"),
+                        alt.Tooltip("district:N", title="District"),
+                        alt.Tooltip("rainfall_3h_mm:Q", title="3-hour rainfall (mm)", format=".2f"),
+                        alt.Tooltip("rainfall_24h_mm:Q", title="24-hour rainfall (mm)", format=".2f"),
+                    ],
+                )
+                .properties(height=360, title="Highest 3-Hour Rainfall Points")
+            )
+            st.altair_chart(chart, use_container_width=True)
+        with rain_cols[1]:
+            trend_source = observations.dropna(subset=["observed_at", "rainfall_3h_mm"]).copy()
+            if not trend_source.empty:
+                top_station_ids = latest_obs.head(8)["station_id"].astype(str).tolist()
+                trend_source = trend_source[trend_source["station_id"].astype(str).isin(top_station_ids)]
+                trend = (
+                    alt.Chart(trend_source)
+                    .mark_line(point=True)
+                    .encode(
+                        x=alt.X("observed_at:T", title="Observation slot"),
+                        y=alt.Y("rainfall_3h_mm:Q", title="3-hour rainfall (mm)"),
+                        color=alt.Color("station_name:N", title="Station"),
+                        tooltip=[
+                            alt.Tooltip("observed_at:T", title="Slot"),
+                            alt.Tooltip("station_name:N", title="Station"),
+                            alt.Tooltip("rainfall_3h_mm:Q", title="Rainfall (mm)", format=".2f"),
+                        ],
+                    )
+                    .properties(height=360, title="Recent Rainfall Time Series")
+                )
+                st.altair_chart(trend, use_container_width=True)
+        st.dataframe(
+            latest_obs[
+                [
+                    "station_name",
+                    "station_type",
+                    "district",
+                    "basin",
+                    "observed_at",
+                    "rainfall_3h_mm",
+                    "rainfall_24h_mm",
+                    "source_product",
+                    "quality_flag",
+                ]
+            ],
+            use_container_width=True,
+            hide_index=True,
+            height=300,
+        )
+
+    with st.expander("Rainfall station master and refresh log", expanded=False):
+        station_tab, log_tab = st.tabs(["Stations", "Refresh Log"])
+        with station_tab:
+            st.dataframe(stations, use_container_width=True, hide_index=True, height=280)
+        with log_tab:
+            st.dataframe(logs, use_container_width=True, hide_index=True, height=260)
+        if is_admin_user:
+            st.caption(
+                "Operational schedule: run `run_satellite_rainfall_refresh.bat` on the server or configure the hosted job to execute every 3 hours. "
+                "For online deployment, add NASA credentials only in secrets/environment variables."
+            )
 
 
 def get_cached_open_meteo_weather(
@@ -9829,6 +10013,7 @@ if main_page == "Weather Forecast":
         """,
         unsafe_allow_html=True,
     )
+    render_satellite_rainfall_dss(is_admin)
     towns_master = read_csv(MP_TOWNS_CSV)
     if not towns_master.empty:
         towns_master["latitude"] = pd.to_numeric(towns_master["latitude"], errors="coerce")

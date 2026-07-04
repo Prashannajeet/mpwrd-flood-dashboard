@@ -55,6 +55,20 @@ To add official MP rain-gauge stations, place `data/mp_raingauge_stations.csv` w
 station_id,station_name,district,basin,latitude,longitude
 ```
 
+NASA PPS credentials must be configured only as environment variables or Streamlit secrets:
+
+```text
+NASA_PPS_USERNAME
+NASA_PPS_PASSWORD
+NASA_PPS_BASE_URL=https://arthurhouhttps.pps.eosdis.nasa.gov
+```
+
+To verify login without exposing credentials:
+
+```bash
+python satellite_rainfall_refresh.py --check-nasa-access
+```
+
 To import extracted 3-hour rainfall values from NASA IMERG or another approved source:
 
 ```bash

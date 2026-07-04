@@ -7,6 +7,8 @@ import json
 import os
 import sqlite3
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -22,6 +24,7 @@ DAM_LOCATIONS_CSV = APP_DIR / "dam_locations.csv"
 GD_SITES_GEOJSON = DATA_DIR / "gd_sites_swedes.geojson"
 RAINFALL_DB = DATA_DIR / "satellite_rainfall_timeseries.sqlite"
 REFRESH_SECONDS = 3 * 60 * 60
+NASA_PPS_BASE_URL = os.getenv("NASA_PPS_BASE_URL", "https://arthurhouhttps.pps.eosdis.nasa.gov").rstrip("/")
 
 
 @dataclass(frozen=True)
@@ -322,6 +325,28 @@ def create_pending_imerg_run(stations: list[RainfallStation], requested_slot: da
     log_run(run_id, source_product, requested_slot.isoformat(), len(stations), "station_master_ready", message)
 
 
+def get_nasa_pps_credentials() -> tuple[str, str]:
+    return os.getenv("NASA_PPS_USERNAME", "").strip(), os.getenv("NASA_PPS_PASSWORD", "").strip()
+
+
+def check_nasa_pps_access() -> tuple[bool, str]:
+    username, password = get_nasa_pps_credentials()
+    if not username or not password:
+        return False, "NASA_PPS_USERNAME and NASA_PPS_PASSWORD are not configured."
+    password_manager = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+    password_manager.add_password(None, NASA_PPS_BASE_URL, username, password)
+    opener = urllib.request.build_opener(urllib.request.HTTPBasicAuthHandler(password_manager))
+    request = urllib.request.Request(NASA_PPS_BASE_URL + "/", headers={"User-Agent": "mpwrd-imerg-refresh/1.0"})
+    try:
+        with opener.open(request, timeout=30) as response:
+            status = getattr(response, "status", 200)
+            return 200 <= int(status) < 400, f"NASA PPS access check returned HTTP {status}."
+    except urllib.error.HTTPError as exc:
+        return False, f"NASA PPS access check failed with HTTP {exc.code}."
+    except Exception as exc:
+        return False, f"NASA PPS access check failed: {exc}"
+
+
 def run_once(include_dams: bool, include_gd_sites: bool, import_csv: Path | None, source_product: str) -> None:
     init_database()
     stations = load_all_stations(include_dams=include_dams, include_gd_sites=include_gd_sites)
@@ -348,8 +373,15 @@ def main() -> None:
     parser.add_argument("--include-dams", action="store_true", help="Include dam locations as rainfall sampling points.")
     parser.add_argument("--include-gd-sites", action="store_true", help="Include GD/gauge-discharge locations as rainfall sampling points.")
     parser.add_argument("--import-csv", type=Path, help="Import extracted 3-hour rainfall rows from CSV.")
+    parser.add_argument("--check-nasa-access", action="store_true", help="Check NASA PPS login using NASA_PPS_USERNAME and NASA_PPS_PASSWORD.")
     parser.add_argument("--source-product", default=os.getenv("NASA_IMERG_PRODUCT", "IMERG_EARLY_3H"))
     args = parser.parse_args()
+
+    if args.check_nasa_access:
+        ok, message = check_nasa_pps_access()
+        print(f"{'OK' if ok else 'FAILED'}: {message}")
+        if not ok:
+            raise SystemExit(1)
 
     while True:
         run_once(
