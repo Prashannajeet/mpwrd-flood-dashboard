@@ -7507,7 +7507,7 @@ def admin_login_panel() -> bool:
 
 
 if "main_dashboard_page" not in st.session_state:
-    st.session_state.main_dashboard_page = "WaterWatch Live - Enabled with AI"
+    st.session_state.main_dashboard_page = "Water Watch"
 
 record_visitor_session(st.session_state.main_dashboard_page)
 
@@ -9586,9 +9586,9 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
 
 
 if "main_dashboard_page" not in st.session_state:
-    st.session_state.main_dashboard_page = "WaterWatch Live - Enabled with AI"
+    st.session_state.main_dashboard_page = "Water Watch"
 
-nav_pages = ["WaterWatch Live - Enabled with AI", "Dam DSS & Analytics", "GD Site Analytics", "Weather Forecast", "3D Flood Scenarios", "Data & Timeseries", "Report Generation", "Administration"]
+nav_pages = ["Water Watch", "Dam DSS & Analytics", "GD Site Analytics", "Weather Forecast", "3D Flood Scenarios", "Data & Timeseries", "Report Generation", "Administration"]
 st.markdown('<div class="dashboard-topnav-title">Dashboard Navigation</div>', unsafe_allow_html=True)
 nav_cols = st.columns(len(nav_pages))
 for nav_col, page in zip(nav_cols, nav_pages):
@@ -11065,7 +11065,7 @@ if main_page == "3D Flood Scenarios":
             )
 
 
-if main_page == "WaterWatch Live - Enabled with AI":
+if main_page == "Water Watch":
     st.subheader("WaterWatch Live - Enabled with AI")
     if reservoir_view.empty and map_status.empty:
         st.info("No data is available for infographic generation under the current filters.")
