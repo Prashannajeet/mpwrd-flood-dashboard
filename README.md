@@ -1,6 +1,6 @@
 # MP WRD Flood Report Dashboard
 
-Streamlit dashboard and REST/GeoJSON API for MP WRD Flood Season PDF capture, reservoir/river time-series review, dam map alerts, and external GIS data sharing.
+Streamlit dashboard for MP WRD Flood Season PDF capture, reservoir/river time-series review, dam map alerts, weather intelligence, rainfall monitoring, and operational DSS reporting.
 
 ## Streamlit Community Cloud
 
@@ -23,15 +23,15 @@ pip install -r requirements.txt
 streamlit run flood_report_app.py
 ```
 
-API:
+Optional secure data service:
 
 ```bash
 uvicorn flood_report_api:app --host 0.0.0.0 --port 8600
 ```
 
-## 3-Hour Rainfall Database
+## Operational Rainfall Database
 
-The app now includes a backend-ready satellite rainfall store for MP rain gauges, dams, and GD sites:
+The app includes a backend-ready rainfall store for MP rain gauges, dams, and GD sites:
 
 ```bash
 python satellite_rainfall_refresh.py --include-dams --include-gd-sites
@@ -55,7 +55,7 @@ Local Windows runner:
 run_daily_dam_weather_refresh.bat
 ```
 
-Render deployment includes a cron job scheduled at `19:00 UTC`, equivalent to `12:30 AM IST`, to refresh town + dam weather forecast cache daily.
+Hosted deployment includes a scheduled job equivalent to `12:30 AM IST` to refresh town + dam weather forecast cache daily.
 
 The script creates `data/satellite_rainfall_timeseries.sqlite` with:
 
@@ -69,24 +69,20 @@ To add official MP rain-gauge stations, place `data/mp_raingauge_stations.csv` w
 station_id,station_name,district,basin,latitude,longitude
 ```
 
-NASA PPS credentials must be configured only as environment variables or Streamlit secrets:
+Secure rainfall feed credentials must be configured only as environment variables or Streamlit secrets. Do not commit credentials to the repository.
 
 ```text
-NASA_PPS_USERNAME
-NASA_PPS_PASSWORD
-NASA_PPS_BASE_URL=https://arthurhouhttps.pps.eosdis.nasa.gov
+SECURE_FEED_USERNAME
+SECURE_FEED_PASSWORD
+SECURE_FEED_BASE_URL
 ```
 
-To verify login without exposing credentials:
+To verify operational feed login without exposing credentials, use the backend access-check workflow.
+
+To import extracted 3-hour rainfall values from an approved operational source:
 
 ```bash
-python satellite_rainfall_refresh.py --check-nasa-access
-```
-
-To import extracted 3-hour rainfall values from NASA IMERG or another approved source:
-
-```bash
-python satellite_rainfall_refresh.py --import-csv data/imerg_3hour_station_extract.csv --source-product IMERG_EARLY_3H
+python satellite_rainfall_refresh.py --import-csv data/operational_3hour_station_extract.csv --source-product OPERATIONAL_RAINFALL_3H
 ```
 
 Import CSV columns:
@@ -95,24 +91,11 @@ Import CSV columns:
 station_id,observed_at,rainfall_3h_mm,rainfall_24h_mm,source_latency_hours,quality_flag
 ```
 
-## Render Deployment
+## Hosted Deployment
 
-This repo includes `render.yaml` with two web services:
+This repo includes hosted deployment configuration for the dashboard, secure data service, and scheduled refresh tasks.
 
-- `mpwrd-flood-dashboard`
-- `mpwrd-flood-api`
-
-Deploy from Render Blueprints using this GitHub repository.
-
-Important API endpoints:
-
-- `/api/reports`
-- `/api/reservoir-observations`
-- `/api/district-summary`
-- `/api/basin-summary`
-- `/api/geojson/dams`
-- `/api/geojson/reservoir-status`
-- `/api/geojson/alerts`
+Share service endpoints only through authorized operational documentation.
 
 ## Included Data
 

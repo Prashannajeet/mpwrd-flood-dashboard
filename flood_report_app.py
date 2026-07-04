@@ -1307,15 +1307,15 @@ def read_satellite_rainfall_tables(limit: int = 600) -> tuple[pd.DataFrame, pd.D
 def render_satellite_rainfall_dss(is_admin_user: bool) -> None:
     summary = get_satellite_rainfall_summary()
     stations, observations, logs = read_satellite_rainfall_tables()
-    pps_username_configured = bool(get_app_secret("nasa_pps_username", "NASA_PPS_USERNAME", ""))
-    pps_password_configured = bool(get_app_secret("nasa_pps_password", "NASA_PPS_PASSWORD", ""))
+    pps_username_configured = bool(get_app_secret("secure_feed_username", "SECURE_FEED_USERNAME", ""))
+    pps_password_configured = bool(get_app_secret("secure_feed_password", "SECURE_FEED_PASSWORD", ""))
     pps_ready = pps_username_configured and pps_password_configured
 
     st.markdown(
         """
         <div class="infographic-frame">
-            <div class="infographic-title">Satellite Rainfall Intelligence</div>
-            <div class="infographic-subtitle">Three-hour precipitation database for rain gauges, dams, GD sites, and future catchment-level rainfall analytics.</div>
+            <div class="infographic-title">Operational Rainfall Intelligence</div>
+            <div class="infographic-subtitle">Three-hour precipitation intelligence for rain gauges, dams, GD sites, and catchment-level rainfall analytics.</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1325,18 +1325,17 @@ def render_satellite_rainfall_dss(is_admin_user: bool) -> None:
     kpi_cols[1].metric("3-Hour Records", int(summary.get("observation_count", 0)))
     kpi_cols[2].metric("Latest Rain Slot", summary.get("latest_observed_at") or "Pending")
     kpi_cols[3].metric("Refresh Status", summary.get("latest_status") or "Pending")
-    kpi_cols[4].metric("NASA Access", "Ready" if pps_ready else "Not configured")
+    kpi_cols[4].metric("Secure Feed", "Ready" if pps_ready else "Pending")
 
-    if not pps_ready:
+    if is_admin_user and not pps_ready:
         st.info(
-            "Configure NASA PPS credentials as Streamlit secrets or environment variables "
-            "`NASA_PPS_USERNAME` and `NASA_PPS_PASSWORD`. Credentials are intentionally not stored in GitHub."
+            "Configure the secure rainfall feed credentials in deployment secrets. Credentials are intentionally not stored in the repository."
         )
 
     if observations.empty:
         st.warning(
-            "Rainfall station master is ready, but 3-hour satellite rainfall observations have not been imported or extracted yet. "
-            "Run `satellite_rainfall_refresh.py --include-dams --include-gd-sites` to refresh stations, then import or extract IMERG station values."
+            "Rainfall station master is ready, but 3-hour operational rainfall observations have not been populated yet. "
+            "Run the backend refresh workflow to update station rainfall values."
         )
     else:
         latest_slot = observations["observed_at"].dropna().max()
@@ -1393,7 +1392,6 @@ def render_satellite_rainfall_dss(is_admin_user: bool) -> None:
                     "observed_at",
                     "rainfall_3h_mm",
                     "rainfall_24h_mm",
-                    "source_product",
                     "quality_flag",
                 ]
             ],
@@ -1402,16 +1400,18 @@ def render_satellite_rainfall_dss(is_admin_user: bool) -> None:
             height=300,
         )
 
-    with st.expander("Rainfall station master and refresh log", expanded=False):
+    with st.expander("Operational rainfall station register", expanded=False):
         station_tab, log_tab = st.tabs(["Stations", "Refresh Log"])
         with station_tab:
-            st.dataframe(stations, use_container_width=True, hide_index=True, height=280)
+            public_station_cols = [col for col in ["station_id", "station_name", "station_type", "district", "basin", "latitude", "longitude", "updated_at"] if col in stations.columns]
+            st.dataframe(stations[public_station_cols] if public_station_cols else stations, use_container_width=True, hide_index=True, height=280)
         with log_tab:
-            st.dataframe(logs, use_container_width=True, hide_index=True, height=260)
+            public_log_cols = [col for col in ["started_at", "finished_at", "requested_slot", "station_count", "observation_count", "status", "message"] if col in logs.columns]
+            st.dataframe(logs[public_log_cols] if public_log_cols else logs, use_container_width=True, hide_index=True, height=260)
         if is_admin_user:
             st.caption(
                 "Operational schedule: run `run_satellite_rainfall_refresh.bat` on the server or configure the hosted job to execute every 3 hours. "
-                "For online deployment, add NASA credentials only in secrets/environment variables."
+                "For online deployment, add secure feed credentials only in secrets/environment variables."
             )
 
 
@@ -2249,7 +2249,7 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
           }}
         </style>
         <div class="gd-map-title">GD Sites and River Forecast Layer</div>
-        <div class="gd-map-note">GD station points are overlaid on ArcGIS basemaps. The river forecast layer is loaded dynamically from the online MapServer and can be toggled from the layer control.</div>
+        <div class="gd-map-note">GD station points are overlaid on operational basemaps. The river forecast layer can be toggled from the layer control.</div>
         <div id="{map_id}"><div id="{map_id}-info" class="gd-info-panel"></div></div>
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <script src="https://unpkg.com/esri-leaflet@3.0.12/dist/esri-leaflet.js"></script>
@@ -2428,7 +2428,7 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
 def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFrame) -> None:
     st.subheader("GD Site Analytics")
     st.markdown(
-        '<div class="panel-note">Observed GD station water levels are linked with river and basin forecast signals. This page is separated from Dam DSS so more GD-site modules can be added independently.</div>',
+        '<div class="panel-note">Observed GD station water levels are reviewed with operational river and basin forecast signals. This page is separated from Dam DSS so more GD-site modules can be added independently.</div>',
         unsafe_allow_html=True,
     )
     gd_sites = load_gd_sites_swedes(str(GD_SITES_SWEDES_LAYER))
@@ -2437,7 +2437,7 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
     cached_gd = load_latest_gd_site_forecast_slot()
     if not cached_gd.empty and cached_gd["current_flow_cms"].notna().any():
         gd_forecasts = cached_gd.copy()
-        gd_source_mode = "Cached station-specific drainage refresh"
+        gd_source_mode = "Cached station-specific operational refresh"
     else:
         gd_forecasts = build_gd_site_forecast_rows(
             gd_sites,
@@ -2447,7 +2447,7 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
             forecast_days=7,
             online_now_time=online_now_time,
         )
-        gd_source_mode = "Pending station-specific drainage refresh"
+        gd_source_mode = "Pending station-specific operational refresh"
     if not gd_forecasts.empty:
         gd_forecasts = gd_forecasts.copy()
         gd_forecasts["forecast_alert_level"] = gd_forecasts.apply(
@@ -2467,12 +2467,12 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
         st.warning("GD Sites are available, but no observed/forecast rows could be prepared.")
         return
     slot_date, slot_time, _slot_ts = gd_forecast_slot()
-    cache_note = f"GD source mode: {gd_source_mode}. Reporting slot: {slot_date} {slot_time}."
+    cache_note = f"GD data mode: {gd_source_mode}. Reporting slot: {slot_date} {slot_time}."
     if not cached_gd.empty:
         latest_cache = cached_gd.sort_values(["slot_date", "slot_time", "generated_at"]).tail(1)
         cache_note += f" Latest cached generation: {time_label(latest_cache.iloc[0].get('generated_at'))}; cached rows: {len(cached_gd):,}."
     else:
-        cache_note += " Run the GD refresh job to populate station-specific drainage discharge values."
+        cache_note += " Run the GD refresh job to populate station-specific discharge values."
     st.markdown(f'<div class="panel-note">{escape(cache_note)}</div>', unsafe_allow_html=True)
 
     render_gd_site_leaflet_map(gd_sites, gd_forecasts)
@@ -2531,7 +2531,7 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
             else selected_station_code
         )
         st.markdown(
-            f'<div class="panel-note"><b>{escape(station_name)}</b>: latest available one-month GD observed archive is shown with the linked forecast values. The observed archive may be older than the forecast signal where live GD observations are not available.</div>',
+            f'<div class="panel-note"><b>{escape(station_name)}</b>: latest available one-month GD observed archive is shown with forecast values. The observed archive may be older than the forecast signal where live GD observations are not available.</div>',
             unsafe_allow_html=True,
         )
         hist_cols = st.columns([0.58, 0.42])
@@ -2558,7 +2558,7 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
                     .encode(
                         x=alt.X("forecast_time:T", title="Date"),
                         y=alt.Y("combined_forecast_flow_cms:Q", title="Forecast discharge (cumecs)"),
-                        tooltip=["station_code", "forecast_time", "data_period", "combined_forecast_flow_cms", "linked_comid", "streamorder"],
+                        tooltip=["station_code", "forecast_time", "data_period", "combined_forecast_flow_cms", "streamorder"],
                     )
                     .properties(height=260)
                 )
@@ -2569,14 +2569,13 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
             elif layers:
                 st.altair_chart(layers[0], use_container_width=True)
             else:
-                st.info("No historical archive or linked forecast values are available for the selected GD site.")
+                st.info("No historical archive or forecast values are available for the selected GD site.")
         with hist_cols[1]:
             latest_forecast_row = station_forecast.sort_values("forecast_time").head(1)
             linked_summary = "-"
             if not latest_forecast_row.empty:
                 linked_summary = (
-                    f"Reach {latest_forecast_row.iloc[0].get('linked_comid', '-')}, "
-                    f"stream order {fmt_number(latest_forecast_row.iloc[0].get('streamorder'))}, "
+                    f"Stream order {fmt_number(latest_forecast_row.iloc[0].get('streamorder'))}, "
                     f"flow {fmt_number(latest_forecast_row.iloc[0].get('current_flow_cms'), ' cumecs')}"
                 )
             st.markdown(
@@ -2586,7 +2585,7 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
                     <span class="district-gauge-meta">Site: {escape(station_name)}</span>
                     <span class="district-gauge-meta">Historical rows: {len(station_history):,}</span>
                     <span class="district-gauge-meta">Forecast rows: {len(station_forecast):,}</span>
-                    <span class="district-gauge-meta">Linked drainage: {escape(linked_summary)}</span>
+                    <span class="district-gauge-meta">River forecast context: {escape(linked_summary)}</span>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -2922,7 +2921,7 @@ def build_mp_glofas_nodes(map_frame: pd.DataFrame, reservoir_frame: pd.DataFrame
             risk = "Normal"
         nodes.append(
             {
-                "name": f"{basin} basin GloFAS node",
+                "name": f"{basin} basin forecast node",
                 "basin": basin,
                 "latitude": float(representative["latitude"]),
                 "longitude": float(representative["longitude"]),
@@ -3024,7 +3023,7 @@ def build_mp_grrr_nodes(map_frame: pd.DataFrame, reservoir_frame: pd.DataFrame, 
             risk = "Normal"
         nodes.append(
             {
-                "name": f"{basin} GRRR runoff node",
+                "name": f"{basin} runoff forecast node",
                 "basin": basin,
                 "latitude": float(representative["latitude"]),
                 "longitude": float(representative["longitude"]),
@@ -3830,9 +3829,9 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
         <div class="geoglows-panel">
             <div class="geoglows-head">
                 <div>
-                    <span>GEOGLOWS Forecast at Selected Point</span>
+                    <span>River Forecast at Selected Point</span>
                     <strong id="geoglowsTitle">Click a dam point to compare river forecast with dam water level</strong>
-                    <small id="geoglowsStatus">Nearest GEOGLOWS reach and forecast table will load here.</small>
+                    <small id="geoglowsStatus">Nearest river reach and forecast table will load here.</small>
                 </div>
             </div>
             <div class="geoglows-grid">
@@ -3840,7 +3839,7 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                 <div class="geoglows-table">
                     <table>
                         <thead><tr><th>Forecast Time</th><th>Mean Flow</th><th>Return Period</th></tr></thead>
-                        <tbody id="geoglowsBody"><tr><td colspan="3">No GEOGLOWS reach selected.</td></tr></tbody>
+                        <tbody id="geoglowsBody"><tr><td colspan="3">No river reach selected.</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -3849,16 +3848,16 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
             <div class="dss-link-head">
                 <div>
                     <span>GD Site Forecast Linkage</span>
-                    <strong id="dssLinkTitle">Click a GD site, dam, GEOGLOWS stream, or map point to build linked DSS context.</strong>
+                    <strong id="dssLinkTitle">Click a GD site, dam, river stream, or map point to build DSS context.</strong>
                 </div>
             </div>
             <div id="dssLinkCards" class="dss-card-grid">
-                <div id="dssGeoglowsCard" class="dss-card"><span>GEOGLOWS</span><strong>Waiting for selection</strong><small>Nearest stream reach will drive downstream DSS context.</small></div>
-                <div id="dssGlofasCard" class="dss-card"><span>GloFAS</span><strong>Waiting for selection</strong><small>Nearest project forecast node will be linked by location.</small></div>
-                <div id="dssGrrrCard" class="dss-card"><span>GRRR</span><strong>Waiting for selection</strong><small>Nearest runoff reanalysis/reforecast node will be linked by location.</small></div>
+                <div id="dssGeoglowsCard" class="dss-card"><span>River Forecast</span><strong>Waiting for selection</strong><small>Nearest stream reach will drive downstream DSS context.</small></div>
+                <div id="dssGlofasCard" class="dss-card"><span>Basin Forecast</span><strong>Waiting for selection</strong><small>Nearest basin forecast node will be matched by location.</small></div>
+                <div id="dssGrrrCard" class="dss-card"><span>Runoff Forecast</span><strong>Waiting for selection</strong><small>Nearest runoff node will be matched by location.</small></div>
                 <div class="dss-card hand-card">
                     <span>HAND Scenario</span>
-                    <strong id="handTitle">Inundation screening from selected GEOGLOWS reach</strong>
+                    <strong id="handTitle">Inundation screening from selected river reach</strong>
                     <div class="hand-controls">
                         <label>COMID
                             <input id="handComid" type="text" placeholder="Select site or enter COMID">
@@ -4013,9 +4012,9 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                 const title = document.getElementById("dssLinkTitle");
                 if (title) title.textContent = context?.label || "Linked forecast DSS context";
                 if (context?.loading) {{
-                    replaceDssCard("dssGeoglowsCard", dssCard("dssGeoglowsCard", "GEOGLOWS", "Loading nearest reach", ["Querying live medium-flow service..."]));
-                    replaceDssCard("dssGlofasCard", dssCard("dssGlofasCard", "GloFAS", "Preparing linkage", ["Nearest project forecast node will be matched."]));
-                    replaceDssCard("dssGrrrCard", dssCard("dssGrrrCard", "GRRR", "Preparing linkage", ["Nearest runoff node will be matched."]));
+                    replaceDssCard("dssGeoglowsCard", dssCard("dssGeoglowsCard", "River Forecast", "Loading nearest reach", ["Querying operational river service..."]));
+                    replaceDssCard("dssGlofasCard", dssCard("dssGlofasCard", "Basin Forecast", "Preparing match", ["Nearest basin forecast node will be matched."]));
+                    replaceDssCard("dssGrrrCard", dssCard("dssGrrrCard", "Runoff Forecast", "Preparing match", ["Nearest runoff node will be matched."]));
                     return;
                 }}
                 const lat = Number(context?.latitude);
@@ -4028,23 +4027,23 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                         `COMID ${{attrs.comid}} | Stream order ${{attrs.streamorder ?? "n/a"}}`,
                         `${{fmt(attrs.meanflow, " cumecs")}} mean flow | ${{returnPeriodLabel(attrs.returnperiod)}}`
                     ]
-                    : [context?.error || "No linked GEOGLOWS reach found near this selection."];
+                    : [context?.error || "No river reach found near this selection."];
                 const glofasFlow = latestNodeFlow(glofasNode, ["glofas_p50_cms", "reservoir_attenuated_cms", "chirps_hindcast_cms"]);
                 const grrrFlow = latestNodeFlow(grrrNode, ["reforecast_p50_cms", "reservoir_adjusted_cms", "reanalysis_discharge_cms"]);
                 replaceDssCard(
                     "dssGeoglowsCard",
-                    dssCard("dssGeoglowsCard", "GEOGLOWS", attrs.comid ? "Live river forecast reach" : "No reach linked", geoglowsLines, returnPeriodColor(attrs.returnperiod))
+                    dssCard("dssGeoglowsCard", "River Forecast", attrs.comid ? "Operational river forecast reach" : "No reach matched", geoglowsLines, returnPeriodColor(attrs.returnperiod))
                 );
                 replaceDssCard(
                     "dssGlofasCard",
                     dssCard(
                         "dssGlofasCard",
-                        "GloFAS",
-                        glofasNode?.name || "No GloFAS node",
+                        "Basin Forecast",
+                        glofasNode?.name || "No basin forecast node",
                         glofasNode ? [
                             `${{glofasNode.basin || "Project basin"}} | ${{fmt(glofasNode.distance_km, " km away")}}`,
                             `Risk ${{glofasNode.risk_band || "Normal"}} | Flow ${{fmt(glofasFlow, " cumecs")}}`
-                        ] : ["Project GloFAS JSON has no node with coordinates."],
+                        ] : ["No basin forecast node with coordinates."],
                         "#7c3aed"
                     )
                 );
@@ -4052,12 +4051,12 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                     "dssGrrrCard",
                     dssCard(
                         "dssGrrrCard",
-                        "GRRR",
-                        grrrNode?.name || "No GRRR node",
+                        "Runoff Forecast",
+                        grrrNode?.name || "No runoff node",
                         grrrNode ? [
                             `${{grrrNode.basin || "Project basin"}} | ${{fmt(grrrNode.distance_km, " km away")}}`,
                             `Risk ${{grrrNode.risk_band || "Normal"}} | Runoff flow ${{fmt(grrrFlow, " cumecs")}}`
-                        ] : ["Project GRRR JSON has no node with coordinates."],
+                        ] : ["No runoff node with coordinates."],
                         "#0f766e"
                     )
                 );
@@ -4203,7 +4202,7 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                 const latestText = `${{fmt(latest.meanflow, " cumecs")}} latest`;
                 const peakText = `${{fmt(peak.meanflow, " cumecs")}} peak`;
                 return `
-                    <svg viewBox="0 0 ${{width}} ${{height}}" width="100%" height="${{height}}" role="img" aria-label="GEOGLOWS forecast graph">
+                    <svg viewBox="0 0 ${{width}} ${{height}}" width="100%" height="${{height}}" role="img" aria-label="River forecast graph">
                         <defs>
                             <linearGradient id="geoglowsFill" x1="0" x2="0" y1="0" y2="1">
                                 <stop offset="0%" stop-color="#2563eb" stop-opacity="0.26" />
@@ -4223,7 +4222,7 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                         <polyline fill="none" stroke="#ef4444" stroke-width="1.7" stroke-dasharray="6 5" stroke-linejoin="round" stroke-linecap="round" points="${{rpPoints}}" opacity="0.82" />
                         ${{markers}}
                         <text x="${{padLeft}}" y="20" fill="#0f172a" font-size="12" font-weight="800">Mean flow forecast</text>
-                        <text x="${{padLeft}}" y="34" fill="#64748b" font-size="10">cumecs | dynamic GEOGLOWS reach series</text>
+                        <text x="${{padLeft}}" y="34" fill="#64748b" font-size="10">cumecs | dynamic river reach series</text>
                         <text x="${{width - padRight}}" y="20" fill="#ef4444" font-size="11" font-weight="800" text-anchor="end">Return period overlay</text>
                         <text x="${{width - padRight}}" y="34" fill="#64748b" font-size="10" text-anchor="end">${{returnPeriodLabel(latest.returnperiod)}}</text>
                         <rect x="${{padLeft + 8}}" y="${{padTop + 8}}" width="116" height="28" rx="14" fill="#eff6ff" stroke="#bfdbfe" />
@@ -4244,18 +4243,18 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                 const chart = document.getElementById("geoglowsChart");
                 const attrs = payload?.feature?.properties || payload?.feature?.attributes || {{}};
                 const rows = payload?.series || [];
-                if (title) title.textContent = payload?.label || "GEOGLOWS forecast";
+                if (title) title.textContent = payload?.label || "River forecast";
                 if (status) {{
-                    if (payload?.loading) status.textContent = "Finding nearest GEOGLOWS reach and forecast series...";
+                    if (payload?.loading) status.textContent = "Finding nearest river reach and forecast series...";
                     else if (payload?.error) status.textContent = payload.error;
                     else status.textContent = `COMID ${{attrs.comid || "n/a"}} | Stream order ${{attrs.streamorder ?? "n/a"}} | ${{returnPeriodLabel(attrs.returnperiod)}}`;
                 }}
-                if (chart) chart.innerHTML = payload?.loading ? `<div class="chart-label" style="padding:16px">Loading GEOGLOWS forecast...</div>` : geoglowsChartSvg(rows);
+                if (chart) chart.innerHTML = payload?.loading ? `<div class="chart-label" style="padding:16px">Loading river forecast...</div>` : geoglowsChartSvg(rows);
                 if (!body) return;
                 if (payload?.loading) {{
-                    body.innerHTML = '<tr><td colspan="3">Loading GEOGLOWS forecast...</td></tr>';
+                    body.innerHTML = '<tr><td colspan="3">Loading river forecast...</td></tr>';
                 }} else if (!rows.length) {{
-                    body.innerHTML = '<tr><td colspan="3">No GEOGLOWS forecast rows found near this point.</td></tr>';
+                    body.innerHTML = '<tr><td colspan="3">No river forecast rows found near this point.</td></tr>';
                 }} else {{
                     body.innerHTML = rows.slice(0, 14).map((row) => `
                         <tr>
@@ -4277,7 +4276,7 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                     if (requestId !== geoglowsRequestId) return null;
                     const attrs = feature?.properties || feature?.attributes || {{}};
                     if (!attrs.comid) {{
-                        const error = "No GEOGLOWS forecast reach found within 150 km of this point.";
+                        const error = "No river forecast reach found within 150 km of this point.";
                         renderGeoglowsPanel({{ label, error, series: [] }});
                         renderDssLinkage({{ label, latitude, longitude, error, series: [] }});
                         return null;
@@ -4289,8 +4288,8 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                     return feature;
                 }} catch (error) {{
                     if (requestId === geoglowsRequestId) {{
-                        renderGeoglowsPanel({{ label, error: `GEOGLOWS query failed: ${{error.message}}`, series: [] }});
-                        renderDssLinkage({{ label, latitude, longitude, error: `GEOGLOWS query failed: ${{error.message}}`, series: [] }});
+                        renderGeoglowsPanel({{ label, error: `River forecast query failed: ${{error.message}}`, series: [] }});
+                        renderDssLinkage({{ label, latitude, longitude, error: `River forecast query failed: ${{error.message}}`, series: [] }});
                     }}
                     return null;
                 }}
@@ -4410,7 +4409,7 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                     visible: false
                 }});
                 const layer = new GraphicsLayer({{ title: "Latest dashboard dam status" }});
-                const selectedGeoglowsLayer = new GraphicsLayer({{ title: "Selected GEOGLOWS reach" }});
+                const selectedGeoglowsLayer = new GraphicsLayer({{ title: "Selected river reach" }});
                 const handInundationLayer = new GraphicsLayer({{ title: "HAND inundation screening" }});
                 const buildingRiskLayer = new GraphicsLayer({{
                     title: "OSM 3D building risk exposure",
@@ -4423,7 +4422,7 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                 webmap.add(handInundationLayer);
                 const geoglowsLayer = new MapImageLayer({{
                     url: geoglowsServiceUrl,
-                    title: "GEOGLOWS medium flow forecast",
+                    title: "Operational river flow forecast",
                     opacity: 0.72,
                     sublayers: [
                         {{
@@ -4687,7 +4686,7 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                     const attrs = feature?.properties || feature?.attributes || {{}};
                     const line = geoglowsFeatureToPolyline(feature);
                     if (!line) {{
-                        updateHandNote("Selected GEOGLOWS feature does not include a line geometry for HAND screening.", "error");
+                        updateHandNote("Selected river feature does not include a line geometry for HAND screening.", "error");
                         return;
                     }}
                     const distance = handDistanceMeters(returnPeriod, stageMeters);
@@ -4714,7 +4713,7 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                         popupTemplate: {{
                             title: "HAND screening inundation",
                             content: `
-                                <b>GEOGLOWS COMID:</b> ${{escapeHtml(attrs.comid || "-")}}<br>
+                                <b>River Reach ID:</b> ${{escapeHtml(attrs.comid || "-")}}<br>
                                 <b>Stream order:</b> ${{escapeHtml(attrs.streamorder ?? "-")}}<br>
                                 <b>Return period:</b> ${{escapeHtml(returnPeriod)}} year<br>
                                 <b>HAND stage:</b> ${{fmt(stageMeters, " m")}}<br>
@@ -4737,7 +4736,7 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                     const comid = String(comidInput?.value || "").trim();
                     const returnPeriod = Number(rpInput?.value || 10);
                     const stageMeters = Number(stageInput?.value || 3.5);
-                    updateHandNote("Generating HAND screening layer from GEOGLOWS stream geometry...");
+                    updateHandNote("Generating HAND screening layer from selected stream geometry...");
                     try {{
                         let feature = null;
                         if (comid) feature = await queryGeoglowsFeatureByComid(comid);
@@ -4753,7 +4752,7 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                             }};
                         }}
                         if (!feature) {{
-                            updateHandNote("No GEOGLOWS stream selected. Click a dam/map point first or enter a valid COMID.", "error");
+                            updateHandNote("No river stream selected. Click a dam/map point first or enter a valid reach ID.", "error");
                             return;
                         }}
                         const attrs = feature.properties || feature.attributes || {{}};
@@ -4853,7 +4852,7 @@ def render_arcgis_dam_timeseries_map(map_frame: pd.DataFrame, reservoir_frame: p
                             const attrs = hit.graphic.attributes;
                             const point = hit.graphic.geometry;
                             const name = attrs.reservoir_name || attrs.dam_name || "Selected dam";
-                            selectGeoglows(point.latitude, point.longitude, `${{name}} nearest GEOGLOWS reach`);
+                            selectGeoglows(point.latitude, point.longitude, `${{name}} nearest river reach`);
                         }} else {{
                             const linkedHit = response.results.find((item) => item.graphic && item.graphic.layer !== layer);
                             const linkedAttrs = linkedHit?.graphic?.attributes || {{}};
@@ -5547,10 +5546,10 @@ def google_weather_current_url(latitude: float, longitude: float, api_key: str) 
 @st.cache_data(ttl=1800, show_spinner=False)
 def fetch_google_weather_current(latitude: float, longitude: float, _api_key: str) -> tuple[dict, str | None]:
     if not _api_key:
-        return {}, "Google Weather API key is not configured."
+        return {}, "Operational weather key is not configured."
     payload, error = fetch_json_url(google_weather_current_url(latitude, longitude, _api_key))
     if error or not isinstance(payload, dict):
-        return {}, error or "Google Weather API returned an empty response."
+        return {}, error or "Operational weather service returned an empty response."
     api_error = payload.get("error")
     if isinstance(api_error, dict):
         return {}, api_error.get("message") or json.dumps(api_error)
@@ -6014,7 +6013,7 @@ def render_weather_town_leaflet_map(
                     "max_temp": round(float(row.get("forecast_temp_max_c") or 0), 1),
                     "max_wind": round(float(row.get("forecast_wind_max_kmh") or 0), 1),
                     "max_uv": round(float(row.get("forecast_uv_max") or 0), 1),
-                    "source": str(row.get("source") or row.get("status") or "Location layer"),
+                    "source": "Operational cache",
                     "has_forecast": pd.notna(row.get("forecast_rain_mm")) if "forecast_rain_mm" in row else False,
                     "selected": str(row.get("town_name") or row.get("reservoir_name") or "") == selected_town,
                 }
@@ -6024,7 +6023,7 @@ def render_weather_town_leaflet_map(
     tile_key = weather_tile_api_key.strip()
     districts_json = json.dumps(district_geojson or {"type": "FeatureCollection", "features": []})
     layer_note = (
-        "Radar overlay is loaded from live radar tiles. Cloud and precipitation overlays require a configured weather-map API key."
+        "Radar overlay is available when the operational weather layer is configured. Cloud and precipitation overlays require a configured weather layer key."
         if not tile_key
         else "Satellite basemap, weather overlays, radar animation and MP administrative boundaries are enabled by default."
     )
@@ -6039,7 +6038,7 @@ def render_weather_town_leaflet_map(
         if tile_key
         else """
         <span><i style="background:#0f172a"></i>Satellite default</span>
-        <span><i style="background:#ef4444"></i>Cloud/precip key missing online</span>
+        <span><i style="background:#ef4444"></i>Cloud/precip layer pending</span>
         <span><i style="background:#22c55e"></i>Radar default on</span>
         <span><i style="background:#111827"></i>MP admin boundary</span>
         """
@@ -6156,11 +6155,11 @@ def render_weather_town_leaflet_map(
             if (weatherTileApiKey) {{
                 const cloudLayer = L.tileLayer(
                     `https://tile.openweathermap.org/map/clouds_new/{{z}}/{{x}}/{{y}}.png?appid=${{weatherTileApiKey}}`,
-                    {{ opacity: 0.55, maxZoom: 16, attribution: "Weather tiles &copy; OpenWeather" }}
+                    {{ opacity: 0.55, maxZoom: 16, attribution: "Operational weather layer" }}
                 ).addTo(map);
                 const precipitationLayer = L.tileLayer(
                     `https://tile.openweathermap.org/map/precipitation_new/{{z}}/{{x}}/{{y}}.png?appid=${{weatherTileApiKey}}`,
-                    {{ opacity: 0.62, maxZoom: 16, attribution: "Weather tiles &copy; OpenWeather" }}
+                    {{ opacity: 0.62, maxZoom: 16, attribution: "Operational precipitation layer" }}
                 ).addTo(map);
                 overlays["Cloud cover"] = cloudLayer;
                 overlays["Precipitation"] = precipitationLayer;
@@ -6187,7 +6186,7 @@ def render_weather_town_leaflet_map(
                         {{
                             opacity: 0.66,
                             maxZoom: 16,
-                            attribution: 'Weather radar &copy; <a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer">RainViewer</a>'
+                            attribution: 'Operational radar layer'
                         }}
                     ).addTo(map);
                     let radarTimer = null;
@@ -6243,7 +6242,7 @@ def render_weather_town_leaflet_map(
                     Max temp: ${{dam.has_forecast ? dam.max_temp + " &deg;C" : "-"}}<br/>
                     Max wind: ${{dam.has_forecast ? dam.max_wind + " km/h" : "-"}}<br/>
                     Max UV: ${{dam.has_forecast ? dam.max_uv : "-"}}<br/>
-                    Source: ${{dam.source}}
+                    Data status: ${{dam.has_forecast ? "Operational forecast ready" : "Forecast pending"}}
                 `);
             }});
             layerControl.addOverlay(damLayer, "Dam forecast points");
@@ -6633,7 +6632,7 @@ def render_arcgis_3d_sentinel_scene(
                     }},
                     popupTemplate: {{
                         title: `${{dam.name}} drainage-layer WSE`,
-                        content: `Depth class: <b>${{zone.label}}</b><br/>Modeled WSE depth: ${{zone.depth.toFixed(2)}} m<br/>Drainage ORD_STRA: ${{order}}<br/>Source: ${{sourceLabel}}<br/>Elevation context: ArcGIS world elevation`
+                        content: `Depth class: <b>${{zone.label}}</b><br/>Modeled WSE depth: ${{zone.depth.toFixed(2)}} m<br/>Drainage order: ${{order}}<br/>Elevation context: operational terrain model`
                     }}
                 }}));
             }};
@@ -7383,21 +7382,21 @@ with st.sidebar:
     st.header("Forecast Data")
     forecast_data_mode = st.radio(
         "Forecast Mode",
-        ["Full dynamic mode", "Fallback/demo mode"],
+        ["Operational mode", "Screening mode"],
         index=0,
-        help="Full dynamic mode uses only configured live/preprocessed endpoints. Fallback/demo mode keeps the synthetic MP screening panels available when endpoints are blank.",
+        help="Operational mode uses configured backend feeds. Screening mode keeps internal planning panels available when operational feeds are pending.",
     )
     glofas_endpoint = st.text_input(
-        "GloFAS Timeseries Endpoint",
+        "Basin Forecast Endpoint",
         value=GLOFAS_PROJECT_JSON.as_uri() if GLOFAS_PROJECT_JSON.exists() else "",
-        placeholder="Required for full dynamic GloFAS mode",
-        help="Defaults to the project-area GloFAS-compatible JSON. Paste a CDS/EWDS-backed or hosted preprocessed GloFAS JSON endpoint to replace it.",
+        placeholder="Required for operational basin forecast mode",
+        help="Internal operational endpoint for basin-scale flow context.",
     )
     grrr_endpoint = st.text_input(
-        "Google Runoff Reanalysis/Reforecast Endpoint",
+        "Runoff Forecast Endpoint",
         value=GRRR_PROJECT_JSON.as_uri() if GRRR_PROJECT_JSON.exists() else "",
-        placeholder="Required for full dynamic GRRR mode",
-        help="Defaults to the project-area Google Runoff/GRRR-compatible JSON. Paste a published notebook/API JSON endpoint to replace it.",
+        placeholder="Required for operational runoff mode",
+        help="Internal operational endpoint for runoff and basin response context.",
     )
 
 reservoir_view = reservoirs.copy()
@@ -8342,7 +8341,7 @@ def dashboard_assistant_answer(
         text = (
             f"AI DSS brief for {latest_label}: {critical} Critical, {warning} Warning, and {watch} Watch reservoirs are present in the active filter. "
             f"Average mapped filling is {fmt_number(avg_fill, '%')}. Immediate operational priority should focus on low FRL-gap reservoirs, then high-filling reservoirs with rising trend or open gates. "
-            "Recommended next actions: validate latest readings, review gate status, check downstream gauges/GEOGLOWS context, and prepare private official alerts for Critical/Warning dams."
+            "Recommended next actions: validate latest readings, review gate status, check downstream gauge context, and prepare private official alerts for Critical/Warning dams."
         )
         combined = pd.concat([low_gap, highest], ignore_index=True).drop_duplicates(subset=["reservoir_name"], keep="first")
         table = assistant_table(
@@ -8967,7 +8966,7 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
                 """
                 **Supported files:** `river_flow_model.keras`, `river_flow_model.h5`, `model_metadata.json`.
 
-                **Input features:** water level, danger gap, level trend, GloFAS flow, GRRR flow, and forecast lead day.
+                **Input features:** water level, danger gap, level trend, basin flow, runoff flow, and forecast lead day.
                 """
             )
 
@@ -9527,7 +9526,7 @@ if main_page == "Dam DSS & Analytics":
             </div>
             """
             st.markdown(alert_legend_html, unsafe_allow_html=True)
-            st.markdown('<div class="panel-note">Hover a dam for water level, alert type, filling percent, and trend. Click a dam or map location to load the nearest GEOGLOWS forecast comparison below the map.</div>', unsafe_allow_html=True)
+            st.markdown('<div class="panel-note">Hover a dam for water level, alert type, filling percent, and trend. Click a dam or map location to load the nearest river forecast comparison below the map.</div>', unsafe_allow_html=True)
         show_selected_dam_accelerometer = True
         show_district_accelerometers = False
         if show_selected_dam_accelerometer:
@@ -9808,19 +9807,19 @@ if main_page == "Dam DSS & Analytics":
                 )
                 st.altair_chart(gauge_chart, use_container_width=True)
 
-        st.subheader("GloFAS Forecast")
-        dynamic_mode = forecast_data_mode == "Full dynamic mode"
+        st.subheader("Basin Forecast")
+        dynamic_mode = forecast_data_mode == "Operational mode"
         if dynamic_mode:
             glofas_nodes, glofas_error = fetch_dynamic_nodes(glofas_endpoint, "GloFAS")
         else:
             glofas_nodes, glofas_error = build_mp_glofas_nodes(map_status, reservoir_view, forecast_days=10), None
         if not glofas_nodes:
             if dynamic_mode and glofas_error == "endpoint_not_configured":
-                st.warning("Full dynamic GloFAS mode is active. Configure a live/preprocessed GloFAS endpoint in the sidebar to show forecast nodes.")
+                st.warning("Operational basin forecast mode is active. Configure the backend endpoint in the sidebar to show forecast nodes.")
             elif dynamic_mode and glofas_error:
                 st.error(glofas_error)
             else:
-                st.info("No mapped MP basin locations are available for GloFAS context under the current filters.")
+                st.info("No mapped MP basin locations are available for basin forecast context under the current filters.")
         else:
             live_mode = dynamic_mode
             risk_counts = pd.Series([node["risk_band"] for node in glofas_nodes]).value_counts().to_dict()
@@ -9831,7 +9830,7 @@ if main_page == "Dam DSS & Analytics":
             st.markdown(
                 f"""
                 <div class="glofas-status-grid">
-                  <div class="glofas-card"><span>Source Mode</span><b>{'Full dynamic endpoint' if live_mode else 'Fallback/demo mode'}</b></div>
+                  <div class="glofas-card"><span>Data Mode</span><b>{'Operational feed' if live_mode else 'Screening mode'}</b></div>
                   <div class="glofas-card"><span>MP Basin Nodes</span><b>{len(glofas_nodes)}</b></div>
                   <div class="glofas-card"><span>Highest Risk</span><b style="color:{risk_color(highest_node['risk_band'])}">{escape(highest_node['risk_band'])}</b></div>
                   <div class="glofas-card"><span>Forecast Lead</span><b>10 days</b></div>
@@ -9840,12 +9839,12 @@ if main_page == "Dam DSS & Analytics":
                 unsafe_allow_html=True,
             )
             if live_mode:
-                st.caption("Full dynamic GloFAS mode is active. Rows are read from the configured endpoint and normalized into the dashboard schema.")
+                st.caption("Operational basin forecast mode is active. Rows are normalized into the dashboard schema.")
             else:
-                st.caption("Fallback/demo mode is active. Switch Forecast Mode to Full dynamic mode and configure an endpoint to disable fallback data.")
+                st.caption("Screening mode is active. Switch Forecast Mode to Operational mode and configure an endpoint to disable screening data.")
 
             glofas_labels = [f"{node['basin']} | {node['risk_band']}" for node in glofas_nodes]
-            selected_glofas_label = st.selectbox("GloFAS MP basin node", glofas_labels, key="selected_glofas_node")
+            selected_glofas_label = st.selectbox("MP basin forecast node", glofas_labels, key="selected_glofas_node")
             selected_glofas = glofas_nodes[glofas_labels.index(selected_glofas_label)]
             glofas_rows = pd.DataFrame(selected_glofas["series"])
             for column in ["chirps_hindcast_cms", "glofas_p10_cms", "glofas_p50_cms", "glofas_p90_cms", "reservoir_attenuated_cms", "return_period"]:
@@ -9876,7 +9875,7 @@ if main_page == "Dam DSS & Analytics":
                         y=alt.Y("flow_cms:Q", title="Discharge (cumecs)"),
                         color=alt.Color(
                             "series:N",
-                            title="GloFAS series",
+                            title="Basin forecast series",
                             scale=alt.Scale(
                                 domain=["glofas_p10_cms", "glofas_p50_cms", "glofas_p90_cms", "reservoir_attenuated_cms"],
                                 range=["#60a5fa", "#dc2626", "#7c3aed", "#0f766e"],
@@ -9927,18 +9926,18 @@ if main_page == "Dam DSS & Analytics":
                 display_rows["return_period"] = display_rows["return_period"].apply(return_period_label)
                 st.dataframe(display_rows, use_container_width=True, hide_index=True, height=285)
 
-        st.subheader("GRRR for Basins")
+        st.subheader("Runoff Forecast for Basins")
         if dynamic_mode:
             grrr_nodes, grrr_error = fetch_dynamic_nodes(grrr_endpoint, "GRRR")
         else:
             grrr_nodes, grrr_error = build_mp_grrr_nodes(map_status, reservoir_view, forecast_days=7), None
         if not grrr_nodes:
             if dynamic_mode and grrr_error == "endpoint_not_configured":
-                st.warning("Full dynamic GRRR mode is active. Configure a published GRRR JSON/API endpoint in the sidebar to show runoff nodes.")
+                st.warning("Operational runoff mode is active. Configure the backend endpoint in the sidebar to show runoff nodes.")
             elif dynamic_mode and grrr_error:
                 st.error(grrr_error)
             else:
-                st.info("No mapped MP basin locations are available for GRRR runoff context under the current filters.")
+                st.info("No mapped MP basin locations are available for runoff context under the current filters.")
         else:
             grrr_live_mode = dynamic_mode
             grrr_highest = sorted(
@@ -9948,7 +9947,7 @@ if main_page == "Dam DSS & Analytics":
             st.markdown(
                 f"""
                 <div class="glofas-status-grid">
-                  <div class="glofas-card"><span>Source Mode</span><b>{'Full dynamic endpoint' if grrr_live_mode else 'Fallback/demo mode'}</b></div>
+                  <div class="glofas-card"><span>Data Mode</span><b>{'Operational feed' if grrr_live_mode else 'Screening mode'}</b></div>
                   <div class="glofas-card"><span>MP Runoff Nodes</span><b>{len(grrr_nodes)}</b></div>
                   <div class="glofas-card"><span>Highest Risk</span><b style="color:{risk_color(grrr_highest['risk_band'])}">{escape(grrr_highest['risk_band'])}</b></div>
                   <div class="glofas-card"><span>Reforecast Lead</span><b>7 days</b></div>
@@ -9957,12 +9956,12 @@ if main_page == "Dam DSS & Analytics":
                 unsafe_allow_html=True,
             )
             if grrr_live_mode:
-                st.caption("Full dynamic GRRR mode is active. Rows are read from the configured endpoint and normalized into the dashboard schema.")
+                st.caption("Operational runoff mode is active. Rows are normalized into the dashboard schema.")
             else:
-                st.caption("Fallback/demo mode is active. Switch Forecast Mode to Full dynamic mode and configure an endpoint to disable fallback data.")
+                st.caption("Screening mode is active. Switch Forecast Mode to Operational mode and configure an endpoint to disable screening data.")
 
             grrr_labels = [f"{node['basin']} | {node['risk_band']}" for node in grrr_nodes]
-            selected_grrr_label = st.selectbox("GRRR MP runoff node", grrr_labels, key="selected_grrr_node")
+            selected_grrr_label = st.selectbox("MP runoff forecast node", grrr_labels, key="selected_grrr_node")
             selected_grrr = grrr_nodes[grrr_labels.index(selected_grrr_label)]
             grrr_rows = pd.DataFrame(selected_grrr["series"])
             for column in ["runoff_mm", "reanalysis_discharge_cms", "reforecast_p50_cms", "reforecast_p90_cms", "reservoir_adjusted_cms"]:
@@ -9992,7 +9991,7 @@ if main_page == "Dam DSS & Analytics":
                         y=alt.Y("flow_cms:Q", title="Runoff-derived discharge (cumecs)"),
                         color=alt.Color(
                             "series:N",
-                            title="GRRR series",
+                            title="Runoff forecast series",
                             scale=alt.Scale(
                                 domain=["reanalysis_discharge_cms", "reforecast_p50_cms", "reforecast_p90_cms", "reservoir_adjusted_cms"],
                                 range=["#0ea5e9", "#111827", "#dc2626", "#0f766e"],
@@ -10235,15 +10234,15 @@ if main_page == "Weather Forecast":
                 float(selected_town["longitude"]),
                 force_refresh=force_weather_refresh,
             )
-            st.caption(f"Selected {selected_weather_set.lower()} weather source: {weather_source}.")
+            st.caption(f"Selected {selected_weather_set.lower()} weather data status: {'Ready' if not weather_error else 'Using stored operational data'}.")
             google_weather_api_key = get_app_secret("google_weather_api_key", "GOOGLE_WEATHER_API_KEY", "")
             if is_admin:
-                with st.expander("Google Weather API demo check", expanded=False):
+                with st.expander("Operational weather service check", expanded=False):
                     if not google_weather_api_key:
-                        st.info("Configure Streamlit secret google_weather_api_key or environment variable GOOGLE_WEATHER_API_KEY to test Google Weather API for the selected point.")
+                        st.info("Configure the operational weather key in deployment secrets to test the selected point.")
                     else:
-                        st.caption("Runs a current-condition lookup for the selected weather point without displaying the configured API key.")
-                        if st.button("Test Google Weather API for selected point", use_container_width=True, key="test_google_weather_api"):
+                        st.caption("Runs a current-condition lookup for the selected weather point without displaying the configured key.")
+                        if st.button("Test operational weather service for selected point", use_container_width=True, key="test_google_weather_api"):
                             google_payload, google_error = fetch_google_weather_current(
                                 float(selected_town["latitude"]),
                                 float(selected_town["longitude"]),
@@ -10252,7 +10251,7 @@ if main_page == "Weather Forecast":
                             if google_error:
                                 st.error(google_error)
                             else:
-                                st.success("Google Weather API responded successfully for the selected point.")
+                                st.success("Operational weather service responded successfully for the selected point.")
                                 st.dataframe(
                                     pd.DataFrame([google_weather_summary(google_payload)]),
                                     use_container_width=True,
@@ -10482,7 +10481,7 @@ if main_page == "Weather Forecast":
                         {
                             "Input Layer": "AI weather trigger",
                             "Current Value": ai_weather_signal,
-                            "DSS Use": "Can be replaced or enriched by GraphCast-derived 10-day weather signals",
+                            "DSS Use": "Can be replaced or enriched by advanced 10-day weather signals",
                         },
                     ]
                 )
@@ -10490,12 +10489,12 @@ if main_page == "Weather Forecast":
                     f"""
                     <div class="infographic-frame">
                         <div class="infographic-title">AI Weather Intelligence Inputs</div>
-                        <div class="infographic-subtitle">Operational weather variables prepared for dam, GD site, and basin DSS. The same schema can accept GraphCast-derived 10-day forecast grids when a backend source is connected.</div>
+                        <div class="infographic-subtitle">Operational weather variables prepared for dam, GD site, and basin DSS. The same schema can accept advanced 10-day forecast grids when a backend model is connected.</div>
                         <div class="infographic-grid">
                             <div class="infographic-card"><span>AI Weather Signal</span><b>{escape(ai_weather_signal)}</b><small>Composite rainfall, wind, UV, and current rainfall trigger</small></div>
                             <div class="infographic-card"><span>Next 3-Day Rain</span><b>{fmt_number(three_day_rain_total, " mm")}</b><small>Short-range inflow pressure indicator</small></div>
                             <div class="infographic-card"><span>Next 7-Day Rain</span><b>{fmt_number(forecast_rain_total, " mm")}</b><small>Medium-range DSS planning input</small></div>
-                            <div class="infographic-card"><span>Suggested Backend</span><b>AI forecast ready</b><small>GraphCast / Weather API / local model compatible schema</small></div>
+                            <div class="infographic-card"><span>Suggested Backend</span><b>AI forecast ready</b><small>Operational model compatible schema</small></div>
                         </div>
                     </div>
                     """,
@@ -10504,7 +10503,7 @@ if main_page == "Weather Forecast":
                 with st.expander("Review AI weather input schema for DSS", expanded=False):
                     st.dataframe(ai_weather_inputs, use_container_width=True, hide_index=True, height=250)
                     st.caption(
-                        "These are dashboard-ready decision inputs. A future GraphCast data service can populate the same fields from 0.25-degree forecast grids clipped to MP districts, dam catchments, and GD site basins."
+                        "These are dashboard-ready decision inputs. A future advanced weather service can populate the same fields from forecast grids clipped to MP districts, dam catchments, and GD site basins."
                     )
 
                 weather_tile_api_key = get_app_secret("openweather_api_key", "OPENWEATHER_API_KEY", "")
@@ -10667,7 +10666,7 @@ if main_page == "Weather Forecast":
 if main_page == "3D Flood Scenarios":
     st.subheader("3D Flood Scenarios")
     st.markdown(
-        '<div class="panel-note">ArcGIS 3D terrain module for Sentinel historical inundation review and planning scenarios. The current version generates screening footprints from selected dams; Sentinel-1 SAR event polygons can be connected as GeoJSON/FeatureLayer inputs in the next data stage.</div>',
+        '<div class="panel-note">3D terrain module for historical inundation review and planning scenarios. The current version generates screening footprints from selected dams; event inundation polygons can be connected as secure spatial inputs in the next data stage.</div>',
         unsafe_allow_html=True,
     )
     if map_status.empty:
@@ -11821,32 +11820,29 @@ if main_page == "Data & Timeseries":
 
     api_base_url = "http://127.0.0.1:8600"
     api_status = api_is_available(api_base_url)
-    with st.expander("External Data API / GeoJSON Sources", expanded=False):
-        status_cols = st.columns([0.78, 2.2])
-        status_cols[0].metric("API Status", "Online" if api_status else "Offline")
-        if api_status:
-            status_cols[1].success(f"REST and GeoJSON services are available at {api_base_url}")
-        else:
-            status_cols[1].warning("API server is not responding. Start it with Flood Reports\\run_api.ps1.")
+    if is_admin:
+        with st.expander("Secure Data Services", expanded=False):
+            status_cols = st.columns([0.78, 2.2])
+            status_cols[0].metric("Service Status", "Online" if api_status else "Offline")
+            if api_status:
+                status_cols[1].success("Secure dashboard data services are available for authorized integrations.")
+            else:
+                status_cols[1].warning("Secure data service is not responding. Start the local service from the operations workstation.")
 
-        api_cards = [
-            ("Reports", f"{api_base_url}/api/reports"),
-            ("Reservoir Observations", f"{api_base_url}/api/reservoir-observations"),
-            ("District Summary", f"{api_base_url}/api/district-summary"),
-            ("Basin Summary", f"{api_base_url}/api/basin-summary"),
-            ("Dam GeoJSON", f"{api_base_url}/api/geojson/dams"),
-            ("Reservoir Status GeoJSON", f"{api_base_url}/api/geojson/reservoir-status"),
-            ("Alert GeoJSON", f"{api_base_url}/api/geojson/alerts"),
-            ("Bansagar Filter Example", f"{api_base_url}/api/reservoir-observations?reservoir=Bansagar"),
-        ]
-        cards_html = '<div class="api-grid">'
-        for label, url in api_cards:
-            cards_html += f'<div class="api-card"><b>{label}</b><code>{url}</code></div>'
-        cards_html += "</div>"
-        st.markdown(cards_html, unsafe_allow_html=True)
-        link_cols = st.columns(3)
-        link_cols[0].link_button("Open API Home", api_base_url)
-        link_cols[1].link_button("Open Reservoir GeoJSON", f"{api_base_url}/api/geojson/reservoir-status")
-        link_cols[2].link_button("Open Alert GeoJSON", f"{api_base_url}/api/geojson/alerts")
-        st.caption("Use the GeoJSON URLs as external layers in ArcGIS Online, QGIS, web maps, Power BI, or the NITA AI platform.")
+            api_cards = [
+                ("Reports", "Authorized report service"),
+                ("Reservoir Observations", "Authorized reservoir service"),
+                ("District Summary", "Authorized district service"),
+                ("Basin Summary", "Authorized basin service"),
+                ("Dam Spatial Layer", "Authorized dam spatial service"),
+                ("Reservoir Status Layer", "Authorized status spatial service"),
+                ("Alert Layer", "Authorized alert spatial service"),
+                ("Filtered Observation Example", "Authorized filtered observation service"),
+            ]
+            cards_html = '<div class="api-grid">'
+            for label, description in api_cards:
+                cards_html += f'<div class="api-card"><b>{label}</b><span>{description}</span></div>'
+            cards_html += "</div>"
+            st.markdown(cards_html, unsafe_allow_html=True)
+            st.caption("External service endpoints are intentionally hidden from public dashboard users. Share integration details only through authorized deployment documentation.")
 
