@@ -5735,6 +5735,107 @@ def build_weather_forecast_for_points(points_key: tuple[tuple[str, str, float, f
     return pd.DataFrame(rows)
 
 
+def weather_summary_from_frames(
+    point_name: str,
+    district: str,
+    latitude: float,
+    longitude: float,
+    daily: pd.DataFrame,
+    current: pd.DataFrame,
+    source: str,
+    status: str,
+) -> dict:
+    if daily.empty:
+        return {
+            "town_name": point_name,
+            "district": district,
+            "latitude": latitude,
+            "longitude": longitude,
+            "forecast_rain_mm": math.nan,
+            "forecast_temp_max_c": math.nan,
+            "forecast_wind_max_kmh": math.nan,
+            "forecast_uv_max": math.nan,
+            "current_rain_mm": math.nan,
+            "current_temp_c": math.nan,
+            "weather_risk": "No Data",
+            "source": source,
+            "status": status,
+        }
+    forecast = daily[daily.get("period", pd.Series(dtype=str)) == "Forecast"].head(7).copy()
+    if forecast.empty:
+        forecast = daily.tail(7).copy()
+    forecast_rain = pd.to_numeric(forecast.get("precipitation_sum"), errors="coerce").sum()
+    forecast_temp = pd.to_numeric(forecast.get("temperature_2m_max"), errors="coerce").max()
+    forecast_wind = pd.to_numeric(forecast.get("wind_speed_10m_max"), errors="coerce").max()
+    forecast_uv = pd.to_numeric(forecast.get("uv_index_max"), errors="coerce").max()
+    current_row = current.iloc[0].to_dict() if not current.empty else {}
+    current_rain = pd.to_numeric(pd.Series([current_row.get("precipitation")]), errors="coerce").iloc[0]
+    current_temp = pd.to_numeric(pd.Series([current_row.get("temperature_2m")]), errors="coerce").iloc[0]
+    return {
+        "town_name": point_name,
+        "district": district,
+        "latitude": latitude,
+        "longitude": longitude,
+        "forecast_rain_mm": round(float(forecast_rain), 2) if pd.notna(forecast_rain) else math.nan,
+        "forecast_temp_max_c": round(float(forecast_temp), 2) if pd.notna(forecast_temp) else math.nan,
+        "forecast_wind_max_kmh": round(float(forecast_wind), 2) if pd.notna(forecast_wind) else math.nan,
+        "forecast_uv_max": round(float(forecast_uv), 2) if pd.notna(forecast_uv) else math.nan,
+        "current_rain_mm": round(float(current_rain), 2) if pd.notna(current_rain) else math.nan,
+        "current_temp_c": round(float(current_temp), 2) if pd.notna(current_temp) else math.nan,
+        "weather_risk": weather_risk_label(forecast_rain, forecast_wind, forecast_uv),
+        "source": source,
+        "status": status,
+    }
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def build_cached_weather_forecast_for_points(points_key: tuple[tuple[str, str, float, float], ...]) -> pd.DataFrame:
+    init_weather_database()
+    rows = []
+    with sqlite3.connect(WEATHER_CACHE_DB) as conn:
+        for point_name, district, latitude, longitude in points_key:
+            key = weather_location_key(float(latitude), float(longitude))
+            row = conn.execute(
+                """
+                SELECT daily_json, hourly_json, current_json, fetched_at
+                FROM weather_forecast_cache
+                WHERE location_key = ?
+                """,
+                (key,),
+            ).fetchone()
+            if not row:
+                rows.append(
+                    weather_summary_from_frames(
+                        point_name,
+                        district,
+                        latitude,
+                        longitude,
+                        pd.DataFrame(),
+                        pd.DataFrame(),
+                        "database cache",
+                        "Cache pending - scheduled daily refresh not completed",
+                    )
+                )
+                continue
+            daily = dataframe_from_weather_json(row[0])
+            hourly = dataframe_from_weather_json(row[1])
+            current = dataframe_from_weather_json(row[2])
+            daily, hourly, current = normalize_weather_frames(daily, hourly, current)
+            rows.append(
+                weather_summary_from_frames(
+                    point_name,
+                    district,
+                    latitude,
+                    longitude,
+                    daily,
+                    current,
+                    "daily database cache",
+                    f"Cached at {row[3]}",
+                )
+            )
+    return pd.DataFrame(rows)
+
+
 @st.cache_data(ttl=WEATHER_REFRESH_HOURS * 3600, show_spinner=False)
 def build_current_weather_for_towns(towns_key: tuple[tuple[str, str, float, float], ...]) -> pd.DataFrame:
     rows = []
@@ -10037,26 +10138,22 @@ if main_page == "Weather Forecast":
         weather_points = weather_point_sets[selected_weather_set].copy()
         dam_layer_weather = dam_weather_points.copy()
         if not dam_weather_points.empty:
-            dam_layer_controls = st.columns([0.32, 0.68])
-            with dam_layer_controls[0]:
-                if st.button("Load all dam forecasts", use_container_width=True, key="load_all_dam_weather_button"):
-                    st.session_state["load_all_dam_weather"] = True
-            with dam_layer_controls[1]:
-                st.caption(
-                    "Dam weather layer is visible on the map. Load all dam forecasts to color every dam by 7-day weather risk and view the dam-wise forecast table."
+            dam_points_key = tuple(
+                (
+                    str(row.town_name),
+                    str(row.district),
+                    round(float(row.latitude), 5),
+                    round(float(row.longitude), 5),
                 )
-            if st.session_state.get("load_all_dam_weather"):
-                dam_points_key = tuple(
-                    (
-                        str(row.town_name),
-                        str(row.district),
-                        round(float(row.latitude), 5),
-                        round(float(row.longitude), 5),
-                    )
-                    for row in dam_weather_points.dropna(subset=["latitude", "longitude"]).itertuples(index=False)
-                )
-                with st.spinner("Fetching cached weather forecasts for dam locations..."):
-                    dam_layer_weather = build_weather_forecast_for_points(dam_points_key)
+                for row in dam_weather_points.dropna(subset=["latitude", "longitude"]).itertuples(index=False)
+            )
+            dam_layer_weather = build_cached_weather_forecast_for_points(dam_points_key)
+            cached_count = int(dam_layer_weather["forecast_rain_mm"].notna().sum()) if "forecast_rain_mm" in dam_layer_weather else 0
+            st.caption(
+                f"Dam forecast layer loads by default from the daily weather database. "
+                f"Cached dam forecasts available: {cached_count}/{len(dam_layer_weather)}. "
+                "The backend refresh is designed for 12:30 AM IST daily execution."
+            )
         with weather_top[1]:
             district_filter_options = ["All districts"] + sorted(weather_points["district"].dropna().astype(str).unique())
             selected_weather_district = st.selectbox("Weather district", district_filter_options, key="weather_district_filter")
@@ -10165,7 +10262,7 @@ if main_page == "Weather Forecast":
                 summary_towns.loc[selected_mask, "forecast_wind_max_kmh"] = forecast_wind_max
                 summary_towns.loc[selected_mask, "forecast_uv_max"] = forecast_uv_max
                 summary_towns.loc[selected_mask, "weather_risk"] = selected_weather_risk
-                if not dam_layer_weather.empty and not st.session_state.get("load_all_dam_weather"):
+                if not dam_layer_weather.empty:
                     selected_dam_mask = dam_layer_weather["town_name"].astype(str) == selected_town_name
                     if selected_weather_set == "Dams" and selected_dam_mask.any():
                         dam_layer_weather.loc[selected_dam_mask, "forecast_rain_mm"] = forecast_rain_total
@@ -10302,7 +10399,7 @@ if main_page == "Weather Forecast":
                     dam_layer_weather,
                 )
 
-                if st.session_state.get("load_all_dam_weather") and not dam_layer_weather.empty:
+                if not dam_layer_weather.empty:
                     dam_forecast_display = dam_layer_weather[
                         [
                             "town_name",

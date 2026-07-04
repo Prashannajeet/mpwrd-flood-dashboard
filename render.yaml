@@ -12,3 +12,11 @@ services:
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn flood_report_api:app --host 0.0.0.0 --port $PORT
+
+  - type: cron
+    name: mpwrd-daily-dam-weather-refresh
+    runtime: python
+    plan: starter
+    schedule: "0 19 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python weather_cache_refresh.py --forecast-all --include-dams

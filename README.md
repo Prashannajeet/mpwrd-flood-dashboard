@@ -43,6 +43,20 @@ For a continuously running local refresh service:
 run_satellite_rainfall_refresh.bat
 ```
 
+For weather forecasts, dam forecast cache is designed to refresh once daily at 12:30 AM IST and display instantly from the database:
+
+```bash
+python weather_cache_refresh.py --daily-at 00:30 --forecast-all --include-dams
+```
+
+Local Windows runner:
+
+```bash
+run_daily_dam_weather_refresh.bat
+```
+
+Render deployment includes a cron job scheduled at `19:00 UTC`, equivalent to `12:30 AM IST`, to refresh town + dam weather forecast cache daily.
+
 The script creates `data/satellite_rainfall_timeseries.sqlite` with:
 
 - `rainfall_station_master`
