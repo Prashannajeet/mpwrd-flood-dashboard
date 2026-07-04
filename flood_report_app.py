@@ -7507,7 +7507,7 @@ def admin_login_panel() -> bool:
 
 
 if "main_dashboard_page" not in st.session_state:
-    st.session_state.main_dashboard_page = "Infographics"
+    st.session_state.main_dashboard_page = "WaterWatch Live Enabled with AI"
 
 record_visitor_session(st.session_state.main_dashboard_page)
 
@@ -9586,9 +9586,9 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
 
 
 if "main_dashboard_page" not in st.session_state:
-    st.session_state.main_dashboard_page = "Infographics"
+    st.session_state.main_dashboard_page = "WaterWatch Live Enabled with AI"
 
-nav_pages = ["Infographics", "Dam DSS & Analytics", "GD Site Analytics", "Weather Forecast", "3D Flood Scenarios", "Data & Timeseries", "Report Generation", "Administration"]
+nav_pages = ["WaterWatch Live Enabled with AI", "Dam DSS & Analytics", "GD Site Analytics", "Weather Forecast", "3D Flood Scenarios", "Data & Timeseries", "Report Generation", "Administration"]
 st.markdown('<div class="dashboard-topnav-title">Dashboard Navigation</div>', unsafe_allow_html=True)
 nav_cols = st.columns(len(nav_pages))
 for nav_col, page in zip(nav_cols, nav_pages):
@@ -9666,7 +9666,7 @@ if main_page == "Report Generation":
 
         with report_cols[0]:
             infographic_pdf = build_pdf_report(
-                "Infographics Report",
+                "WaterWatch Live Enabled with AI Report",
                 "Snapshot report with maps, filling bands, top/least reservoirs and key tables.",
                 [
                     ("Executive Snapshot", [report_table(snapshot_kpis, max_rows=8, font_size=8)]),
@@ -9677,7 +9677,7 @@ if main_page == "Report Generation":
                     ("Reservoir Detail Table", [report_table(latest_fill[["reservoir_name", "district", "water_level_m", "frl_gap_m", "current_live_capacity_mcm", "filling_percent"]] if not latest_fill.empty else latest_fill, max_rows=30, font_size=6)]),
                 ],
             )
-            st.download_button("Download Infographics Report", infographic_pdf, "mpwrd_infographics_report.pdf", "application/pdf", use_container_width=True)
+            st.download_button("Download WaterWatch Report", infographic_pdf, "mpwrd_waterwatch_live_report.pdf", "application/pdf", use_container_width=True)
 
         with report_cols[1]:
             dss_alerts = map_status[map_status.get("alert_level", pd.Series(dtype=str)).isin(["Critical", "Warning", "Watch"])].copy() if not map_status.empty else pd.DataFrame()
@@ -11065,8 +11065,8 @@ if main_page == "3D Flood Scenarios":
             )
 
 
-if main_page == "Infographics":
-    st.subheader("Infographics")
+if main_page == "WaterWatch Live Enabled with AI":
+    st.subheader("WaterWatch Live Enabled with AI")
     if reservoir_view.empty and map_status.empty:
         st.info("No data is available for infographic generation under the current filters.")
     else:
