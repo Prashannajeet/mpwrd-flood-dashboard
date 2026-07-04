@@ -8134,7 +8134,7 @@ def local_ai_enhance_answer(question: str, answer: dict) -> dict:
 def local_ai_status_text() -> str:
     config = local_ai_config()
     if not config["enabled"]:
-        return "Local AI model is optional and currently disabled. Structured DSS queries are active."
+        return "Structured DSS intelligence is active."
     if config["provider"] != "ollama":
         return f"Local AI provider '{config['provider']}' is configured but only Ollama is supported in this build."
     return f"Local AI enabled: Ollama model `{config['model']}` at `{config['base_url']}`."
@@ -8738,7 +8738,7 @@ def render_dashboard_assistant(
 
     with st.expander("AI DSS Assistant: Ask About Current Dashboard Data", expanded=False):
         st.markdown(
-            '<div class="panel-note">Enhanced hybrid DSS assistant: operational briefs, dam-name lookup, weather intelligence, and advanced data queries over the loaded historical report data. Try natural questions using district, dam, alert, filling percentage, gate, river, trend, or last-N-days table filters.</div>',
+            '<div class="panel-note">AI-enabled DSS assistant for reservoir status, weather context, alerts, trends, and historical data queries.</div>',
             unsafe_allow_html=True,
         )
         st.caption(local_ai_status_text())
