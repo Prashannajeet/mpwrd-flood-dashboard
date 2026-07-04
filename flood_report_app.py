@@ -5604,16 +5604,6 @@ def render_infographic_leaflet_map(map_frame: pd.DataFrame, district_geojson: di
                 marker.bindTooltip(`${{dam.reservoir_name}} | ${{dam.alert}}`, {{ sticky: true }});
                 marker.__damRecord = dam;
                 marker.on("click", () => updateDamFocus(dam, marker));
-                marker.bindPopup(`
-                    <b>${{dam.reservoir_name}}</b><br/>
-                    Dam: ${{dam.dam_name}}<br/>
-                    District: ${{dam.district}}<br/>
-                    Alert: <b style="color:${{dam.color}}">${{dam.alert}}</b><br/>
-                    Filling: ${{dam.filling ?? "-"}}%<br/>
-                    Water level: ${{dam.water_level ?? "-"}} m<br/>
-                    FRL gap: ${{dam.frl_gap ?? "-"}} m<br/>
-                    Waterbody: ${{dam.waterbody_area ?? 0}} sq.km
-                `);
             }});
 
             const bounds = L.latLngBounds(dams.map((dam) => [dam.lat, dam.lon]));
