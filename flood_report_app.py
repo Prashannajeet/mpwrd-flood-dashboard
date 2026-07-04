@@ -11157,10 +11157,15 @@ if main_page == "Water Watch":
                     infographic_map["waterbody_area_sqkm"] = pd.to_numeric(
                         infographic_map.get("waterbody_area_sqkm"), errors="coerce"
                     ).fillna(0)
-                    map_district_series = infographic_map.get("map_district", pd.Series("", index=infographic_map.index)).fillna("").astype(str)
-                    infographic_map["district_label"] = map_district_series.where(
-                        map_district_series.str.len() > 0,
-                        infographic_map.get("district", pd.Series("Unassigned", index=infographic_map.index)).fillna("Unassigned").astype(str),
+                    parsed_district_series = infographic_map.get(
+                        "district", pd.Series("", index=infographic_map.index)
+                    ).fillna("").astype(str)
+                    map_district_series = infographic_map.get(
+                        "map_district", pd.Series("", index=infographic_map.index)
+                    ).fillna("").astype(str)
+                    infographic_map["district_label"] = parsed_district_series.where(
+                        parsed_district_series.str.len() > 0,
+                        map_district_series.where(map_district_series.str.len() > 0, "Unassigned"),
                     )
                     render_infographic_leaflet_map(
                         infographic_map,
