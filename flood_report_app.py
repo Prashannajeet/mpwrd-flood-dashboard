@@ -2073,13 +2073,39 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
     if gd_sites.empty or not {"latitude", "longitude"}.issubset(gd_sites.columns):
         return
     gd_now = gd_forecasts[gd_forecasts["data_period"] == "Now Data"].copy() if not gd_forecasts.empty else pd.DataFrame()
-    site_latest = gd_now.drop_duplicates("station_code").set_index("station_code") if not gd_now.empty else pd.DataFrame()
+    if not gd_now.empty:
+        latest_sort_cols = [column for column in ["forecast_time", "generated_at"] if column in gd_now.columns]
+        if latest_sort_cols:
+            gd_now = gd_now.sort_values(latest_sort_cols)
+        site_latest = gd_now.drop_duplicates("station_code", keep="last").set_index("station_code")
+    else:
+        site_latest = pd.DataFrame()
     site_series: dict[str, list[dict]] = {}
-    if not gd_forecasts.empty:
-        for station_code, group in gd_forecasts.sort_values("forecast_time").groupby("station_code"):
+    graph_forecasts = gd_forecasts.copy() if not gd_forecasts.empty else pd.DataFrame()
+    cached_history = load_gd_site_forecast_cache()
+    if not cached_history.empty and "data_period" in cached_history.columns:
+        cached_history = cached_history[cached_history["data_period"].astype(str).eq("Now Data")].copy()
+        if "forecast_time" in cached_history.columns and cached_history["forecast_time"].notna().any():
+            cutoff = cached_history["forecast_time"].max() - pd.Timedelta(days=7)
+            cached_history = cached_history[cached_history["forecast_time"] >= cutoff]
+        if not cached_history.empty:
+            graph_forecasts = pd.concat([cached_history, graph_forecasts], ignore_index=True)
+            graph_forecasts = graph_forecasts.drop_duplicates(
+                [column for column in ["station_code", "forecast_time", "data_period"] if column in graph_forecasts.columns],
+                keep="last",
+            )
+    if not graph_forecasts.empty:
+        for station_code, group in graph_forecasts.sort_values("forecast_time").groupby("station_code"):
             points = []
-            for item in group.head(24).to_dict("records"):
-                flow_value = pd.to_numeric(pd.Series([item.get("combined_forecast_flow_cms")]), errors="coerce").iloc[0]
+            for item in group.tail(24).to_dict("records"):
+                flow_candidates = [
+                    item.get("combined_forecast_flow_cms"),
+                    item.get("current_flow_cms"),
+                    item.get("river_forecast_flow_cms"),
+                    item.get("basin_forecast_flow_cms"),
+                ]
+                flow_value = pd.to_numeric(pd.Series(flow_candidates), errors="coerce").dropna()
+                flow_value = flow_value.iloc[0] if not flow_value.empty else math.nan
                 if pd.isna(flow_value):
                     continue
                 return_period_value = pd.to_numeric(pd.Series([item.get("return_period")]), errors="coerce").iloc[0]
@@ -2096,7 +2122,18 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
     for row in gd_sites.dropna(subset=["latitude", "longitude"]).to_dict("records"):
         station_code = str(row.get("station_code") or "")
         now = site_latest.loc[station_code].to_dict() if not site_latest.empty and station_code in site_latest.index else {}
-        flow = pd.to_numeric(pd.Series([now.get("current_flow_cms")]), errors="coerce").iloc[0]
+        flow_candidates = [
+            now.get("current_flow_cms"),
+            now.get("combined_forecast_flow_cms"),
+            now.get("river_forecast_flow_cms"),
+            now.get("basin_forecast_flow_cms"),
+        ]
+        flow_values = pd.to_numeric(pd.Series(flow_candidates), errors="coerce").dropna()
+        flow = flow_values.iloc[0] if not flow_values.empty else math.nan
+        if pd.isna(flow):
+            cached_points = site_series.get(station_code, [])
+            if cached_points:
+                flow = cached_points[-1].get("flow", math.nan)
         status = str(now.get("forecast_status") or "Layer pending")
         return_period_value = pd.to_numeric(pd.Series([now.get("return_period")]), errors="coerce").iloc[0]
         level, color = gd_return_period_alert(return_period_value, flow)
@@ -2164,12 +2201,6 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
             color: #64748b;
             margin: 0 0 8px;
           }}
-          .gd-popup {{
-            font: 12px Roboto, Inter, Segoe UI, sans-serif;
-            color: #334155;
-            line-height: 1.35;
-          }}
-          .gd-popup b {{ color:#0f172a; font-size:13px; }}
           .gd-info-panel {{
             position: absolute;
             top: 58px;

@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import subprocess
+import urllib.request
 import urllib.parse
 from pathlib import Path
 
@@ -15,18 +16,43 @@ DATA_DIR = APP_DIR / "data"
 SITES = DATA_DIR / "gd_sites_swedes.geojson"
 OUT = DATA_DIR / "gd_site_online_forecasts.csv"
 LOCAL_REACHES = DATA_DIR / "geoglows_mp_reaches.geojson"
+SERVICE_CACHE = DATA_DIR / "river_forecast_service_status.json"
 SERVICE = "https://livefeeds3.arcgis.com/arcgis/rest/services/GEOGLOWS/GlobalWaterModel_Medium/MapServer/0/query"
 SERVICE_LAYER = "https://livefeeds3.arcgis.com/arcgis/rest/services/GEOGLOWS/GlobalWaterModel_Medium/MapServer/0"
 FORECAST_HOURS = 7 * 24
 FORECAST_STEP_HOURS = 3
-COMID_CHUNK_SIZE = 45
+COMID_CHUNK_SIZE = 20
 
 
 def curl_json(params: dict[str, str]) -> dict:
     url = SERVICE + "?" + urllib.parse.urlencode(params)
-    # Use cmd.exe so the call behaves like the interactive curl command that works on this Windows host.
-    command = f'curl.exe -s --max-time 25 "{url}"'
-    result = subprocess.run(["cmd.exe", "/d", "/s", "/c", command], capture_output=True, text=True, timeout=35)
+    return fetch_json_url(url)
+
+
+def fetch_json_url(url: str) -> dict:
+    try:
+        request = urllib.request.Request(url, headers={"User-Agent": "MPWRD-GD-Forecast-Refresh/1.0"})
+        with urllib.request.urlopen(request, timeout=35) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except Exception:
+        pass
+    try:
+        result = subprocess.run(
+            [
+                "powershell.exe",
+                "-NoProfile",
+                "-Command",
+                f"(Invoke-WebRequest -UseBasicParsing -TimeoutSec 35 -Uri {json.dumps(url)}).Content",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=45,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return json.loads(result.stdout)
+    except Exception:
+        pass
+    result = subprocess.run(["curl.exe", "-s", "--max-time", "35", url], capture_output=True, text=True, timeout=45)
     if result.returncode != 0 or not result.stdout.strip():
         return {}
     try:
@@ -36,18 +62,21 @@ def curl_json(params: dict[str, str]) -> dict:
 
 
 def curl_json_url(url: str) -> dict:
-    command = f'curl.exe -s --max-time 25 "{url}"'
-    result = subprocess.run(["cmd.exe", "/d", "/s", "/c", command], capture_output=True, text=True, timeout=35)
-    if result.returncode != 0 or not result.stdout.strip():
-        return {}
-    try:
-        return json.loads(result.stdout)
-    except json.JSONDecodeError:
-        return {}
+    return fetch_json_url(url)
 
 
 def forecast_time_values() -> list[int]:
     payload = curl_json_url(SERVICE_LAYER + "?f=json")
+    if payload:
+        try:
+            SERVICE_CACHE.write_text(json.dumps(payload), encoding="utf-8")
+        except Exception:
+            pass
+    elif SERVICE_CACHE.exists():
+        try:
+            payload = json.loads(SERVICE_CACHE.read_text(encoding="utf-8"))
+        except Exception:
+            payload = {}
     extent = (payload or {}).get("timeInfo", {}).get("timeExtent") or []
     if not extent:
         return []
@@ -68,23 +97,42 @@ def fetch_forecast_series(comids: list[str]) -> pd.DataFrame:
     if not time_values:
         return pd.DataFrame()
     rows: list[dict] = []
-    for time_value in time_values:
-        for group in chunks(comids, COMID_CHUNK_SIZE):
-            where = "comid IN (" + ",".join(group) + ")"
-            payload = curl_json(
-                {
-                    "f": "json",
-                    "where": where,
-                    "outFields": "comid,streamorder,timevalue,meanflow,returnperiod,upstreamarea",
-                    "returnGeometry": "false",
-                    "time": str(time_value),
-                    "resultRecordCount": "2000",
-                }
-            )
-            for feature in payload.get("features") or []:
-                attrs = feature.get("attributes") or {}
-                rows.append(attrs)
+    time_window = f"{min(time_values)},{max(time_values)}"
+    for group in chunks(comids, COMID_CHUNK_SIZE):
+        where = "comid IN (" + ",".join(group) + ")"
+        payload = curl_json(
+            {
+                "f": "json",
+                "where": where,
+                "outFields": "comid,streamorder,timevalue,meanflow,returnperiod,upstreamarea",
+                "returnGeometry": "false",
+                "time": time_window,
+                "orderByFields": "comid ASC,timevalue ASC",
+                "resultRecordCount": "2000",
+            }
+        )
+        if not payload or payload.get("error"):
+            features = []
+        else:
+            features = payload.get("features") or []
+        if payload and not payload.get("error") and not features:
+            for time_value in time_values:
+                fallback_payload = curl_json(
+                    {
+                        "f": "json",
+                        "where": where,
+                        "outFields": "comid,streamorder,timevalue,meanflow,returnperiod,upstreamarea",
+                        "returnGeometry": "false",
+                        "time": str(time_value),
+                        "resultRecordCount": "2000",
+                    }
+                )
+                features.extend(fallback_payload.get("features") or [])
+        for feature in features:
+            attrs = feature.get("attributes") or {}
+            rows.append(attrs)
     if not rows:
+        print("Warning: live river forecast series could not be fetched; using cached reach snapshot only.")
         return pd.DataFrame()
     series = pd.DataFrame(rows)
     series["comid"] = series["comid"].astype(str)
