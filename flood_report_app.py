@@ -51,6 +51,7 @@ SATELLITE_RAINFALL_DB = APP_DIR / "data" / "satellite_rainfall_timeseries.sqlite
 VISITOR_ANALYTICS_DB = APP_DIR / "data" / "visitor_analytics.sqlite"
 RIVER_FLOW_FORECAST_DB = APP_DIR / "data" / "river_flow_forecasts.sqlite"
 GD_SITE_FORECAST_DB = APP_DIR / "data" / "gd_site_forecasts.sqlite"
+GD_SITE_ONLINE_FORECAST_CSV = APP_DIR / "data" / "gd_site_online_forecasts.csv"
 RIVER_FLOW_MODEL_DIR = APP_DIR / "models" / "river_flow_tensorflow"
 WEATHER_REFRESH_HOURS = 3
 RESERVOIR_CAPACITY_ESTIMATES_CSV = APP_DIR / "data" / "reservoir_capacity_estimates.csv"
@@ -2157,7 +2158,7 @@ def load_gd_site_forecast_cache() -> pd.DataFrame:
 
 def load_latest_gd_site_forecast_slot() -> pd.DataFrame:
     if not GD_SITE_FORECAST_DB.exists():
-        return pd.DataFrame()
+        return load_gd_site_online_forecast_csv()
     try:
         with sqlite3.connect(GD_SITE_FORECAST_DB) as conn:
             latest = pd.read_sql_query(
@@ -2170,7 +2171,7 @@ def load_latest_gd_site_forecast_slot() -> pd.DataFrame:
                 conn,
             )
             if latest.empty:
-                return pd.DataFrame()
+                return load_gd_site_online_forecast_csv()
             slot_date = latest.iloc[0].get("slot_date")
             slot_time = latest.iloc[0].get("slot_time")
             cached = pd.read_sql_query(
@@ -2184,11 +2185,66 @@ def load_latest_gd_site_forecast_slot() -> pd.DataFrame:
                 params=(slot_date, slot_time),
             )
     except Exception:
-        return pd.DataFrame()
+        return load_gd_site_online_forecast_csv()
     for column in ["generated_at", "observed_at", "forecast_time"]:
         if column in cached:
             cached[column] = pd.to_datetime(cached[column], errors="coerce")
+    if cached.empty:
+        return load_gd_site_online_forecast_csv()
     return cached
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def load_gd_site_online_forecast_csv() -> pd.DataFrame:
+    if not GD_SITE_ONLINE_FORECAST_CSV.exists():
+        return pd.DataFrame()
+    try:
+        online = pd.read_csv(GD_SITE_ONLINE_FORECAST_CSV)
+    except Exception:
+        return pd.DataFrame()
+    if online.empty or "station_code" not in online.columns:
+        return pd.DataFrame()
+    online = online.copy()
+    online["station_code"] = online["station_code"].astype(str).str.strip()
+    online["forecast_time"] = pd.to_datetime(online.get("forecast_time"), errors="coerce")
+    online["meanflow_cms"] = pd.to_numeric(online.get("meanflow_cms"), errors="coerce")
+    online["lead_day"] = pd.to_numeric(online.get("lead_day"), errors="coerce").fillna(0).astype(int)
+    online["returnperiod"] = pd.to_numeric(online.get("returnperiod"), errors="coerce")
+    online["streamorder"] = pd.to_numeric(online.get("streamorder"), errors="coerce")
+    now_mask = online["lead_day"].eq(0)
+    out = pd.DataFrame(
+        {
+            "forecast_id": [
+                hashlib.sha256(f"csv|{row.station_code}|{row.forecast_time}|{row.lead_day}".encode()).hexdigest()[:32]
+                for row in online.itertuples(index=False)
+            ],
+            "slot_date": "",
+            "slot_time": "",
+            "generated_at": pd.Timestamp.now(tz="Asia/Kolkata"),
+            "station_code": online["station_code"],
+            "station_name": online.get("station_name", pd.Series("", index=online.index)),
+            "district": online.get("district", pd.Series("", index=online.index)),
+            "river": online.get("river", pd.Series("", index=online.index)),
+            "tributary": online.get("tributary", pd.Series("", index=online.index)),
+            "latitude": pd.to_numeric(online.get("latitude"), errors="coerce"),
+            "longitude": pd.to_numeric(online.get("longitude"), errors="coerce"),
+            "observed_at": pd.NaT,
+            "observed_age_days": math.nan,
+            "forecast_time": online["forecast_time"],
+            "data_period": now_mask.map({True: "Now Data", False: "Forecasted Data"}),
+            "current_flow_cms": online["meanflow_cms"].where(now_mask),
+            "current_water_level_m": math.nan,
+            "water_level_change_m": math.nan,
+            "river_forecast_flow_cms": online["meanflow_cms"],
+            "basin_forecast_flow_cms": math.nan,
+            "combined_forecast_flow_cms": online["meanflow_cms"],
+            "linked_comid": online.get("comid", pd.Series("", index=online.index)).astype(str),
+            "streamorder": online["streamorder"],
+            "return_period": online["returnperiod"],
+            "forecast_status": online.get("linkage_status", pd.Series("Linked live river forecast reach", index=online.index)),
+        }
+    )
+    return out.dropna(subset=["station_code", "forecast_time", "combined_forecast_flow_cms"]).reset_index(drop=True)
 
 
 def gd_return_period_alert(return_period: object, flow: object = None) -> tuple[str, str]:
