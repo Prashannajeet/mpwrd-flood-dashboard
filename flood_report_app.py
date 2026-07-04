@@ -7772,8 +7772,10 @@ if not map_status.empty and not latest_reservoirs.empty:
         how="left",
     )
     map_status["display_filling"] = map_status["filling_percent"].fillna(map_status.get("map_filled_percent"))
+    map_status["status_data_source"] = map_status["observed_at"].notna().map({True: "Parsed PDF", False: "Map registry fallback"})
 else:
     map_status["display_filling"] = map_status.get("map_filled_percent", pd.Series(dtype=float))
+    map_status["status_data_source"] = "Map registry fallback"
 
 if not map_status.empty:
     if selected_districts:
@@ -11204,7 +11206,6 @@ if main_page == "Water Watch":
                     help="Use this selector to link all Python-side infographic cards and charts to one dam. Map clicks update the in-map linked panel instantly.",
                 )
                 focus_rows = focus_source[focus_source["reservoir_name"].astype(str) == selected_focus_dam].copy()
-                focus_latest = focus_rows.iloc[0] if not focus_rows.empty else pd.Series(dtype=object)
                 focus_history = reservoir_view[
                     reservoir_view.get("reservoir_name", pd.Series(dtype=str)).astype(str) == selected_focus_dam
                 ].copy() if not reservoir_view.empty else pd.DataFrame()
@@ -11212,7 +11213,25 @@ if main_page == "Water Watch":
                     focus_history["observed_at"] = pd.to_datetime(focus_history["observed_at"], errors="coerce")
                     focus_history["water_level_m"] = pd.to_numeric(focus_history["water_level_m"], errors="coerce")
                     focus_history["filling_percent"] = pd.to_numeric(focus_history["filling_percent"], errors="coerce")
-                    focus_history = focus_history.dropna(subset=["observed_at"]).sort_values("observed_at")
+                    focus_history["frl_gap_m"] = pd.to_numeric(focus_history.get("frl_gap_m"), errors="coerce")
+                    focus_history = (
+                        focus_history.dropna(subset=["observed_at"])
+                        .sort_values(["observed_at", "report_at"] if "report_at" in focus_history.columns else ["observed_at"])
+                        .drop_duplicates("observed_at", keep="last")
+                    )
+                if not focus_history.empty:
+                    focus_latest = focus_history.sort_values("observed_at").tail(1).iloc[0].copy()
+                    if not focus_rows.empty:
+                        map_latest = focus_rows.sort_values("observed_at").tail(1).iloc[0] if "observed_at" in focus_rows.columns else focus_rows.iloc[0]
+                        for column in ["district_label", "map_district", "latitude", "longitude", "alert_level", "display_filling", "status_data_source"]:
+                            if column in map_latest.index and (column not in focus_latest.index or pd.isna(focus_latest.get(column))):
+                                focus_latest[column] = map_latest.get(column)
+                    if "display_filling" not in focus_latest.index or pd.isna(focus_latest.get("display_filling")):
+                        focus_latest["display_filling"] = focus_latest.get("filling_percent")
+                    if "alert_level" not in focus_latest.index or not str(focus_latest.get("alert_level") or "").strip():
+                        focus_latest["alert_level"] = frl_alert_level(focus_latest)
+                else:
+                    focus_latest = focus_rows.sort_values("observed_at").tail(1).iloc[0] if not focus_rows.empty and "observed_at" in focus_rows else (focus_rows.iloc[0] if not focus_rows.empty else pd.Series(dtype=object))
 
                 focus_cols = st.columns([0.42, 0.58])
                 with focus_cols[0]:
@@ -11233,39 +11252,49 @@ if main_page == "Water Watch":
                                 <div class="infographic-card"><span>Filling</span><b>{fmt_number(focus_latest.get("display_filling"), "%")}</b><small>latest selected slot</small></div>
                                 <div class="infographic-card"><span>FRL Gap</span><b>{fmt_number(focus_latest.get("frl_gap_m"), " m")}</b><small>headroom to FRL</small></div>
                             </div>
+                            <div style="margin-top:.5rem;color:#64748b;font-size:.78rem">Data source: {escape(str(focus_latest.get("status_data_source") or "Parsed PDF"))}</div>
                         </div>
                         """,
                         unsafe_allow_html=True,
                     )
                 with focus_cols[1]:
                     if not focus_history.empty:
-                        focus_long = focus_history.melt(
-                            id_vars=["observed_at"],
-                            value_vars=[col for col in ["water_level_m", "filling_percent"] if col in focus_history],
-                            var_name="metric",
-                            value_name="value",
-                        ).dropna(subset=["value"])
-                        focus_chart = (
-                            alt.Chart(focus_long)
+                        chart_history = focus_history.dropna(subset=["observed_at"]).copy()
+                        chart_tooltips = [
+                            alt.Tooltip("observed_at:T", title="Observation"),
+                            alt.Tooltip("water_level_m:Q", title="Water Level (m)", format=".2f"),
+                            alt.Tooltip("filling_percent:Q", title="Filling (%)", format=".2f"),
+                        ]
+                        if "report_id" in chart_history.columns:
+                            chart_tooltips.append(alt.Tooltip("report_id:N", title="Source Report"))
+                        water_level_chart = (
+                            alt.Chart(chart_history.dropna(subset=["water_level_m"]))
                             .mark_line(point=True, strokeWidth=2.5)
                             .encode(
                                 x=alt.X("observed_at:T", title="Observation time"),
-                                y=alt.Y("value:Q", title="Water level / filling"),
-                                color=alt.Color(
-                                    "metric:N",
-                                    scale=alt.Scale(
-                                        domain=["water_level_m", "filling_percent"],
-                                        range=["#2563eb", "#f97316"],
-                                    ),
-                                    title="Metric",
-                                ),
-                                tooltip=["observed_at", "metric", "value"],
+                                y=alt.Y("water_level_m:Q", title="Water level (m)", axis=alt.Axis(titleColor="#2563eb")),
+                                color=alt.value("#2563eb"),
+                                tooltip=chart_tooltips,
                             )
+                        )
+                        filling_chart = (
+                            alt.Chart(chart_history.dropna(subset=["filling_percent"]))
+                            .mark_line(point=True, strokeWidth=2.5, strokeDash=[5, 3])
+                            .encode(
+                                x=alt.X("observed_at:T", title="Observation time"),
+                                y=alt.Y("filling_percent:Q", title="Filling (%)", axis=alt.Axis(titleColor="#f97316", orient="right")),
+                                color=alt.value("#f97316"),
+                                tooltip=chart_tooltips,
+                            )
+                        )
+                        focus_chart = (
+                            alt.layer(water_level_chart, filling_chart)
+                            .resolve_scale(y="independent")
                             .properties(
                                 height=260,
                                 title=alt.TitleParams(
                                     text=f"{selected_focus_dam}: Linked Trend",
-                                    subtitle="Water level (m) and filling (%) across selected observations",
+                                    subtitle="Actual parsed report observations with independent water-level and filling axes",
                                     anchor="start",
                                     fontSize=13,
                                     subtitleFontSize=11,
@@ -11274,8 +11303,10 @@ if main_page == "Water Watch":
                             )
                         )
                         st.altair_chart(focus_chart, use_container_width=True)
+                        latest_observation = chart_history["observed_at"].max()
+                        st.caption(f"Connected to parsed PDF observations. Latest selected record: {time_label(latest_observation)}; rows plotted: {len(chart_history):,}.")
                     else:
-                        st.info("No time-series history is available for the selected focus dam.")
+                        st.info("No parsed PDF time-series observations are available for the selected focus dam.")
 
         if not latest_reservoirs.empty:
             district_infographic = (
