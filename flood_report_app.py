@@ -53,6 +53,7 @@ VISITOR_ANALYTICS_DB = APP_DIR / "data" / "visitor_analytics.sqlite"
 RIVER_FLOW_FORECAST_DB = APP_DIR / "data" / "river_flow_forecasts.sqlite"
 GD_SITE_FORECAST_DB = APP_DIR / "data" / "gd_site_forecasts.sqlite"
 GD_SITE_ONLINE_FORECAST_CSV = APP_DIR / "data" / "gd_site_online_forecasts.csv"
+DEFAULT_FLOOD_REPOSITORY_DB = APP_DIR / "data" / "mpwrd_flood_repository.sqlite"
 CWC_BIAS_CORRECTION_DB = APP_DIR / "data" / "bias_correction" / "cwc_bias_correction.sqlite"
 CWC_BIAS_READINESS_REPORT = APP_DIR / "data" / "bias_correction" / "bias_correction_training_readiness.md"
 CWC_BIAS_PIPELINE_STATUS_JSON = APP_DIR / "data" / "bias_correction" / "v02_pipeline_status.json"
@@ -7787,7 +7788,10 @@ ADMIN_PASSWORD = get_app_secret("admin_password", "MPWRD_ADMIN_PASSWORD", "")
 
 
 def database_url_config() -> str:
-    return get_app_secret("database_url", "DATABASE_URL", "").strip()
+    configured = get_app_secret("database_url", "DATABASE_URL", "").strip()
+    if configured:
+        return configured
+    return f"sqlite:///{DEFAULT_FLOOD_REPOSITORY_DB.as_posix()}"
 
 
 def database_engine_label(database_url: str) -> str:
@@ -7796,6 +7800,8 @@ def database_engine_label(database_url: str) -> str:
         return "PostgreSQL"
     if value.startswith("mysql"):
         return "MySQL"
+    if value.startswith("sqlite"):
+        return "Local SQLite"
     if value:
         return "Unknown SQL database"
     return "Not configured"
@@ -7806,6 +7812,8 @@ def mask_database_url(database_url: str) -> str:
         return ""
     try:
         parsed = urllib.parse.urlsplit(database_url)
+        if parsed.scheme.startswith("sqlite"):
+            return parsed.path
         host = parsed.hostname or ""
         port = f":{parsed.port}" if parsed.port else ""
         username = parsed.username or "user"
@@ -10085,8 +10093,11 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
                 st.success(f"Database URL configured: {mask_database_url(database_url)}")
             else:
                 st.warning("No database is configured yet. Add `database_url` in Streamlit secrets or `DATABASE_URL` in the environment.")
-            st.caption("PostgreSQL example: postgresql+psycopg2://user:password@host:5432/mpwrd_flood")
-            st.caption("MySQL example: mysql+pymysql://user:password@host:3306/mpwrd_flood")
+            if database_url.startswith("sqlite"):
+                st.caption("Using the bundled local SQLite repository. Add database_url or DATABASE_URL only when moving to external PostgreSQL/MySQL.")
+            else:
+                st.caption("PostgreSQL example: postgresql+psycopg2://user:password@host:5432/mpwrd_flood")
+                st.caption("MySQL example: mysql+pymysql://user:password@host:3306/mpwrd_flood")
 
         st.markdown(
             """
@@ -10099,9 +10110,7 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
         sync_command = f'"{sys.executable}" "{sync_script}" --parsed-root "{APP_DIR}"'
         st.code(sync_command, language="powershell")
         if st.button("Sync Parsed Reports to SQL Database", type="primary", use_container_width=True, key="admin_sync_sql_database"):
-            if not database_url:
-                st.error("Database sync cannot run until `database_url` or `DATABASE_URL` is configured.")
-            elif not sync_script.exists():
+            if not sync_script.exists():
                 st.error("Database sync script is missing from the app folder.")
             else:
                 env = os.environ.copy()
