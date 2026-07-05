@@ -28,6 +28,7 @@ import streamlit.components.v1 as components
 
 
 APP_DIR = Path(__file__).resolve().parent
+APP_VERSION = "V02"
 DAM_LOCATIONS_CSV = APP_DIR / "dam_locations.csv"
 DAM_SHAPEFILE = APP_DIR / "dam_shapefile" / "Dams_EinC_54_R2.shp"
 GLOFAS_PROJECT_JSON = APP_DIR / "data" / "glofas_mp_project.json"
@@ -52,6 +53,10 @@ VISITOR_ANALYTICS_DB = APP_DIR / "data" / "visitor_analytics.sqlite"
 RIVER_FLOW_FORECAST_DB = APP_DIR / "data" / "river_flow_forecasts.sqlite"
 GD_SITE_FORECAST_DB = APP_DIR / "data" / "gd_site_forecasts.sqlite"
 GD_SITE_ONLINE_FORECAST_CSV = APP_DIR / "data" / "gd_site_online_forecasts.csv"
+CWC_BIAS_CORRECTION_DB = APP_DIR / "data" / "bias_correction" / "cwc_bias_correction.sqlite"
+CWC_BIAS_READINESS_REPORT = APP_DIR / "data" / "bias_correction" / "bias_correction_training_readiness.md"
+CWC_BIAS_PIPELINE_STATUS_JSON = APP_DIR / "data" / "bias_correction" / "v02_pipeline_status.json"
+CWC_BIAS_PIPELINE_STATUS_MD = APP_DIR / "data" / "bias_correction" / "v02_pipeline_status.md"
 RIVER_FLOW_MODEL_DIR = APP_DIR / "models" / "river_flow_tensorflow"
 WEATHER_REFRESH_HOURS = 3
 RESERVOIR_CAPACITY_ESTIMATES_CSV = APP_DIR / "data" / "reservoir_capacity_estimates.csv"
@@ -95,7 +100,7 @@ from flood_report_parser import parse_pdf  # noqa: E402
 
 
 st.set_page_config(
-    page_title="Nita AI & Geo-Analytics | MPWRD VBSR Dashboard",
+    page_title=f"Nita AI & Geo-Analytics | MPWRD VBSR Dashboard {APP_VERSION}",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -2680,6 +2685,448 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
     )
 
 
+@st.cache_data(show_spinner=False, ttl=900)
+def load_cwc_bias_context(db_path: str) -> dict:
+    path = Path(db_path)
+    if not path.exists():
+        return {"available": False}
+    with sqlite3.connect(path) as con:
+        station_summary = pd.read_sql_query(
+            """
+            SELECT station_name, district, river, basin, start_date, end_date, daily_rows,
+                   missing_pct, nonzero_pct, max_discharge_cms, training_ready, data_quality_class
+            FROM cwc_station_summary
+            """,
+            con,
+        )
+        linkage = pd.read_sql_query(
+            """
+            SELECT station_code, forecast_station_name, forecast_district, forecast_river,
+                   cwc_station_name, effective_cwc_station_name, cwc_district, cwc_river,
+                   cwc_basin, cwc_to_forecast_distance_km, linkage_score, linkage_confidence,
+                   auto_approved, manual_approved, review_status, review_notes, linkage_source
+            FROM gd_cwc_station_linkage
+            """,
+            con,
+        )
+        current_context = pd.read_sql_query(
+            """
+            SELECT station_code, station_name, district, river, forecast_time, meanflow_cms,
+                   linked_cwc_station, cwc_to_forecast_distance_km, linkage_score,
+                   linkage_confidence, auto_approved, historical_median_cms,
+                   historical_p75_cms, historical_p90_cms, historical_p95_cms,
+                   historical_p99_cms, historical_max_cms, flow_percentile_status
+            FROM current_forecast_cwc_context
+            """,
+            con,
+            parse_dates=["forecast_time"],
+        )
+        thresholds = pd.read_sql_query(
+            """
+            SELECT station_name, period_type, month, records, mean_flow_cms,
+                   median_flow_cms, max_flow_cms, p75_flow_cms, p90_flow_cms,
+                   p95_flow_cms, p99_flow_cms
+            FROM cwc_flow_thresholds
+            WHERE period_type = 'All season'
+            """,
+            con,
+        )
+        travel_links = pd.read_sql_query(
+            """
+            SELECT source_station, target_station, source_district, target_district,
+                   basin, river, best_lag_days, lead_time_hours, overlap_days,
+                   flow_correlation, change_correlation, combined_correlation_score,
+                   straight_distance_km, travel_confidence, method_note
+            FROM gauge_travel_time_correlations
+            """,
+            con,
+        )
+        calibrated = pd.read_sql_query(
+            """
+            SELECT station_code, station_name, district, river, forecast_time,
+                   raw_forecast_discharge_cms, corrected_forecast_discharge_cms,
+                   correction_factor, additive_bias_cms, correction_mode,
+                   training_rows, mae_cms, rmse_cms, flow_percentile_status,
+                   linked_cwc_station
+            FROM calibrated_gd_forecasts
+            """,
+            con,
+            parse_dates=["forecast_time"],
+        )
+        factors = pd.read_sql_query(
+            """
+            SELECT station_code, linked_cwc_station, month, lead_bucket_hours,
+                   training_rows, median_ratio, median_bias_cms, mae_cms, rmse_cms, model_status
+            FROM forecast_bias_correction_factors
+            """,
+            con,
+        )
+        hindcast = pd.read_sql_query(
+            """
+            SELECT station_code, linked_cwc_station, linked_comid, forecast_issue_time,
+                   forecast_valid_time, lead_hours, raw_forecast_discharge_cms, model_source
+            FROM historical_model_hindcast
+            """,
+            con,
+            parse_dates=["forecast_issue_time", "forecast_valid_time"],
+        )
+        training_overlap = pd.read_sql_query(
+            """
+            SELECT station_code, linked_cwc_station, linked_comid, forecast_issue_time,
+                   forecast_valid_time, lead_hours, raw_forecast_discharge_cms,
+                   observed_discharge_cms, basin, river, district, model_source
+            FROM historical_forecast_observation_training
+            """,
+            con,
+            parse_dates=["forecast_issue_time", "forecast_valid_time"],
+        )
+    return {
+        "available": True,
+        "station_summary": station_summary,
+        "linkage": linkage,
+        "current_context": current_context,
+        "thresholds": thresholds,
+        "travel_links": travel_links,
+        "calibrated": calibrated,
+        "factors": factors,
+        "hindcast": hindcast,
+        "training_overlap": training_overlap,
+    }
+
+
+def cwc_bias_status_color(status: str) -> str:
+    colors = {
+        "Critical": "#ff0000",
+        "Warning": "#ff8700",
+        "Watch": "#ffd300",
+        "Normal": "#147df5",
+        "Unlinked": "#94a3b8",
+    }
+    return colors.get(str(status), "#94a3b8")
+
+
+@st.cache_data(show_spinner=False, ttl=120)
+def load_v02_pipeline_status(path: str) -> dict:
+    status_path = Path(path)
+    if not status_path.exists():
+        return {}
+    try:
+        return json.loads(status_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def render_v02_pipeline_status_panel() -> None:
+    status = load_v02_pipeline_status(str(CWC_BIAS_PIPELINE_STATUS_JSON))
+    if not status:
+        st.info("V02 pipeline status is not available yet. Run `run_v02_bias_pipeline.bat` to generate it.")
+        return
+    metrics = status.get("metrics", {})
+    status_label = str(status.get("status", "unknown")).title()
+    status_color = "#10b981" if status.get("status") == "success" else "#ef4444"
+    st.markdown(
+        f"""
+        <div class="selected-dam-panel" style="border-left:5px solid {status_color};">
+            <span class="district-gauge-title">V02 Pipeline Status: {escape(status_label)}</span>
+            <span class="district-gauge-meta">Last run: {escape(str(status.get("generated_at", "-")))}</span>
+            <span class="district-gauge-meta">Mode: {escape(str(metrics.get("bias_mode", "unknown")))}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    metric_cols = st.columns(5)
+    metric_cols[0].metric("CWC Rows", f"{int(metrics.get('cwc_daily_rows', 0)):,}")
+    metric_cols[1].metric("Approved Links", int(metrics.get("review_approved_links", 0)))
+    metric_cols[2].metric("Travel Links", int(metrics.get("gauge_travel_links", 0)))
+    metric_cols[3].metric("Overlap Rows", int(metrics.get("training_overlap_rows", 0)))
+    metric_cols[4].metric("Calibrated Rows", int(metrics.get("calibrated_rows", 0)))
+    steps = pd.DataFrame(status.get("steps", []))
+    if not steps.empty:
+        st.dataframe(
+            steps[["name", "status", "return_code", "started_at", "ended_at"]],
+            use_container_width=True,
+            hide_index=True,
+            height=150,
+        )
+    if CWC_BIAS_PIPELINE_STATUS_MD.exists():
+        st.download_button(
+            "Download V02 pipeline status report",
+            CWC_BIAS_PIPELINE_STATUS_MD.read_bytes(),
+            file_name="v02_pipeline_status.md",
+            mime="text/markdown",
+            use_container_width=True,
+        )
+
+
+def render_cwc_bias_readiness_panel(cwc_context: dict) -> None:
+    if not cwc_context.get("available"):
+        st.info("V02 CWC historical calibration database is not available yet. Run the V02 bias database builder to enable calibrated GD-site context.")
+        return
+    station_summary = cwc_context["station_summary"]
+    linkage = cwc_context["linkage"]
+    current_context = cwc_context["current_context"]
+    training_ready = int(pd.to_numeric(station_summary.get("training_ready"), errors="coerce").fillna(0).sum())
+    auto_links = int(pd.to_numeric(linkage.get("auto_approved"), errors="coerce").fillna(0).sum())
+    approved_links = int(pd.to_numeric(linkage.get("manual_approved"), errors="coerce").fillna(0).sum())
+    pending_links = max(0, int(len(linkage) - approved_links))
+    linked_context = current_context[current_context["linked_cwc_station"].notna()].drop_duplicates("station_code")
+    travel_links = cwc_context.get("travel_links", pd.DataFrame())
+    calibrated = cwc_context.get("calibrated", pd.DataFrame())
+    factors = cwc_context.get("factors", pd.DataFrame())
+    strong_travel_links = (
+        travel_links[travel_links["travel_confidence"].isin(["High", "Moderate"])]
+        if not travel_links.empty and "travel_confidence" in travel_links
+        else pd.DataFrame()
+    )
+    cwc_cols = st.columns(4)
+    cwc_cols[0].metric("CWC History Stations", int(station_summary["station_name"].nunique()))
+    cwc_cols[1].metric("Training Ready", training_ready)
+    cwc_cols[2].metric("Approved GD-CWC Links", approved_links)
+    cwc_cols[3].metric("Lead/Lag Gauge Links", int(len(strong_travel_links)))
+    st.markdown(
+        f'<div class="panel-note">V02 calibration layer compares GD-site forecast signals with long-term CWC discharge behavior for local percentile context, linkage confidence, lead/lag gauge correlation, and future bias correction. Pending linkage review: {pending_links} site(s); auto-approved: {auto_links}.</div>',
+        unsafe_allow_html=True,
+    )
+    with st.expander("V02 Pipeline Status", expanded=False):
+        render_v02_pipeline_status_panel()
+    with st.expander("V02 GD-CWC Linkage Review", expanded=False):
+        review_cols = st.columns([0.25, 0.25, 0.25, 0.25])
+        review_cols[0].metric("Total Link Candidates", len(linkage))
+        review_cols[1].metric("Approved", approved_links)
+        review_cols[2].metric("Pending Review", pending_links)
+        review_cols[3].metric("High Confidence", int(linkage["linkage_confidence"].astype(str).eq("High").sum()) if "linkage_confidence" in linkage else 0)
+        view_mode = st.radio(
+            "Review view",
+            ["Pending first", "Approved only", "All links"],
+            horizontal=True,
+            key="v02_cwc_linkage_review_mode",
+        )
+        review_table = linkage.copy()
+        if view_mode == "Pending first":
+            review_table = review_table.sort_values(["manual_approved", "linkage_score"], ascending=[True, False])
+        elif view_mode == "Approved only":
+            review_table = review_table[pd.to_numeric(review_table["manual_approved"], errors="coerce").fillna(0).astype(bool)]
+        else:
+            review_table = review_table.sort_values("linkage_score", ascending=False)
+        review_columns = [
+            "station_code",
+            "forecast_station_name",
+            "forecast_district",
+            "forecast_river",
+            "effective_cwc_station_name",
+            "cwc_district",
+            "cwc_river",
+            "cwc_to_forecast_distance_km",
+            "linkage_score",
+            "linkage_confidence",
+            "manual_approved",
+            "review_status",
+        ]
+        st.dataframe(
+            review_table[[col for col in review_columns if col in review_table.columns]].head(80),
+            use_container_width=True,
+            hide_index=True,
+            height=320,
+        )
+        review_path = APP_DIR / "data" / "bias_correction" / "gd_cwc_station_linkage_review.csv"
+        if review_path.exists():
+            st.download_button(
+                "Download linkage review CSV",
+                review_path.read_bytes(),
+                file_name="gd_cwc_station_linkage_review.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+    with st.expander("V02 Bias Correction Readiness", expanded=False):
+        trained_rows = int(pd.to_numeric(factors.get("training_rows", pd.Series(dtype=float)), errors="coerce").fillna(0).sum()) if not factors.empty else 0
+        calibrated_sites = int(calibrated["station_code"].nunique()) if not calibrated.empty and "station_code" in calibrated else 0
+        hindcast = cwc_context.get("hindcast", pd.DataFrame())
+        training_overlap = cwc_context.get("training_overlap", pd.DataFrame())
+        hindcast_rows = len(hindcast)
+        overlap_rows = len(training_overlap)
+        overlap_sites = int(training_overlap["station_code"].nunique()) if not training_overlap.empty and "station_code" in training_overlap else 0
+        mode_counts = (
+            calibrated["correction_mode"].fillna("Unknown").value_counts().reset_index()
+            if not calibrated.empty and "correction_mode" in calibrated
+            else pd.DataFrame(columns=["correction_mode", "count"])
+        )
+        if not mode_counts.empty:
+            mode_counts.columns = ["Correction Mode", "Rows"]
+        bias_cols = st.columns(5)
+        bias_cols[0].metric("Training Rows", trained_rows)
+        bias_cols[1].metric("Hindcast Rows", hindcast_rows)
+        bias_cols[2].metric("Overlap Rows", overlap_rows)
+        bias_cols[3].metric("Overlap Sites", overlap_sites)
+        bias_cols[4].metric("Calibrated Sites", calibrated_sites)
+        st.markdown(
+            '<div class="panel-note">Bias correction is ready for training. Add historical model hindcast rows to the template, run the overlap builder, then run the baseline correction script. V02 will join hindcast values to CWC observations and replace raw retained values with trained corrected discharge.</div>',
+            unsafe_allow_html=True,
+        )
+        if not mode_counts.empty:
+            st.dataframe(mode_counts, use_container_width=True, hide_index=True, height=120)
+        template_path = APP_DIR / "data" / "bias_correction" / "historical_model_hindcast_template.csv"
+        training_path = APP_DIR / "data" / "bias_correction" / "historical_forecast_observation_training.csv"
+        download_cols = st.columns(2)
+        if template_path.exists():
+            download_cols[0].download_button(
+                "Download hindcast import template",
+                template_path.read_bytes(),
+                file_name="historical_model_hindcast_template.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+        if training_path.exists():
+            download_cols[1].download_button(
+                "Download current training overlap table",
+                training_path.read_bytes(),
+                file_name="historical_forecast_observation_training.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+
+
+def render_selected_cwc_context(selected_station_code: str, cwc_context: dict) -> None:
+    if not selected_station_code or not cwc_context.get("available"):
+        return
+    current_context = cwc_context["current_context"]
+    station_context = current_context[current_context["station_code"].astype(str) == str(selected_station_code)].copy()
+    if station_context.empty:
+        return
+    row = station_context.sort_values("forecast_time").head(1).iloc[0]
+    linked_station = row.get("linked_cwc_station")
+    status = str(row.get("flow_percentile_status") or "Unlinked")
+    color = cwc_bias_status_color(status)
+    confidence = str(row.get("linkage_confidence") or "Needs Review")
+    review_status = str(row.get("review_status") or confidence)
+    approval_state = "Approved" if bool(row.get("manual_approved")) else "Pending review"
+    st.markdown(
+        f"""
+        <div class="selected-dam-panel" style="border-left: 5px solid {color};">
+            <span class="district-gauge-title">V02 CWC Historical Calibration</span>
+            <span class="district-gauge-meta">Linked CWC station: {escape(str(linked_station or "Pending linkage review"))}</span>
+            <span class="district-gauge-meta">Historical percentile status: <b style="color:{color};">{escape(status)}</b></span>
+            <span class="district-gauge-meta">Link status: {escape(approval_state)} | Review: {escape(review_status)} | Confidence: {escape(confidence)}</span>
+            <span class="district-gauge-meta">Score {fmt_number(row.get("linkage_score"))} | Distance {fmt_number(row.get("cwc_to_forecast_distance_km"), " km")}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    threshold_row = pd.DataFrame(
+        [
+            {
+                "Current forecast flow": row.get("meanflow_cms"),
+                "Historical median": row.get("historical_median_cms"),
+                "Watch p75": row.get("historical_p75_cms"),
+                "Warning p90": row.get("historical_p90_cms"),
+                "Critical p95": row.get("historical_p95_cms"),
+                "Extreme p99": row.get("historical_p99_cms"),
+                "Historical max": row.get("historical_max_cms"),
+            }
+        ]
+    )
+    st.dataframe(threshold_row, use_container_width=True, hide_index=True, height=76)
+    calibrated = cwc_context.get("calibrated", pd.DataFrame())
+    if not calibrated.empty and "station_code" in calibrated:
+        selected_calibrated = calibrated[calibrated["station_code"].astype(str) == str(selected_station_code)].copy()
+        if not selected_calibrated.empty:
+            cal_row = selected_calibrated.sort_values("forecast_time").head(1).iloc[0]
+            st.dataframe(
+                pd.DataFrame(
+                    [
+                        {
+                            "Correction mode": cal_row.get("correction_mode"),
+                            "Raw forecast flow": cal_row.get("raw_forecast_discharge_cms"),
+                            "Corrected forecast flow": cal_row.get("corrected_forecast_discharge_cms"),
+                            "Correction factor": cal_row.get("correction_factor"),
+                            "Training rows": cal_row.get("training_rows"),
+                            "MAE": cal_row.get("mae_cms"),
+                            "RMSE": cal_row.get("rmse_cms"),
+                        }
+                    ]
+                ),
+                use_container_width=True,
+                hide_index=True,
+                height=76,
+            )
+    travel_links = cwc_context.get("travel_links", pd.DataFrame())
+    if linked_station and not travel_links.empty:
+        related = travel_links[
+            (travel_links["source_station"].astype(str) == str(linked_station))
+            | (travel_links["target_station"].astype(str) == str(linked_station))
+        ].copy()
+        if not related.empty:
+            related["relationship"] = related.apply(
+                lambda item: "Downstream impact" if str(item.get("source_station")) == str(linked_station) else "Upstream lead signal",
+                axis=1,
+            )
+            related["paired_gauge"] = related.apply(
+                lambda item: item.get("target_station") if str(item.get("source_station")) == str(linked_station) else item.get("source_station"),
+                axis=1,
+            )
+            related = related.sort_values(["travel_confidence", "combined_correlation_score"], ascending=[True, False]).head(8)
+            st.markdown(
+                '<div class="panel-note"><b>Gauge-to-gauge flood travel intelligence:</b> strongest historical CWC lead/lag links for the selected station. Daily data gives screening-level travel time; sub-daily data will refine this further.</div>',
+                unsafe_allow_html=True,
+            )
+            st.dataframe(
+                related[
+                    [
+                        "relationship",
+                        "paired_gauge",
+                        "river",
+                        "lead_time_hours",
+                        "flow_correlation",
+                        "combined_correlation_score",
+                        "overlap_days",
+                        "straight_distance_km",
+                        "travel_confidence",
+                    ]
+                ],
+                use_container_width=True,
+                hide_index=True,
+                height=250,
+            )
+            downstream = related[related["relationship"].eq("Downstream impact")].copy()
+            if not downstream.empty:
+                forecast_time = pd.to_datetime(row.get("forecast_time"), errors="coerce")
+                active_statuses = {"Watch", "Warning", "Critical"}
+                downstream["estimated_arrival_time"] = pd.NaT
+                if pd.notna(forecast_time):
+                    downstream["estimated_arrival_time"] = downstream["lead_time_hours"].apply(
+                        lambda hours: forecast_time + pd.Timedelta(hours=float(hours)) if pd.notna(hours) else pd.NaT
+                    )
+                downstream["warning_status"] = status if status in active_statuses else "Monitoring"
+                downstream["recommended_action"] = downstream["warning_status"].map(
+                    {
+                        "Critical": "Issue downstream alert and review field confirmation",
+                        "Warning": "Prepare downstream warning and monitor next forecast refresh",
+                        "Watch": "Keep downstream watch and verify rainfall/upstream trend",
+                        "Monitoring": "No active warning; retain as travel-time context",
+                    }
+                )
+                st.markdown(
+                    '<div class="panel-note"><b>Downstream warning window:</b> estimated arrival timing based on selected station status and historical lead/lag correlation.</div>',
+                    unsafe_allow_html=True,
+                )
+                st.dataframe(
+                    downstream[
+                        [
+                            "paired_gauge",
+                            "river",
+                            "warning_status",
+                            "lead_time_hours",
+                            "estimated_arrival_time",
+                            "flow_correlation",
+                            "travel_confidence",
+                            "recommended_action",
+                        ]
+                    ],
+                    use_container_width=True,
+                    hide_index=True,
+                    height=220,
+                )
+
+
 def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFrame) -> None:
     st.subheader("GD Site Analytics")
     st.markdown(
@@ -2733,6 +3180,8 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
     else:
         cache_note += " Run the GD refresh job to populate station-specific discharge values."
     st.markdown(f'<div class="panel-note">{escape(cache_note)}</div>', unsafe_allow_html=True)
+    cwc_context = load_cwc_bias_context(str(CWC_BIAS_CORRECTION_DB))
+    render_cwc_bias_readiness_panel(cwc_context)
 
     render_gd_site_leaflet_map(gd_sites, gd_forecasts)
 
@@ -2864,6 +3313,7 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
                 )
             if preview_frames:
                 st.dataframe(pd.concat(preview_frames, ignore_index=True), use_container_width=True, hide_index=True, height=230)
+            render_selected_cwc_context(selected_station_code, cwc_context)
 
     chart_cols = st.columns([0.64, 0.36])
     with chart_cols[0]:

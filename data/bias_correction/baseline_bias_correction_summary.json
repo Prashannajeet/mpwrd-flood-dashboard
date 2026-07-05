@@ -1,0 +1,8 @@
+{
+  "training_csv": "D:\\01 Project\\Development\\mpwrd_streamlit_deploy_V02\\data\\bias_correction\\historical_forecast_observation_training.csv",
+  "training_rows": 0,
+  "factor_rows": 0,
+  "calibrated_rows": 162,
+  "trained": false,
+  "mode": "readiness mode - raw forecast retained until hindcast/observed overlap is supplied"
+}

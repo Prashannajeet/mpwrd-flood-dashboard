@@ -1,0 +1,13 @@
+{
+  "output_db": "D:\\01 Project\\Development\\mpwrd_streamlit_deploy_V02\\data\\bias_correction\\cwc_bias_correction.sqlite",
+  "cwc_daily_rows": 274733,
+  "cwc_stations": 67,
+  "training_ready_stations": 58,
+  "linkage_rows": 67,
+  "auto_approved_links": 31,
+  "current_context_rows": 162,
+  "gauge_travel_links": 207,
+  "high_confidence_travel_links": 7,
+  "linkage_review_csv": "D:\\01 Project\\Development\\mpwrd_streamlit_deploy_V02\\data\\bias_correction\\gd_cwc_station_linkage_review.csv",
+  "review_approved_links": 31
+}

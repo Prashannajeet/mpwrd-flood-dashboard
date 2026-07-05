@@ -1,0 +1,17 @@
+{
+  "source_file": "F:\\01 GIS Data\\01 India\\10 CWC\\Daily River Dischaser MP.csv",
+  "raw_rows": 298373,
+  "daily_rows": 274733,
+  "stations": 67,
+  "districts": 22,
+  "rivers": 5,
+  "basins": 5,
+  "date_min": "2001-01-01",
+  "date_max": "2025-12-31",
+  "bad_dates": 0,
+  "missing_discharge": 0,
+  "negative_discharge_rows": 1,
+  "exact_duplicate_station_timestamp_rows": 14538,
+  "duplicate_station_date_rows": 23640,
+  "zero_discharge_pct": 15.37
+}

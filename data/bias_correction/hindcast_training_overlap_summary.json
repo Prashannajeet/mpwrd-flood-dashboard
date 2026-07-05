@@ -1,0 +1,8 @@
+{
+  "hindcast_csv": "D:\\01 Project\\Development\\mpwrd_streamlit_deploy_V02\\data\\bias_correction\\historical_model_hindcast_template.csv",
+  "hindcast_rows": 0,
+  "training_overlap_rows": 0,
+  "training_output_csv": "D:\\01 Project\\Development\\mpwrd_streamlit_deploy_V02\\data\\bias_correction\\historical_forecast_observation_training.csv",
+  "stations_with_overlap": 0,
+  "linked_cwc_stations_with_overlap": 0
+}

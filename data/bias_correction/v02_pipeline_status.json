@@ -1,0 +1,75 @@
+{
+  "status": "success",
+  "generated_at": "2026-07-05T08:02:41.281465+00:00",
+  "app_dir": "D:\\01 Project\\Development\\mpwrd_streamlit_deploy_V02",
+  "input_dir": "D:\\01 Project\\Development\\mpwrd_streamlit_deploy_V02\\data\\bias_correction",
+  "database": "D:\\01 Project\\Development\\mpwrd_streamlit_deploy_V02\\data\\bias_correction\\cwc_bias_correction.sqlite",
+  "metrics": {
+    "cwc_daily_rows": 274733,
+    "cwc_stations": 67,
+    "training_ready_stations": 58,
+    "review_approved_links": 31,
+    "gauge_travel_links": 207,
+    "hindcast_rows": 0,
+    "training_overlap_rows": 0,
+    "bias_factor_rows": 0,
+    "calibrated_rows": 162,
+    "bias_mode": "readiness mode - raw forecast retained until hindcast/observed overlap is supplied"
+  },
+  "steps": [
+    {
+      "name": "Build CWC bias database",
+      "command": [
+        "C:\\Users\\Welcome\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+        "D:\\01 Project\\Development\\mpwrd_streamlit_deploy_V02\\scripts\\build_cwc_bias_database.py",
+        "--input-dir",
+        "D:\\01 Project\\Development\\mpwrd_streamlit_deploy_V02\\data\\bias_correction",
+        "--output-db",
+        "D:\\01 Project\\Development\\mpwrd_streamlit_deploy_V02\\data\\bias_correction\\cwc_bias_correction.sqlite"
+      ],
+      "return_code": 0,
+      "started_at": "2026-07-05T08:02:14.652598+00:00",
+      "ended_at": "2026-07-05T08:02:39.872904+00:00",
+      "stdout": "{\n  \"output_db\": \"D:\\\\01 Project\\\\Development\\\\mpwrd_streamlit_deploy_V02\\\\data\\\\bias_correction\\\\cwc_bias_correction.sqlite\",\n  \"cwc_daily_rows\": 274733,\n  \"cwc_stations\": 67,\n  \"training_ready_stations\": 58,\n  \"linkage_rows\": 67,\n  \"auto_approved_links\": 31,\n  \"current_context_rows\": 162,\n  \"gauge_travel_links\": 207,\n  \"high_confidence_travel_links\": 7,\n  \"linkage_review_csv\": \"D:\\\\01 Project\\\\Development\\\\mpwrd_streamlit_deploy_V02\\\\data\\\\bias_correction\\\\gd_cwc_station_linkage_review.csv\",\n  \"review_approved_links\": 31\n}",
+      "stderr": "",
+      "status": "success"
+    },
+    {
+      "name": "Build hindcast/CWC training overlap",
+      "command": [
+        "C:\\Users\\Welcome\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+        "D:\\01 Project\\Development\\mpwrd_streamlit_deploy_V02\\scripts\\build_hindcast_training_overlap.py",
+        "--db",
+        "D:\\01 Project\\Development\\mpwrd_streamlit_deploy_V02\\data\\bias_correction\\cwc_bias_correction.sqlite",
+        "--hindcast-csv",
+        "D:\\01 Project\\Development\\mpwrd_streamlit_deploy_V02\\data\\bias_correction\\historical_model_hindcast_template.csv",
+        "--training-output-csv",
+        "D:\\01 Project\\Development\\mpwrd_streamlit_deploy_V02\\data\\bias_correction\\historical_forecast_observation_training.csv"
+      ],
+      "return_code": 0,
+      "started_at": "2026-07-05T08:02:39.872904+00:00",
+      "ended_at": "2026-07-05T08:02:40.838779+00:00",
+      "stdout": "{\n  \"hindcast_csv\": \"D:\\\\01 Project\\\\Development\\\\mpwrd_streamlit_deploy_V02\\\\data\\\\bias_correction\\\\historical_model_hindcast_template.csv\",\n  \"hindcast_rows\": 0,\n  \"training_overlap_rows\": 0,\n  \"training_output_csv\": \"D:\\\\01 Project\\\\Development\\\\mpwrd_streamlit_deploy_V02\\\\data\\\\bias_correction\\\\historical_forecast_observation_training.csv\",\n  \"stations_with_overlap\": 0,\n  \"linked_cwc_stations_with_overlap\": 0\n}",
+      "stderr": "",
+      "status": "success"
+    },
+    {
+      "name": "Train/apply baseline bias correction",
+      "command": [
+        "C:\\Users\\Welcome\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+        "D:\\01 Project\\Development\\mpwrd_streamlit_deploy_V02\\scripts\\train_baseline_bias_correction.py",
+        "--db",
+        "D:\\01 Project\\Development\\mpwrd_streamlit_deploy_V02\\data\\bias_correction\\cwc_bias_correction.sqlite",
+        "--training-csv",
+        "D:\\01 Project\\Development\\mpwrd_streamlit_deploy_V02\\data\\bias_correction\\historical_forecast_observation_training.csv"
+      ],
+      "return_code": 0,
+      "started_at": "2026-07-05T08:02:40.838779+00:00",
+      "ended_at": "2026-07-05T08:02:41.281465+00:00",
+      "stdout": "{\n  \"training_csv\": \"D:\\\\01 Project\\\\Development\\\\mpwrd_streamlit_deploy_V02\\\\data\\\\bias_correction\\\\historical_forecast_observation_training.csv\",\n  \"training_rows\": 0,\n  \"factor_rows\": 0,\n  \"calibrated_rows\": 162,\n  \"trained\": false,\n  \"mode\": \"readiness mode - raw forecast retained until hindcast/observed overlap is supplied\"\n}",
+      "stderr": "",
+      "status": "success"
+    }
+  ],
+  "failed_steps": []
+}
