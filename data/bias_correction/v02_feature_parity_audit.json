@@ -1,0 +1,70 @@
+{
+  "generated_at": "2026-07-05T11:02:14.448827+00:00",
+  "v01_ref": "v01",
+  "v02_ref": "working-tree",
+  "status": "pass",
+  "v01_function_count": 163,
+  "v02_function_count": 169,
+  "missing_v01_functions_in_v02": [],
+  "v02_added_functions": [
+    "cwc_bias_status_color",
+    "load_cwc_bias_context",
+    "load_v02_pipeline_status",
+    "render_cwc_bias_readiness_panel",
+    "render_selected_cwc_context",
+    "render_v02_pipeline_status_panel"
+  ],
+  "v01_nav_pages": [
+    "Water Watch",
+    "Dam DSS & Analytics",
+    "GD Site Analytics",
+    "Weather Forecast",
+    "3D Flood Scenarios",
+    "Data & Timeseries",
+    "Report Generation",
+    "Administration"
+  ],
+  "v02_nav_pages": [
+    "Water Watch",
+    "Dam DSS & Analytics",
+    "GD Site Analytics",
+    "Weather Forecast",
+    "3D Flood Scenarios",
+    "Data & Timeseries",
+    "Report Generation",
+    "Administration"
+  ],
+  "missing_v01_pages_in_v02": [],
+  "v02_added_pages": [],
+  "core_feature_presence": {
+    "Water Watch page": true,
+    "Dam DSS & Analytics page": true,
+    "GD Site Analytics page": true,
+    "Weather Forecast page": true,
+    "3D Flood Scenarios page": true,
+    "Data & Timeseries page": true,
+    "Report Generation page": true,
+    "Administration page": true,
+    "Water Watch Leaflet map": true,
+    "Dam/GD Leaflet map": true,
+    "ArcGIS/GEOGLOWS layer support": true,
+    "Weather DSS": true,
+    "AI DSS assistant": true,
+    "Admin operations": true,
+    "Report builder": true,
+    "Capacity DSS": true,
+    "Email alert framework": true
+  },
+  "v02_feature_presence": {
+    "CWC bias correction database": true,
+    "CWC historical calibration": true,
+    "GD-CWC linkage review": true,
+    "Gauge travel-time correlations": true,
+    "Downstream warning window": true,
+    "Hindcast intake": true,
+    "Bias correction readiness": true,
+    "V02 pipeline status": true
+  },
+  "failed_core_features": [],
+  "failed_v02_features": []
+}

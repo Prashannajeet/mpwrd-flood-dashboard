@@ -32,7 +32,13 @@ This repository now maintains two parallel application lines.
 3. If a V01 feature is improved, apply it to V02 as well so V02 remains a superset of V01.
 4. Before deploying V02 updates, compare `v01..v02` and confirm changes are additive or intentionally documented.
 5. Use `run_v02_bias_pipeline.bat` to refresh V02 CWC/GD/bias assets after any linkage or hindcast update.
+6. Run `python scripts/audit_v02_parity.py --v01-ref v01 --v02-ref working-tree` before promoting V02 changes.
 
 ## Current Audit
 
 The V02 branch is additive over V01. The only existing V01 app-line change outside new DSS panels is the browser page title, which adds the `V02` version label.
+
+Latest generated parity audit:
+
+- `data/bias_correction/v02_feature_parity_audit.md`
+- `data/bias_correction/v02_feature_parity_audit.json`
