@@ -57,6 +57,8 @@ CWC_BIAS_CORRECTION_DB = APP_DIR / "data" / "bias_correction" / "cwc_bias_correc
 CWC_BIAS_READINESS_REPORT = APP_DIR / "data" / "bias_correction" / "bias_correction_training_readiness.md"
 CWC_BIAS_PIPELINE_STATUS_JSON = APP_DIR / "data" / "bias_correction" / "v02_pipeline_status.json"
 CWC_BIAS_PIPELINE_STATUS_MD = APP_DIR / "data" / "bias_correction" / "v02_pipeline_status.md"
+CWC_PARITY_AUDIT_JSON = APP_DIR / "data" / "bias_correction" / "v02_feature_parity_audit.json"
+CWC_PARITY_AUDIT_MD = APP_DIR / "data" / "bias_correction" / "v02_feature_parity_audit.md"
 RIVER_FLOW_MODEL_DIR = APP_DIR / "models" / "river_flow_tensorflow"
 WEATHER_REFRESH_HOURS = 3
 RESERVOIR_CAPACITY_ESTIMATES_CSV = APP_DIR / "data" / "reservoir_capacity_estimates.csv"
@@ -2853,6 +2855,87 @@ def render_v02_pipeline_status_panel() -> None:
             "Download V02 pipeline status report",
             CWC_BIAS_PIPELINE_STATUS_MD.read_bytes(),
             file_name="v02_pipeline_status.md",
+            mime="text/markdown",
+            use_container_width=True,
+        )
+
+
+def render_version_governance_admin() -> None:
+    st.markdown(
+        '<div class="panel-note">Version governance keeps V01 protected as the stable baseline and V02 as the enhanced DSS branch. Use this panel before promoting V02 updates.</div>',
+        unsafe_allow_html=True,
+    )
+    parity = load_v02_pipeline_status(str(CWC_PARITY_AUDIT_JSON))
+    pipeline = load_v02_pipeline_status(str(CWC_BIAS_PIPELINE_STATUS_JSON))
+    parity_status = str(parity.get("status", "missing")).title() if parity else "Missing"
+    pipeline_status = str(pipeline.get("status", "missing")).title() if pipeline else "Missing"
+    version_cols = st.columns(4)
+    version_cols[0].metric("Protected V01", str(parity.get("v01_ref", "v01")) if parity else "v01")
+    version_cols[1].metric("Enhanced V02", str(parity.get("v02_ref", "working-tree")) if parity else "working-tree")
+    version_cols[2].metric("Parity Audit", parity_status)
+    version_cols[3].metric("Pipeline", pipeline_status)
+
+    if parity:
+        missing_pages = parity.get("missing_v01_pages_in_v02", [])
+        missing_functions = parity.get("missing_v01_functions_in_v02", [])
+        failed_core = parity.get("failed_core_features", [])
+        failed_v02 = parity.get("failed_v02_features", [])
+        audit_color = "#10b981" if parity.get("status") == "pass" else "#f59e0b"
+        st.markdown(
+            f"""
+            <div class="selected-dam-panel" style="border-left:5px solid {audit_color};">
+                <span class="district-gauge-title">V02 Feature Parity Audit: {escape(parity_status)}</span>
+                <span class="district-gauge-meta">Generated: {escape(str(parity.get("generated_at", "-")))}</span>
+                <span class="district-gauge-meta">V01 functions: {parity.get("v01_function_count", "-")} | V02 functions: {parity.get("v02_function_count", "-")}</span>
+                <span class="district-gauge-meta">Missing V01 pages: {len(missing_pages)} | Missing V01 functions: {len(missing_functions)} | Failed core checks: {len(failed_core)}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        feature_rows = []
+        for group_label, values in [
+            ("V01 Core Feature", parity.get("core_feature_presence", {})),
+            ("V02 Enhancement", parity.get("v02_feature_presence", {})),
+        ]:
+            for feature, present in values.items():
+                feature_rows.append({"Group": group_label, "Feature": feature, "Status": "OK" if present else "Review"})
+        if feature_rows:
+            st.dataframe(pd.DataFrame(feature_rows), use_container_width=True, hide_index=True, height=300)
+        if failed_core or failed_v02 or missing_pages or missing_functions:
+            st.warning("Parity audit has review items. Resolve them before promoting V02 as the public branch.")
+    else:
+        st.warning("Feature parity audit report is not available. Run `python scripts/audit_v02_parity.py --v01-ref v01 --v02-ref working-tree`.")
+
+    if pipeline:
+        metrics = pipeline.get("metrics", {})
+        metric_table = pd.DataFrame(
+            [{"Metric": key, "Value": value} for key, value in metrics.items()]
+        )
+        st.markdown("#### V02 Pipeline Metrics")
+        st.dataframe(metric_table, use_container_width=True, hide_index=True, height=260)
+    download_cols = st.columns(3)
+    if CWC_PARITY_AUDIT_MD.exists():
+        download_cols[0].download_button(
+            "Download parity audit",
+            CWC_PARITY_AUDIT_MD.read_bytes(),
+            file_name="v02_feature_parity_audit.md",
+            mime="text/markdown",
+            use_container_width=True,
+        )
+    if CWC_BIAS_PIPELINE_STATUS_MD.exists():
+        download_cols[1].download_button(
+            "Download pipeline status",
+            CWC_BIAS_PIPELINE_STATUS_MD.read_bytes(),
+            file_name="v02_pipeline_status.md",
+            mime="text/markdown",
+            use_container_width=True,
+        )
+    strategy_path = APP_DIR / "VERSION_STRATEGY.md"
+    if strategy_path.exists():
+        download_cols[2].download_button(
+            "Download version strategy",
+            strategy_path.read_bytes(),
+            file_name="VERSION_STRATEGY.md",
             mime="text/markdown",
             use_container_width=True,
         )
@@ -9623,7 +9706,7 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
                 st.error("Invalid admin credentials.")
         return
 
-    admin_tabs = st.tabs(["PDF Upload & Data Refresh", "Manual Data Entry", "Messaging Alerts", "Database Sync", "Audit Log", "Visitor Analytics"])
+    admin_tabs = st.tabs(["PDF Upload & Data Refresh", "Manual Data Entry", "Messaging Alerts", "Database Sync", "Audit Log", "Visitor Analytics", "Version Governance"])
     with admin_tabs[0]:
         st.markdown(
             '<div class="panel-note">Upload official MP WRD flood report PDFs. The parser creates a new parsed report folder that becomes available in the dashboard report selector.</div>',
@@ -10061,6 +10144,9 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
 
     with admin_tabs[5]:
         render_visitor_analytics_admin()
+
+    with admin_tabs[6]:
+        render_version_governance_admin()
 
 
 if "main_dashboard_page" not in st.session_state:

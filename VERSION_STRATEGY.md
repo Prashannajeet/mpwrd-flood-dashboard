@@ -33,6 +33,7 @@ This repository now maintains two parallel application lines.
 4. Before deploying V02 updates, compare `v01..v02` and confirm changes are additive or intentionally documented.
 5. Use `run_v02_bias_pipeline.bat` to refresh V02 CWC/GD/bias assets after any linkage or hindcast update.
 6. Run `python scripts/audit_v02_parity.py --v01-ref v01 --v02-ref working-tree` before promoting V02 changes.
+7. Review the Administration > Version Governance tab before online promotion.
 
 ## Current Audit
 
@@ -42,3 +43,5 @@ Latest generated parity audit:
 
 - `data/bias_correction/v02_feature_parity_audit.md`
 - `data/bias_correction/v02_feature_parity_audit.json`
+
+The same audit and V02 pipeline status are visible inside the app under Administration > Version Governance.
