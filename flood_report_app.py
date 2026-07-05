@@ -2967,10 +2967,6 @@ def render_cwc_bias_readiness_panel(cwc_context: dict) -> None:
     cwc_cols[1].metric("Training Ready", training_ready)
     cwc_cols[2].metric("Approved GD-CWC Links", approved_links)
     cwc_cols[3].metric("Lead/Lag Gauge Links", int(len(strong_travel_links)))
-    st.markdown(
-        f'<div class="panel-note">V02 calibration layer compares GD-site forecast signals with long-term CWC discharge behavior for local percentile context, linkage confidence, lead/lag gauge correlation, and future bias correction. Pending linkage review: {pending_links} site(s); auto-approved: {auto_links}.</div>',
-        unsafe_allow_html=True,
-    )
     with st.expander("V02 Pipeline Status", expanded=False):
         render_v02_pipeline_status_panel()
     with st.expander("V02 GD-CWC Linkage Review", expanded=False):
