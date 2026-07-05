@@ -1,11 +1,11 @@
 # V02 Feature Parity Audit
 
 - Status: pass
-- Generated at: 2026-07-05T11:02:14.448827+00:00
+- Generated at: 2026-07-05T11:17:02.766223+00:00
 - V01 reference: `v01`
 - V02 reference: `working-tree`
 - V01 function count: 163
-- V02 function count: 169
+- V02 function count: 170
 
 ## Navigation Pages
 
@@ -46,4 +46,4 @@
 ## Function Parity
 
 - Missing V01 functions in V02: 0
-- V02 added functions: 6
+- V02 added functions: 7

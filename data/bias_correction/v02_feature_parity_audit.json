@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-07-05T11:02:14.448827+00:00",
+  "generated_at": "2026-07-05T11:17:02.766223+00:00",
   "v01_ref": "v01",
   "v02_ref": "working-tree",
   "status": "pass",
   "v01_function_count": 163,
-  "v02_function_count": 169,
+  "v02_function_count": 170,
   "missing_v01_functions_in_v02": [],
   "v02_added_functions": [
     "cwc_bias_status_color",
@@ -12,7 +12,8 @@
     "load_v02_pipeline_status",
     "render_cwc_bias_readiness_panel",
     "render_selected_cwc_context",
-    "render_v02_pipeline_status_panel"
+    "render_v02_pipeline_status_panel",
+    "render_version_governance_admin"
   ],
   "v01_nav_pages": [
     "Water Watch",
