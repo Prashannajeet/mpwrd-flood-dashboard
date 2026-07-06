@@ -340,7 +340,7 @@ def to_geojson(frame: pd.DataFrame) -> dict[str, Any]:
 async def index(_request):
     return JSONResponse(
         {
-            "service": "MP WRD Flood Dashboard API",
+            "service": "Nita AI WaterWatch Live API",
             "rest": [
                 "/api/reports",
                 "/api/reservoirs",

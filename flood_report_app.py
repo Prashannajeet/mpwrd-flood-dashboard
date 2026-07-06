@@ -95,7 +95,7 @@ from flood_report_parser import parse_pdf  # noqa: E402
 
 
 st.set_page_config(
-    page_title="Nita AI & Geo-Analytics | MPWRD VBSR Dashboard",
+    page_title="Nita AI WaterWatch Live | Nita AI & GeoAnalytics",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -6718,7 +6718,7 @@ def render_arcgis_3d_sentinel_scene(
             const drainageLayer = new GraphicsLayer({{ title: "MP drainage layer by ORD_STRA" }});
             const drainageWseLayer = new GraphicsLayer({{ title: "Drainage-layer WSE spread depth" }});
             const buildingLayer = new GraphicsLayer({{ title: "OSM 3D building footprints" }});
-            const damLayer = new GraphicsLayer({{ title: "VBSR dam alert points" }});
+            const damLayer = new GraphicsLayer({{ title: "WaterWatch dam alert points" }});
             map.addMany([inundationLayer, drainageWseLayer, depthLayer, drainageLayer, buildingLayer, damLayer]);
             const colorByAlert = (alert) => {{
                 if (alert === "Critical") return [239,68,68,0.95];
@@ -7478,7 +7478,7 @@ def admin_login_panel() -> bool:
 
         st.caption("Upload and data refresh are restricted to administration users.")
         if not ADMIN_PASSWORD:
-            st.warning("Admin upload is disabled until MPWRD_ADMIN_PASSWORD or Streamlit secret admin_password is configured.")
+            st.warning("Admin upload is disabled until the admin password is configured in Streamlit secrets or the deployment environment.")
             return False
 
         with st.form("admin_login_form"):
@@ -7520,7 +7520,7 @@ with st.sidebar:
     st.header("Report Source")
     is_admin = admin_login_panel()
     if is_admin:
-        uploaded = st.file_uploader("Upload MP WRD flood report PDF", type=["pdf"])
+        uploaded = st.file_uploader("Upload official water resources report PDF", type=["pdf"])
         if uploaded is not None:
             saved_pdf = save_uploaded_pdf(uploaded)
             output_dir = APP_DIR / f"parsed_{saved_pdf.stem.replace(' ', '_')}"
@@ -7732,12 +7732,12 @@ st.markdown(
           <div class="brand-logo">N</div>
           <div>
             <div class="brand-kicker">Nita AI &amp; Geo-Analytics</div>
-            <div class="brand-name">Decision Intelligence for Water Resources</div>
-            <div class="brand-domain">Flood, dam safety, geospatial analytics, and AI-enabled DSS</div>
+            <div class="brand-name">Nita AI WaterWatch Live</div>
+            <div class="brand-domain">AI-enabled water resources monitoring, forecasting and decision support</div>
           </div>
           <div class="title-group">
-            <div class="title">MPWRD VBSR Dam Water Level Intelligent Dashboard and Analytics</div>
-            <div class="subtitle">MPWRD VBSR Dam Water Level Status Monitoring and AI Analytics for DSS</div>
+            <div class="title">Nita AI WaterWatch Live</div>
+            <div class="subtitle">AI-enabled water resources monitoring, forecasting and decision support powered by Nita AI &amp; GeoAnalytics</div>
           </div>
         </div>
         <div class="meta-row">
@@ -7894,7 +7894,7 @@ def build_dam_alert_rows(
 
 def dam_alert_message(row: pd.Series) -> str:
     return (
-        "MPWRD Dam Alert\n"
+        "Nita AI WaterWatch Dam Alert\n"
         f"Reservoir: {row.get('reservoir_name') or row.get('dam_name')}\n"
         f"District: {row.get('district') or row.get('map_district') or '-'}\n"
         f"Basin: {row.get('sub_basin') or row.get('major_basin') or '-'}\n"
@@ -7949,7 +7949,7 @@ def dam_alert_email_html(row: pd.Series, message_text: str) -> str:
       <body style="margin:0;padding:0;background:#eef3f8;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
         <div style="max-width:720px;margin:0 auto;padding:24px;">
           <div style="background:#0f172a;border-radius:14px 14px 0 0;padding:20px 24px;color:#ffffff;">
-            <div style="font-size:12px;letter-spacing:1.8px;text-transform:uppercase;color:#93c5fd;font-weight:700;">NITA AI & Geo-Analytics | MPWRD DSS</div>
+            <div style="font-size:12px;letter-spacing:1.8px;text-transform:uppercase;color:#93c5fd;font-weight:700;">NITA AI & GeoAnalytics | WaterWatch DSS</div>
             <h1 style="margin:8px 0 4px;font-size:24px;line-height:1.22;">Dam Water Level Alert Report</h1>
             <div style="font-size:13px;color:#cbd5e1;">Generated: {escape(generated_at)}</div>
           </div>
@@ -7977,7 +7977,7 @@ def dam_alert_email_html(row: pd.Series, message_text: str) -> str:
               </div>
             </div>
             <div style="padding:14px 24px;background:#f1f5f9;color:#64748b;font-size:12px;border-top:1px solid #e5edf7;">
-              This automated DSS email is generated from MPWRD flood report observations and NITA GeoAI analytics. Validate with official field communication before public warning release.
+              This automated DSS email is generated from WaterWatch observations and Nita AI GeoAnalytics. Validate with official field communication before public warning release.
             </div>
           </div>
         </div>
@@ -8018,7 +8018,7 @@ def parse_alert_recipients(recipients_text: str) -> list[dict[str, str]]:
 def build_alert_test_links(recipients: list[dict[str, str]], message: str, channels: list[str]) -> pd.DataFrame:
     rows = []
     encoded = urllib.parse.quote(message)
-    subject = urllib.parse.quote("MPWRD Dam Alert")
+    subject = urllib.parse.quote("Nita AI WaterWatch Dam Alert")
     for recipient in recipients:
         phone = recipient.get("phone", "")
         email = recipient.get("email", "")
@@ -8070,7 +8070,7 @@ def call_ollama_chat(prompt: str, config: dict) -> tuple[str, str | None]:
             {
                 "role": "system",
                 "content": (
-                    "You are an MPWRD dam safety DSS assistant. Use only the supplied dashboard facts and table preview. "
+                    "You are the Nita AI WaterWatch DSS assistant. Use only the supplied dashboard facts and table preview. "
                     "Do not invent reservoir names, dates, values, forecasts, or alerts. If the table is insufficient, say what data is missing. "
                     "Respond with concise operational interpretation, next checks, and caveats."
                 ),
@@ -9041,7 +9041,7 @@ def build_pdf_report(title: str, subtitle: str, sections: list[tuple[str, list]]
     styles.add(ParagraphStyle(name="Small", parent=styles["Normal"], fontSize=8, leading=11, textColor=colors.HexColor("#64748b")))
     cover_table = Table(
         [
-            ["NITA AI & GEO-ANALYTICS", "MPWRD VBSR FLOOD SEASON 2026"],
+            ["NITA AI & GEOANALYTICS", "WATERWATCH LIVE - ENABLED WITH AI"],
             [Paragraph(title, styles["ReportTitle"]), ""],
             [Paragraph(subtitle, styles["Normal"]), ""],
         ],
@@ -9068,7 +9068,7 @@ def build_pdf_report(title: str, subtitle: str, sections: list[tuple[str, list]]
     story = [cover_table, Spacer(1, 0.14 * inch)]
     story.append(
         Table(
-            [[f"Generated: {pd.Timestamp.now(tz='Asia/Kolkata').strftime('%d %b %Y %I:%M %p')}", "MPWRD VBSR Flood Season 2026"]],
+            [[f"Generated: {pd.Timestamp.now(tz='Asia/Kolkata').strftime('%d %b %Y %I:%M %p')}", "Nita AI WaterWatch Live"]],
             colWidths=[250, 250],
             style=TableStyle([("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#edf7ff")), ("TEXTCOLOR", (0, 0), (-1, -1), colors.HexColor("#334155")), ("FONTSIZE", (0, 0), (-1, -1), 8), ("BOX", (0, 0), (-1, -1), 0.4, colors.HexColor("#dbe6f4")), ("LEFTPADDING", (0, 0), (-1, -1), 8), ("RIGHTPADDING", (0, 0), (-1, -1), 8)]),
         )
@@ -9085,7 +9085,7 @@ def build_pdf_report(title: str, subtitle: str, sections: list[tuple[str, list]]
         canvas.saveState()
         canvas.setFont("Helvetica", 7)
         canvas.setFillColor(colors.HexColor("#64748b"))
-        canvas.drawString(32, 18, "MPWRD VBSR Dam Water Level Intelligent Dashboard and Analytics")
+        canvas.drawString(32, 18, "Powered by Nita AI & GeoAnalytics (OPC) Pvt. Ltd.")
         canvas.drawRightString(A4[0] - 32, 18, f"Page {document.page}")
         canvas.restoreState()
 
@@ -9157,7 +9157,7 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
     if not is_admin:
         st.info("Administration is locked. Sign in as admin_nitaai to upload PDFs and manage SMS/WhatsApp/email alert messaging.")
         if not ADMIN_PASSWORD:
-            st.warning("Admin access is disabled until MPWRD_ADMIN_PASSWORD or Streamlit secret admin_password is configured.")
+            st.warning("Admin access is disabled until the admin password is configured in Streamlit secrets or the deployment environment.")
             return
         with st.form("admin_page_login_form"):
             username = st.text_input("Admin user", value=ADMIN_USER, key="admin_page_user")
@@ -9176,12 +9176,12 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
     admin_tabs = st.tabs(["PDF Upload & Data Refresh", "Manual Data Entry", "Messaging Alerts", "Database Sync", "Audit Log", "Visitor Analytics"])
     with admin_tabs[0]:
         st.markdown(
-            '<div class="panel-note">Upload official MP WRD flood report PDFs. The parser creates a new parsed report folder that becomes available in the dashboard report selector.</div>',
+            '<div class="panel-note">Upload official water resources report PDFs. The parser creates a new parsed report folder that becomes available in the dashboard report selector.</div>',
             unsafe_allow_html=True,
         )
         upload_cols = st.columns([0.58, 0.42])
         with upload_cols[0]:
-            uploaded = st.file_uploader("Upload MP WRD flood report PDF", type=["pdf"], key="admin_module_pdf_upload")
+            uploaded = st.file_uploader("Upload official water resources report PDF", type=["pdf"], key="admin_module_pdf_upload")
             if uploaded is not None:
                 saved_pdf = save_uploaded_pdf(uploaded)
                 output_dir = APP_DIR / f"parsed_{saved_pdf.stem.replace(' ', '_')}"
@@ -9482,7 +9482,7 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
             with action_cols[1]:
                 st.caption(f"Prepared for {gateway_mode}. Message length: {len(alert_message)} characters. Email sending requires email API or SMTP secrets; SMS/WhatsApp require provider credentials.")
                 if "Email" in selected_channels:
-                    email_subject = f"MPWRD Dam Alert: {selected_alert_row.get('reservoir_name')} {selected_alert_row.get('configured_alert')}"
+                    email_subject = f"Nita AI WaterWatch Dam Alert: {selected_alert_row.get('reservoir_name')} {selected_alert_row.get('configured_alert')}"
                     email_html = dam_alert_email_html(selected_alert_row, alert_message)
                     st.caption("Email output uses a professional HTML report layout with dam metrics, alert badge, DSS actions and plain-text fallback.")
                     if st.button("Send Test Email Alert", use_container_width=True, key="admin_send_test_email_alert"):
@@ -9764,7 +9764,7 @@ if main_page == "Report Generation":
             ) if not reservoir_view.empty else pd.DataFrame()
             season_pdf = build_pdf_report(
                 "Monsoon Season PDF-Template Data Report",
-                "Season report organized from the MP WRD PDF report template with reservoir, river and gate observations.",
+                "Season report organized from the official flood report template with reservoir, river and gate observations.",
                 [
                     ("Season Timeline", [report_bar_chart(season_summary, "observed_at", "avg_filling", "Average Reservoir Filling by Observation Slot")]),
                     ("Reservoir Observations", [report_table(reservoir_view.sort_values(["observed_at", "reservoir_name"]) if not reservoir_view.empty else reservoir_view, max_rows=45, font_size=5)]),
@@ -10020,7 +10020,7 @@ if main_page == "Dam DSS & Analytics":
                 with test_cols[1]:
                     st.caption("SMS/WhatsApp delivery will be enabled after gateway credentials, approved WhatsApp templates, and recipient governance are configured. Email delivery works when email API or SMTP secrets are configured.")
                     if "Email" in selected_channels:
-                        email_subject = f"MPWRD Dam Alert: {selected_alert_row.get('reservoir_name')} {selected_alert_row.get('configured_alert')}"
+                        email_subject = f"Nita AI WaterWatch Dam Alert: {selected_alert_row.get('reservoir_name')} {selected_alert_row.get('configured_alert')}"
                         st.caption("Email output uses a professional HTML report layout with dam metrics, alert badge, DSS actions and plain-text fallback.")
                         if st.button("Send Test Email Alert", use_container_width=True, key="send_test_email_alert"):
                             if gateway_mode != "Provider ready":
@@ -11113,7 +11113,7 @@ if main_page == "Water Watch":
         st.markdown(
             f"""
             <div class="infographic-frame">
-                <div class="infographic-title">MPWRD VBSR Water Level Situation Board</div>
+                <div class="infographic-title">Nita AI WaterWatch Live Situation Board</div>
                 <div class="infographic-subtitle">Presentation-ready snapshot from the selected report window. Values update with the sidebar date, time, district, basin, reservoir, and gauge filters.</div>
                 <div class="infographic-grid">
                     <div class="infographic-card"><span>Latest Slot</span><b>{escape(str(latest_label))}</b><small>Current observation context</small></div>
@@ -11732,7 +11732,7 @@ if main_page == "Data & Timeseries":
     with tab_capacity:
         st.subheader("Reservoir Capacity DSS")
         st.markdown(
-            '<div class="panel-note">First-stage remote-sensing capacity layer matching MPWRD dams to waterbody area, then calibrating storage with official FRL/LSL/live capacity. FABDEM/altimetry curves can replace the screening geometry estimate as the next processing stage.</div>',
+            '<div class="panel-note">First-stage remote-sensing capacity layer matching reservoirs to waterbody area, then calibrating storage with official FRL/LSL/live capacity. FABDEM/altimetry curves can replace the screening geometry estimate as the next processing stage.</div>',
             unsafe_allow_html=True,
         )
         if capacity_view.empty:
