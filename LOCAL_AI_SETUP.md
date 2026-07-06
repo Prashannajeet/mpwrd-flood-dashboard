@@ -1,4 +1,4 @@
-# Local AI Setup for MPWRD DSS Assistant
+# Local AI Setup for Nita AI WaterWatch DSS Assistant
 
 The dashboard supports an optional free local AI layer through Ollama. The local
 model does not replace the deterministic DSS query engine. It only improves the

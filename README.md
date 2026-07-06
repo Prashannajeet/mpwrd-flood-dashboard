@@ -1,6 +1,6 @@
-# MP WRD Flood Report Dashboard
+# Nita AI WaterWatch Live
 
-Streamlit dashboard for MP WRD Flood Season PDF capture, reservoir/river time-series review, dam map alerts, weather intelligence, rainfall monitoring, and operational DSS reporting.
+Streamlit dashboard for AI-enabled water resources monitoring, forecasting and decision support powered by Nita AI & GeoAnalytics.
 
 ## Streamlit Community Cloud
 

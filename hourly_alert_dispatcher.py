@@ -211,7 +211,7 @@ def load_alert_rows() -> pd.DataFrame:
 
 def plain_message(row: pd.Series) -> str:
     return (
-        "MPWRD Dam Alert\n"
+        "Nita AI WaterWatch Dam Alert\n"
         f"Reservoir: {row.get('reservoir_name') or row.get('dam_name')}\n"
         f"District: {row.get('district') or row.get('map_district') or '-'}\n"
         f"Basin: {row.get('sub_basin') or row.get('major_basin') or '-'}\n"
@@ -252,7 +252,7 @@ def html_message(row: pd.Series, text: str) -> str:
 <html><body style="margin:0;background:#eef3f8;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
 <div style="max-width:720px;margin:0 auto;padding:24px;">
 <div style="background:#0f172a;border-radius:14px 14px 0 0;padding:20px 24px;color:#fff;">
-<div style="font-size:12px;letter-spacing:1.8px;text-transform:uppercase;color:#93c5fd;font-weight:700;">NITA AI & Geo-Analytics | MPWRD DSS</div>
+<div style="font-size:12px;letter-spacing:1.8px;text-transform:uppercase;color:#93c5fd;font-weight:700;">NITA AI & GeoAnalytics | WaterWatch DSS</div>
 <h1 style="margin:8px 0 4px;font-size:24px;">Automated Hourly Dam Alert</h1>
 <div style="font-size:13px;color:#cbd5e1;">Generated: {escape(generated_at)}</div></div>
 <div style="background:#fff;border:1px solid #dbe6f4;border-top:0;border-radius:0 0 14px 14px;overflow:hidden;">
@@ -270,7 +270,7 @@ def html_message(row: pd.Series, text: str) -> str:
 <div style="margin-top:18px;padding:16px;border-radius:10px;background:#fff7ed;border:1px solid #fed7aa;">
 <b style="font-size:13px;color:#9a3412;text-transform:uppercase;letter-spacing:.9px;">Operational Message</b>
 <ul style="margin:8px 0 0;padding-left:18px;color:#431407;font-size:14px;line-height:1.55;">{plain_lines}</ul></div></div>
-<div style="padding:14px 24px;background:#f1f5f9;color:#64748b;font-size:12px;border-top:1px solid #e5edf7;">Automated DSS email from MPWRD flood report observations and NITA GeoAI analytics. Validate with official field communication before public warning release.</div>
+<div style="padding:14px 24px;background:#f1f5f9;color:#64748b;font-size:12px;border-top:1px solid #e5edf7;">Automated DSS email from WaterWatch observations and Nita AI GeoAnalytics. Validate with official field communication before public warning release.</div>
 </div></div></body></html>"""
 
 
@@ -425,7 +425,7 @@ def dispatch_once(force: bool = False, dry_run: bool = False) -> None:
         if not force and already_sent(dispatch_key):
             skipped += 1
             continue
-        subject = f"MPWRD {row.get('configured_alert')} Dam Alert: {row.get('reservoir_name') or row.get('dam_name')}"
+        subject = f"Nita AI WaterWatch {row.get('configured_alert')} Dam Alert: {row.get('reservoir_name') or row.get('dam_name')}"
         text = plain_message(row)
         html = html_message(row, text)
         if dry_run:
@@ -440,7 +440,7 @@ def dispatch_once(force: bool = False, dry_run: bool = False) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Send automated hourly MPWRD dam alert emails.")
+    parser = argparse.ArgumentParser(description="Send automated hourly Nita AI WaterWatch dam alert emails.")
     parser.add_argument("--loop", action="store_true", help="Run continuously every hour.")
     parser.add_argument("--force", action="store_true", help="Send even if this alert was already sent this hour.")
     parser.add_argument("--dry-run", action="store_true", help="List alerts without sending email or writing dispatch history.")
