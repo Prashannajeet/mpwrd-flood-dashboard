@@ -7509,7 +7509,7 @@ with st.sidebar:
             <div class="sidebar-logo">N</div>
             <div>
               <div class="sidebar-brand-title">Nita AI</div>
-              <div class="sidebar-brand-subtitle">Geo-Analytics Platform</div>
+              <div class="sidebar-brand-subtitle">GeoAnalytics Platform</div>
             </div>
           </div>
         </div>
@@ -7731,7 +7731,7 @@ st.markdown(
         <div class="brand-lockup">
           <div class="brand-logo">N</div>
           <div>
-            <div class="brand-kicker">Nita AI &amp; Geo-Analytics</div>
+            <div class="brand-kicker">Powered by Nita AI &amp; GeoAnalytics (OPC) Pvt. Ltd.</div>
             <div class="brand-name">Nita AI WaterWatch Live</div>
             <div class="brand-domain">AI-enabled water resources monitoring, forecasting and decision support</div>
           </div>
