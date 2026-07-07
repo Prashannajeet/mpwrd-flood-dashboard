@@ -1529,6 +1529,71 @@ st.markdown(
         border-right: 7px solid transparent;
         border-top: 8px solid var(--teal);
     }
+    .waterwatch-nav-anchor {
+        height: 0;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+    }
+    .waterwatch-nav-anchor + div [data-testid="stPills"] {
+        background: linear-gradient(180deg, var(--nav) 0%, var(--nav-deep) 100%) !important;
+        border: 1px solid #0b416e !important;
+        border-radius: 6px !important;
+        box-shadow: 0 10px 24px rgba(4, 39, 70, 0.16) !important;
+        margin: 0.15rem 0 0.55rem !important;
+        padding: 0.22rem !important;
+        overflow-x: auto !important;
+        overflow-y: visible !important;
+        scrollbar-width: thin;
+    }
+    .waterwatch-nav-anchor + div [data-testid="stPills"] > div {
+        flex-wrap: nowrap !important;
+        gap: 0 !important;
+    }
+    .waterwatch-nav-anchor + div [data-testid="stPills"] button {
+        position: relative;
+        flex: 1 0 132px !important;
+        min-width: 132px !important;
+        min-height: 45px !important;
+        border: 0 !important;
+        border-left: 1px solid rgba(255,255,255,0.08) !important;
+        border-radius: 5px !important;
+        background: transparent !important;
+        color: #ffffff !important;
+        font-size: 0.82rem !important;
+        font-weight: 800 !important;
+        line-height: 1.15 !important;
+        white-space: nowrap !important;
+        box-shadow: none !important;
+    }
+    .waterwatch-nav-anchor + div [data-testid="stPills"] button:first-child {
+        border-left: 0 !important;
+    }
+    .waterwatch-nav-anchor + div [data-testid="stPills"] button p {
+        color: #ffffff !important;
+        font-weight: 800 !important;
+        white-space: nowrap !important;
+    }
+    .waterwatch-nav-anchor + div [data-testid="stPills"] button:hover {
+        background: rgba(255,255,255,0.10) !important;
+    }
+    .waterwatch-nav-anchor + div [data-testid="stPills"] button[aria-pressed="true"],
+    .waterwatch-nav-anchor + div [data-testid="stPills"] button[data-selected="true"] {
+        background: linear-gradient(180deg, var(--teal-bright) 0%, var(--teal) 100%) !important;
+        box-shadow: inset 0 -3px 0 rgba(255,255,255,0.12), 0 8px 18px rgba(0, 140, 141, 0.28) !important;
+        font-weight: 900 !important;
+    }
+    .waterwatch-nav-anchor + div [data-testid="stPills"] button[aria-pressed="true"]::after,
+    .waterwatch-nav-anchor + div [data-testid="stPills"] button[data-selected="true"]::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: -8px;
+        transform: translateX(-50%);
+        border-left: 7px solid transparent;
+        border-right: 7px solid transparent;
+        border-top: 8px solid var(--teal);
+    }
 
     .v02-module-banner {
         border: 1px solid var(--line) !important;
@@ -11705,18 +11770,23 @@ if "main_dashboard_page" not in st.session_state:
     st.session_state.main_dashboard_page = "Water Watch"
 
 nav_pages = ["Water Watch", "Dam DSS & Analytics", "Reservoir Inflow DSS", "GD Site Analytics", "Weather Forecast", "3D Flood Scenarios", "Data & Timeseries", "Report Generation", "Administration"]
-query_page = st.query_params.get("page", "")
-if isinstance(query_page, list):
-    query_page = query_page[0] if query_page else ""
-if query_page in nav_pages:
-    st.session_state.main_dashboard_page = query_page
+if st.session_state.main_dashboard_page not in nav_pages:
+    st.session_state.main_dashboard_page = "Water Watch"
+if st.session_state.get("main_nav_pills") not in nav_pages:
+    st.session_state.main_nav_pills = st.session_state.main_dashboard_page
+
+st.markdown('<div class="waterwatch-nav-anchor"></div>', unsafe_allow_html=True)
+selected_nav_page = st.pills(
+    "Dashboard navigation",
+    nav_pages,
+    default=st.session_state.main_dashboard_page,
+    key="main_nav_pills",
+    label_visibility="collapsed",
+    width="stretch",
+)
+if selected_nav_page in nav_pages:
+    st.session_state.main_dashboard_page = selected_nav_page
 main_page = st.session_state.main_dashboard_page
-nav_items = []
-for page in nav_pages:
-    active_class = " active" if page == main_page else ""
-    href = f"?page={urllib.parse.quote(page)}"
-    nav_items.append(f'<a class="{active_class}" href="{href}">{escape(page)}</a>')
-st.markdown('<nav class="waterwatch-nav" aria-label="Dashboard navigation">' + "".join(nav_items) + "</nav>", unsafe_allow_html=True)
 
 assistant_weather_frames = []
 assistant_dam_weather = weather_points_from_dams(map_status)
