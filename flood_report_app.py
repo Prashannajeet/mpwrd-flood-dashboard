@@ -1594,6 +1594,71 @@ st.markdown(
         border-right: 7px solid transparent;
         border-top: 8px solid var(--teal);
     }
+    .st-key-main_nav_pills {
+        margin: 0.15rem 0 0.55rem !important;
+    }
+    .st-key-main_nav_pills [data-testid="stButtonGroup"] {
+        background: linear-gradient(180deg, var(--nav) 0%, var(--nav-deep) 100%) !important;
+        border: 1px solid #0b416e !important;
+        border-radius: 6px !important;
+        box-shadow: 0 10px 24px rgba(4, 39, 70, 0.16) !important;
+        padding: 0.22rem !important;
+        overflow-x: auto !important;
+        overflow-y: visible !important;
+        scrollbar-width: thin;
+    }
+    .st-key-main_nav_pills [role="radiogroup"] {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        gap: 0 !important;
+        align-items: stretch !important;
+        width: 100% !important;
+    }
+    .st-key-main_nav_pills button[data-testid="stBaseButton-pills"],
+    .st-key-main_nav_pills button[data-testid="stBaseButton-pillsActive"] {
+        position: relative !important;
+        flex: 1 0 132px !important;
+        min-width: 132px !important;
+        min-height: 45px !important;
+        border: 0 !important;
+        border-left: 1px solid rgba(255,255,255,0.08) !important;
+        border-radius: 5px !important;
+        background: transparent !important;
+        color: #ffffff !important;
+        font-size: 0.82rem !important;
+        font-weight: 800 !important;
+        line-height: 1.15 !important;
+        white-space: nowrap !important;
+        box-shadow: none !important;
+    }
+    .st-key-main_nav_pills button[data-testid="stBaseButton-pills"]:first-child,
+    .st-key-main_nav_pills button[data-testid="stBaseButton-pillsActive"]:first-child {
+        border-left: 0 !important;
+    }
+    .st-key-main_nav_pills button[data-testid="stBaseButton-pills"] p,
+    .st-key-main_nav_pills button[data-testid="stBaseButton-pillsActive"] p {
+        color: #ffffff !important;
+        font-weight: 800 !important;
+        white-space: nowrap !important;
+    }
+    .st-key-main_nav_pills button[data-testid="stBaseButton-pills"]:hover {
+        background: rgba(255,255,255,0.10) !important;
+    }
+    .st-key-main_nav_pills button[data-testid="stBaseButton-pillsActive"] {
+        background: linear-gradient(180deg, var(--teal-bright) 0%, var(--teal) 100%) !important;
+        box-shadow: inset 0 -3px 0 rgba(255,255,255,0.12), 0 8px 18px rgba(0, 140, 141, 0.28) !important;
+        font-weight: 900 !important;
+    }
+    .st-key-main_nav_pills button[data-testid="stBaseButton-pillsActive"]::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: -8px;
+        transform: translateX(-50%);
+        border-left: 7px solid transparent;
+        border-right: 7px solid transparent;
+        border-top: 8px solid var(--teal);
+    }
 
     .v02-module-banner {
         border: 1px solid var(--line) !important;
