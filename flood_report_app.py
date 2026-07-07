@@ -10230,13 +10230,25 @@ def render_reservoir_inflow_runoff_dss(
             st.info("Observed inflow back-calculation needs at least two storage observations for the selected reservoir.")
     with lower_right:
         if not nearest_series.empty:
+            nearest_plot = nearest_series.copy()
+            if "return_period" not in nearest_plot.columns:
+                nearest_plot["return_period"] = nearest_plot.get("returnperiod", pd.Series(math.nan, index=nearest_plot.index))
+            if "station_name" not in nearest_plot.columns:
+                nearest_plot["station_name"] = metadata.get("nearest_gd_station") or "Nearest river forecast"
+            nearest_plot["return_period"] = pd.to_numeric(nearest_plot["return_period"], errors="coerce")
+            nearest_plot["meanflow_cms"] = pd.to_numeric(nearest_plot["meanflow_cms"], errors="coerce")
             gd_chart = (
-                alt.Chart(nearest_series)
+                alt.Chart(nearest_plot.dropna(subset=["forecast_time", "meanflow_cms"]))
                 .mark_line(point=True, color="#0f766e")
                 .encode(
                     x=alt.X("forecast_time:T", title="Forecast time"),
                     y=alt.Y("meanflow_cms:Q", title="Nearest river flow (cumecs)"),
-                    tooltip=["station_name", "forecast_time:T", "meanflow_cms:Q", "returnperiod"],
+                    tooltip=[
+                        alt.Tooltip("station_name:N", title="Station"),
+                        alt.Tooltip("forecast_time:T", title="Forecast time"),
+                        alt.Tooltip("meanflow_cms:Q", title="Flow", format=".2f"),
+                        alt.Tooltip("return_period:Q", title="Return period", format=".2f"),
+                    ],
                 )
                 .properties(height=285, title=f"Nearest River Forecast: {metadata.get('nearest_gd_station') or '-'}")
             )
