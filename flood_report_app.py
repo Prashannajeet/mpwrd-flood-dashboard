@@ -13659,6 +13659,31 @@ if main_page == "Water Watch":
                 with focus_cols[1]:
                     if not focus_history.empty:
                         chart_history = focus_history.dropna(subset=["observed_at"]).copy()
+                        def adjusted_axis_domain(values: pd.Series, minimum_pad: float, lower_limit: float | None = None, upper_limit: float | None = None) -> list[float] | None:
+                            numeric_values = pd.to_numeric(values, errors="coerce").dropna()
+                            if numeric_values.empty:
+                                return None
+                            lower = float(numeric_values.min())
+                            upper = float(numeric_values.max())
+                            span = upper - lower
+                            pad = max(span * 0.18, minimum_pad)
+                            domain_lower = lower - pad
+                            domain_upper = upper + pad
+                            if lower_limit is not None:
+                                domain_lower = max(lower_limit, domain_lower)
+                            if upper_limit is not None:
+                                domain_upper = min(upper_limit, domain_upper)
+                            if domain_upper <= domain_lower:
+                                domain_upper = domain_lower + max(minimum_pad * 2, 1.0)
+                            return [round(domain_lower, 2), round(domain_upper, 2)]
+
+                        water_level_domain = adjusted_axis_domain(chart_history.get("water_level_m", pd.Series(dtype=float)), minimum_pad=0.25)
+                        filling_domain = adjusted_axis_domain(
+                            chart_history.get("filling_percent", pd.Series(dtype=float)),
+                            minimum_pad=2.0,
+                            lower_limit=0,
+                            upper_limit=100,
+                        )
                         chart_tooltips = [
                             alt.Tooltip("observed_at:T", title="Observation"),
                             alt.Tooltip("water_level_m:Q", title="Water Level (m)", format=".2f"),
@@ -13671,7 +13696,12 @@ if main_page == "Water Watch":
                             .mark_line(point=True, strokeWidth=2.5)
                             .encode(
                                 x=alt.X("observed_at:T", title="Observation time"),
-                                y=alt.Y("water_level_m:Q", title="Water level (m)", axis=alt.Axis(titleColor="#2563eb")),
+                                y=alt.Y(
+                                    "water_level_m:Q",
+                                    title="Water level (m)",
+                                    axis=alt.Axis(titleColor="#2563eb"),
+                                    scale=alt.Scale(domain=water_level_domain, nice=False) if water_level_domain else alt.Scale(nice=True),
+                                ),
                                 color=alt.value("#2563eb"),
                                 tooltip=chart_tooltips,
                             )
@@ -13681,7 +13711,12 @@ if main_page == "Water Watch":
                             .mark_line(point=True, strokeWidth=2.5, strokeDash=[5, 3])
                             .encode(
                                 x=alt.X("observed_at:T", title="Observation time"),
-                                y=alt.Y("filling_percent:Q", title="Filling (%)", axis=alt.Axis(titleColor="#f97316", orient="right")),
+                                y=alt.Y(
+                                    "filling_percent:Q",
+                                    title="Filling (%)",
+                                    axis=alt.Axis(titleColor="#f97316", orient="right"),
+                                    scale=alt.Scale(domain=filling_domain, nice=False) if filling_domain else alt.Scale(domain=[0, 100]),
+                                ),
                                 color=alt.value("#f97316"),
                                 tooltip=chart_tooltips,
                             )
