@@ -12931,10 +12931,62 @@ if main_page == "Weather Forecast":
                                     use_container_width=True,
                                     hide_index=True,
                                 )
-            if weather_error and daily_weather.empty:
-                st.error(weather_error)
-            elif daily_weather.empty:
-                st.warning("Weather service returned no daily weather rows for the selected town.")
+            if daily_weather.empty:
+                if weather_error:
+                    st.error(weather_error)
+                else:
+                    st.warning("Weather service returned no daily weather rows for the selected weather point.")
+
+                fallback_summary_towns = weather_points.copy()
+                for column in ["forecast_rain_mm", "forecast_temp_max_c", "forecast_wind_max_kmh", "forecast_uv_max"]:
+                    if column not in fallback_summary_towns.columns:
+                        fallback_summary_towns[column] = 0.0
+                    fallback_summary_towns[column] = pd.to_numeric(fallback_summary_towns[column], errors="coerce").fillna(0.0)
+                if "weather_risk" not in fallback_summary_towns.columns:
+                    fallback_summary_towns["weather_risk"] = "No Data"
+                fallback_summary_towns["weather_risk"] = fallback_summary_towns["weather_risk"].fillna("No Data")
+                fallback_summary_towns.loc[fallback_summary_towns["town_name"].astype(str) == selected_town_name, "weather_risk"] = "No Data"
+                weather_tile_api_key = get_app_secret("openweather_api_key", "OPENWEATHER_API_KEY", "")
+                weather_district_geojson = load_light_district_geojson(str(MP_DISTRICTS_GEOJSON))
+
+                st.markdown('<div class="v02-section-label">Operational Weather Map and Location Intelligence</div>', unsafe_allow_html=True)
+                fallback_weather_cols = st.columns([0.64, 0.36])
+                with fallback_weather_cols[0]:
+                    render_weather_town_leaflet_map(
+                        fallback_summary_towns,
+                        selected_town_name,
+                        weather_tile_api_key,
+                        weather_district_geojson,
+                        f"Weather Forecast Map: MP {selected_weather_set}",
+                        dam_layer_weather,
+                    )
+                with fallback_weather_cols[1]:
+                    st.markdown(
+                        f"""
+                        <div class="v02-intel-panel" style="min-height:0;border-left:5px solid #2563eb">
+                            <div class="v02-card-title">Selected Location Weather Intelligence</div>
+                            <h3>{escape(str(selected_town['town_name']))}</h3>
+                            <div class="v02-intel-sub">{escape(str(selected_town.get('district') or '-'))} | {escape(selected_weather_set)} weather point</div>
+                            <div class="v02-info-grid">
+                                {v02_info_tile("Status", "Data pending", "#2563eb")}
+                                {v02_info_tile("Coverage", selected_weather_set)}
+                                {v02_info_tile("Latitude", f"{float(selected_town['latitude']):.4f}")}
+                                {v02_info_tile("Longitude", f"{float(selected_town['longitude']):.4f}")}
+                                {v02_info_tile("Map Points", f"{len(fallback_summary_towns):,}")}
+                                {v02_info_tile("Dam Points", f"{len(dam_layer_weather):,}" if not dam_layer_weather.empty else "0")}
+                            </div>
+                            <div class="v02-mini-note">Weather point geometry and map layers are available. Forecast values will populate from the backend cache when the weather refresh succeeds.</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                fallback_cols = [col for col in ["town_name", "district", "latitude", "longitude", "weather_risk", "forecast_rain_mm", "forecast_temp_max_c", "forecast_wind_max_kmh", "forecast_uv_max"] if col in fallback_summary_towns.columns]
+                with st.expander("Review configured weather points and pending values", expanded=False):
+                    st.dataframe(fallback_summary_towns[fallback_cols], use_container_width=True, hide_index=True, height=280)
+                if not dam_layer_weather.empty:
+                    dam_cols = [col for col in ["town_name", "district", "latitude", "longitude", "forecast_rain_mm", "forecast_temp_max_c", "forecast_wind_max_kmh", "forecast_uv_max", "weather_risk", "status"] if col in dam_layer_weather.columns]
+                    with st.expander("Dam-wise weather forecast layer", expanded=False):
+                        st.dataframe(dam_layer_weather[dam_cols], use_container_width=True, hide_index=True, height=260)
             else:
                 st.markdown('<div class="v02-section-label">Selected Location Forecast and Current Conditions</div>', unsafe_allow_html=True)
                 if weather_error:
@@ -13047,6 +13099,60 @@ if main_page == "Weather Forecast":
                         dam_layer_weather.loc[selected_dam_mask, "forecast_uv_max"] = forecast_uv_max
                         dam_layer_weather.loc[selected_dam_mask, "weather_risk"] = selected_weather_risk
                         dam_layer_weather.loc[selected_dam_mask, "source"] = weather_source
+
+                weather_tile_api_key = get_app_secret("openweather_api_key", "OPENWEATHER_API_KEY", "")
+                weather_district_geojson = load_light_district_geojson(str(MP_DISTRICTS_GEOJSON))
+                st.markdown('<div class="v02-section-label">Operational Weather Map and Location Intelligence</div>', unsafe_allow_html=True)
+                weather_map_cols = st.columns([0.64, 0.36])
+                with weather_map_cols[0]:
+                    render_weather_town_leaflet_map(
+                        summary_towns,
+                        selected_town_name,
+                        weather_tile_api_key,
+                        weather_district_geojson,
+                        f"Weather Forecast Map: MP {selected_weather_set}",
+                        dam_layer_weather,
+                    )
+                with weather_map_cols[1]:
+                    st.markdown(
+                        f"""
+                        <div class="v02-intel-panel" style="min-height:0;border-left:5px solid {weather_risk_color(selected_weather_risk)}">
+                            <div class="v02-card-title">Selected Location Weather Intelligence</div>
+                            <h3>{escape(str(selected_town['town_name']))}</h3>
+                            <div class="v02-intel-sub">{escape(str(selected_town.get('district') or '-'))} | {escape(selected_weather_set)} weather point</div>
+                            <div class="v02-info-grid">
+                                {v02_info_tile("Current Temp", fmt_number(current_row.get('temperature_2m'), " deg C"))}
+                                {v02_info_tile("Past 24h Rain", fmt_number(past_24h_rainfall, " mm"))}
+                                {v02_info_tile("7-Day Rain", fmt_number(forecast_rain_total, " mm"))}
+                                {v02_info_tile("Cloud Cover", fmt_number(current_row.get('cloud_cover'), "%"))}
+                                {v02_info_tile("Max Wind", fmt_number(forecast_wind_max, " km/h"))}
+                                {v02_info_tile("Max UV", fmt_number(forecast_uv_max, ""))}
+                                {v02_info_tile("Wettest Day", pd.Timestamp(wettest_day['date']).strftime('%d %b'))}
+                                {v02_info_tile("Risk", selected_weather_risk, weather_risk_color(selected_weather_risk))}
+                            </div>
+                            <div class="v02-mini-note">Map points include towns, districts, and dam-linked weather locations. District and dam views use cached operational forecast records where available.</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                if not dam_layer_weather.empty:
+                    dam_forecast_display = dam_layer_weather[
+                        [
+                            "town_name",
+                            "district",
+                            "forecast_rain_mm",
+                            "forecast_temp_max_c",
+                            "forecast_wind_max_kmh",
+                            "forecast_uv_max",
+                            "current_rain_mm",
+                            "current_temp_c",
+                            "weather_risk",
+                            "status",
+                        ]
+                    ].sort_values(["weather_risk", "forecast_rain_mm", "town_name"], ascending=[True, False, True])
+                    with st.expander("Dam-wise weather forecast layer", expanded=False):
+                        st.dataframe(dam_forecast_display, use_container_width=True, hide_index=True, height=260)
 
                 st.markdown(
                     f"""
@@ -13180,36 +13286,6 @@ if main_page == "Weather Forecast":
                     st.caption(
                         "These are dashboard-ready decision inputs. A future advanced weather service can populate the same fields from forecast grids clipped to MP districts, dam catchments, and GD site basins."
                     )
-
-                weather_tile_api_key = get_app_secret("openweather_api_key", "OPENWEATHER_API_KEY", "")
-                weather_district_geojson = load_light_district_geojson(str(MP_DISTRICTS_GEOJSON))
-                st.markdown('<div class="v02-section-label">Weather Map Layer</div>', unsafe_allow_html=True)
-                render_weather_town_leaflet_map(
-                    summary_towns,
-                    selected_town_name,
-                    weather_tile_api_key,
-                    weather_district_geojson,
-                    f"Weather Forecast Map: MP {selected_weather_set}",
-                    dam_layer_weather,
-                )
-
-                if not dam_layer_weather.empty:
-                    dam_forecast_display = dam_layer_weather[
-                        [
-                            "town_name",
-                            "district",
-                            "forecast_rain_mm",
-                            "forecast_temp_max_c",
-                            "forecast_wind_max_kmh",
-                            "forecast_uv_max",
-                            "current_rain_mm",
-                            "current_temp_c",
-                            "weather_risk",
-                            "status",
-                        ]
-                    ].sort_values(["weather_risk", "forecast_rain_mm", "town_name"], ascending=[True, False, True])
-                    st.markdown("**Dam-wise Weather Forecast Layer**")
-                    st.dataframe(dam_forecast_display, use_container_width=True, hide_index=True, height=260)
 
                 weather_cols = st.columns([1.05, 0.95])
                 with weather_cols[0]:
