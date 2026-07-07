@@ -704,6 +704,202 @@ st.markdown(
     .dashboard-topnav-active b {
         color: #0f172a;
     }
+    .v02-module-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin: 0.4rem 0 0.8rem;
+        padding: 0.82rem 0.95rem;
+        border: 1px solid #dbe7f5;
+        border-radius: 8px;
+        background:
+            linear-gradient(135deg, rgba(255,255,255,0.96), rgba(239,249,255,0.98)),
+            linear-gradient(90deg, rgba(20,184,166,0.12), rgba(37,99,235,0.10), rgba(245,158,11,0.08));
+        box-shadow: 0 14px 28px rgba(15,23,42,0.06);
+    }
+    .v02-module-banner h2 {
+        margin: 0;
+        color: #0f172a;
+        font-size: 1.08rem !important;
+        line-height: 1.2;
+        font-weight: 900;
+    }
+    .v02-module-banner p {
+        margin: 0.24rem 0 0;
+        color: #64748b;
+        font-size: 0.78rem;
+        line-height: 1.45;
+        font-weight: 650;
+    }
+    .v02-module-tag {
+        flex: 0 0 auto;
+        border: 1px solid #bfdbfe;
+        border-radius: 8px;
+        padding: 0.45rem 0.6rem;
+        background: rgba(255,255,255,0.88);
+        color: #1d4ed8;
+        font-size: 0.68rem;
+        font-weight: 900;
+        letter-spacing: 0.06em !important;
+        text-transform: uppercase;
+        box-shadow: 0 8px 18px rgba(37,99,235,0.08);
+    }
+    .v02-card {
+        border: 1px solid #dbe7f5;
+        border-radius: 8px;
+        background: rgba(255,255,255,0.95);
+        padding: 0.82rem;
+        box-shadow: 0 14px 28px rgba(15,23,42,0.055);
+    }
+    .v02-card-title {
+        color: #7c3aed;
+        font-size: 0.68rem;
+        font-weight: 900;
+        letter-spacing: 0.07em !important;
+        text-transform: uppercase;
+        margin-bottom: 0.46rem;
+    }
+    .v02-intel-panel {
+        border: 1px solid #dbe7f5;
+        border-radius: 8px;
+        background:
+            linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,251,255,0.98));
+        padding: 0.9rem;
+        box-shadow: 0 16px 32px rgba(15,23,42,0.075);
+        min-height: 600px;
+    }
+    .v02-intel-panel h3 {
+        margin: 0 0 0.25rem;
+        color: #0f172a;
+        font-size: 1rem;
+        line-height: 1.25;
+        font-weight: 900;
+    }
+    .v02-intel-sub {
+        color: #64748b;
+        font-size: 0.72rem;
+        font-weight: 760;
+        line-height: 1.35;
+        margin-bottom: 0.7rem;
+    }
+    .v02-info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.5rem;
+        margin: 0.65rem 0;
+    }
+    .v02-info-tile {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #f8fbff;
+        padding: 0.58rem 0.62rem;
+        min-height: 66px;
+    }
+    .v02-info-tile span {
+        display: block;
+        color: #64748b;
+        font-size: 0.62rem;
+        font-weight: 900;
+        letter-spacing: 0.06em !important;
+        line-height: 1.1;
+        text-transform: uppercase;
+    }
+    .v02-info-tile b {
+        display: block;
+        color: #0f172a;
+        font-size: 0.92rem;
+        font-weight: 900;
+        line-height: 1.15;
+        margin-top: 0.2rem;
+        overflow-wrap: anywhere;
+    }
+    .v02-alert-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.42rem;
+        border-radius: 999px;
+        padding: 0.42rem 0.58rem;
+        font-size: 0.68rem;
+        font-weight: 900;
+        letter-spacing: 0.05em !important;
+        text-transform: uppercase;
+        border: 1px solid currentColor;
+        background: rgba(37,99,235,0.08);
+    }
+    .v02-alert-pill::before {
+        content: "";
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        background: currentColor;
+        box-shadow: 0 0 0 5px rgba(37,99,235,0.12);
+    }
+    .v02-mini-note {
+        margin-top: 0.55rem;
+        color: #64748b;
+        font-size: 0.72rem;
+        line-height: 1.42;
+        font-weight: 650;
+    }
+    .v02-chart-row {
+        margin-top: 0.72rem;
+        padding: 0.74rem;
+        border: 1px solid #dbe7f5;
+        border-radius: 8px;
+        background: rgba(255,255,255,0.88);
+        box-shadow: 0 12px 24px rgba(15,23,42,0.045);
+    }
+    .v02-map-caption {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+        align-items: center;
+        justify-content: space-between;
+        margin: 0.55rem 0 0;
+        color: #64748b;
+        font-size: 0.72rem;
+        line-height: 1.4;
+        font-weight: 650;
+    }
+    .v02-map-caption b {
+        color: #0f172a;
+    }
+    .v02-legend-inline {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.42rem;
+        align-items: center;
+    }
+    .v02-legend-inline span {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        color: #334155;
+        font-size: 0.68rem;
+        font-weight: 800;
+    }
+    .v02-legend-inline i {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+    }
+    .v02-section-label {
+        color: #7c3aed;
+        font-size: 0.7rem;
+        font-weight: 900;
+        letter-spacing: 0.07em !important;
+        margin: 0.9rem 0 0.35rem;
+        text-transform: uppercase;
+    }
+    div[data-testid="stMetric"] {
+        border: 1px solid #dbe7f5;
+        border-radius: 8px;
+        background: rgba(255,255,255,0.92);
+        padding: 0.58rem 0.65rem;
+        box-shadow: 0 10px 20px rgba(15,23,42,0.045);
+    }
     div[data-testid="stButton"] button {
         border-radius: 8px;
         min-height: 38px;
@@ -3597,6 +3793,101 @@ def time_label(value) -> str:
     if pd.isna(value):
         return "-"
     return pd.Timestamp(value).strftime("%d %b %Y %I:%M %p")
+
+
+def v02_module_banner(title: str, subtitle: str, tag: str = "V02 Integrated DSS") -> None:
+    st.markdown(
+        f"""
+        <div class="v02-module-banner">
+          <div>
+            <h2>{escape(title)}</h2>
+            <p>{escape(subtitle)}</p>
+          </div>
+          <div class="v02-module-tag">{escape(tag)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def alert_color(alert: object) -> str:
+    return {
+        "Critical": "#ef4444",
+        "Warning": "#f59e0b",
+        "Watch": "#eab308",
+        "Normal": "#2563eb",
+    }.get(str(alert), "#2563eb")
+
+
+def v02_alert_pill(alert: object) -> str:
+    color = alert_color(alert)
+    return f'<span class="v02-alert-pill" style="color:{color};background:{hex_to_rgba(color, 0.10)}">{escape(str(alert or "Normal"))}</span>'
+
+
+def v02_info_tile(label: str, value: object, color: str = "#0f172a") -> str:
+    return (
+        '<div class="v02-info-tile">'
+        f'<span>{escape(label)}</span>'
+        f'<b style="color:{color}">{escape(str(value))}</b>'
+        '</div>'
+    )
+
+
+def selected_reservoir_history(reservoir_view_frame: pd.DataFrame, reservoir_name: str) -> pd.DataFrame:
+    if reservoir_view_frame.empty or "reservoir_name" not in reservoir_view_frame:
+        return pd.DataFrame()
+    history = reservoir_view_frame[
+        reservoir_view_frame["reservoir_name"].astype(str) == str(reservoir_name)
+    ].copy()
+    if history.empty:
+        return history
+    if "observed_at" in history:
+        history["observed_at"] = pd.to_datetime(history["observed_at"], errors="coerce")
+        history = history.sort_values("observed_at")
+    for column in ["water_level_m", "filling_percent", "current_live_capacity_mcm", "rainfall_daily_mm"]:
+        if column in history:
+            history[column] = pd.to_numeric(history[column], errors="coerce")
+    return history
+
+
+def render_selected_dam_intelligence_panel(
+    selected_row: pd.Series,
+    forecast: pd.DataFrame | None = None,
+    metadata: dict | None = None,
+    observed_inflow: pd.DataFrame | None = None,
+) -> None:
+    metadata = metadata or {}
+    forecast_frame = forecast if isinstance(forecast, pd.DataFrame) else pd.DataFrame()
+    observed_frame = observed_inflow if isinstance(observed_inflow, pd.DataFrame) else pd.DataFrame()
+    dam_name = selected_row.get("reservoir_name") or selected_row.get("dam_name") or "Selected dam"
+    district = selected_row.get("map_district") or selected_row.get("district") or metadata.get("district") or "-"
+    basin = selected_row.get("sub_basin") or selected_row.get("major_basin") or metadata.get("basin") or "-"
+    alert = selected_row.get("alert_level") or (forecast_frame["forecast_alert"].tail(1).iloc[0] if not forecast_frame.empty and "forecast_alert" in forecast_frame else "Normal")
+    latest_forecast = forecast_frame.sort_values("lead_day").tail(1).iloc[0] if not forecast_frame.empty and "lead_day" in forecast_frame else pd.Series(dtype=object)
+    peak_inflow = pd.to_numeric(forecast_frame.get("net_inflow_mcm", pd.Series(dtype=float)), errors="coerce").max() if not forecast_frame.empty else math.nan
+    recent_inflow = observed_frame.tail(1).iloc[0].get("observed_inflow_mcm") if not observed_frame.empty and "observed_inflow_mcm" in observed_frame else math.nan
+    panel_html = f"""
+    <div class="v02-intel-panel">
+      <div class="v02-card-title">Selected Dam Intelligence</div>
+      <h3>{escape(str(dam_name))}</h3>
+      <div class="v02-intel-sub">{escape(str(district))} district | {escape(str(basin))}</div>
+      {v02_alert_pill(alert)}
+      <div class="v02-info-grid">
+        {v02_info_tile("Water level", fmt_number(selected_row.get("water_level_m"), " m"))}
+        {v02_info_tile("Filling", fmt_number(selected_row.get("display_filling", selected_row.get("filling_percent")), "%"))}
+        {v02_info_tile("Live storage", fmt_number(selected_row.get("current_live_capacity_mcm"), " MCM"))}
+        {v02_info_tile("FRL gap", fmt_number(selected_row.get("frl_gap_m"), " m"), alert_color(alert))}
+        {v02_info_tile("Observed inflow", fmt_number(recent_inflow, " MCM/slot"))}
+        {v02_info_tile("Peak forecast inflow", fmt_number(peak_inflow, " MCM/day"))}
+        {v02_info_tile("Projected filling", fmt_number(latest_forecast.get("projected_filling_percent"), "%"))}
+        {v02_info_tile("Projected FRL gap", fmt_number(latest_forecast.get("projected_frl_gap_m"), " m"), alert_color(latest_forecast.get("forecast_alert", alert)))}
+      </div>
+      <div class="v02-mini-note">
+        Linked panel updates from the selected dam and uses the same reservoir records, capacity curves, rainfall context and river forecast linkage used elsewhere in V02.
+      </div>
+    </div>
+    """
+    st.markdown(panel_html, unsafe_allow_html=True)
 
 
 def haversine_km(lat1, lon1, lat2, lon2) -> float:
@@ -10023,16 +10314,10 @@ def render_reservoir_inflow_runoff_dss(
     capacity_curve_frame: pd.DataFrame,
     capacity_curve_fabdem_frame: pd.DataFrame,
 ) -> None:
-    st.subheader("Reservoir Inflow & Rainfall-Runoff DSS")
-    st.markdown(
-        """
-        <div class="panel-note">
-        Integrated inflow forecasting combines reservoir storage trend, rainfall-runoff response, nearest river forecast context,
-        capacity curves and FRL risk projection. This is the first operational DSS layer; future calibrated AI/ML models can
-        replace the internal equations while keeping the same dashboard and database structure.
-        </div>
-        """,
-        unsafe_allow_html=True,
+    v02_module_banner(
+        "Reservoir Inflow & Rainfall-Runoff DSS",
+        "Linked reservoir storage trend, rainfall-runoff response, nearest river signal, capacity curve projection and FRL risk in one compact operational view.",
+        "Forecast + Calibration",
     )
     reservoir_options = sorted(
         set(reservoir_view_frame.get("reservoir_name", pd.Series(dtype=str)).dropna().astype(str))
@@ -10049,6 +10334,7 @@ def render_reservoir_inflow_runoff_dss(
         or st.session_state.get("selected_dam_speedometer")
     )
     default_index = reservoir_options.index(context_name) if context_name in reservoir_options else 0
+    st.markdown('<div class="v02-card-title">Forecast Controls</div>', unsafe_allow_html=True)
     control_cols = st.columns([0.28, 0.18, 0.18, 0.18, 0.18])
     with control_cols[0]:
         selected_reservoir = st.selectbox(
@@ -10067,15 +10353,22 @@ def render_reservoir_inflow_runoff_dss(
         catchment_multiplier = st.slider("Catchment multiplier", 3.0, 80.0, 18.0, 1.0, key="inflow_catchment_multiplier")
     with control_cols[4]:
         upstream_weight = st.slider("Upstream river weight", 0.0, 1.0, 0.35, 0.05, key="inflow_upstream_weight")
-    release_factor = st.slider(
-        "Daily release / loss proxy (% of current storage)",
-        0.0,
-        8.0,
-        0.8,
-        0.1,
-        key="inflow_release_factor",
-        help="Screening proxy for releases, spill, evaporation and operational drawdown when detailed gate release data is unavailable.",
-    )
+    release_cols = st.columns([0.36, 0.64])
+    with release_cols[0]:
+        release_factor = st.slider(
+            "Daily release / loss proxy (% of current storage)",
+            0.0,
+            8.0,
+            0.8,
+            0.1,
+            key="inflow_release_factor",
+            help="Screening proxy for releases, spill, evaporation and operational drawdown when detailed gate release data is unavailable.",
+        )
+    with release_cols[1]:
+        st.markdown(
+            '<div class="v02-mini-note">Controls are connected to the existing reservoir observations, capacity curves, dam coordinates, cached weather and river forecast tables. The model remains transparent for calibration review.</div>',
+            unsafe_allow_html=True,
+        )
 
     curve_source = capacity_curve_fabdem_frame if not capacity_curve_fabdem_frame.empty else capacity_curve_frame
     gd_forecasts = load_latest_gd_site_forecast_slot()
@@ -10116,6 +10409,7 @@ def render_reservoir_inflow_runoff_dss(
     cumulative_inflow = pd.to_numeric(forecast["cumulative_inflow_mcm"], errors="coerce").max()
     projected_filling = latest_alert.get("projected_filling_percent")
     min_frl_gap = pd.to_numeric(forecast["projected_frl_gap_m"], errors="coerce").min()
+    st.markdown('<div class="v02-section-label">Operational Forecast Snapshot</div>', unsafe_allow_html=True)
     metric_cols = st.columns(6)
     metric_cols[0].metric("Reservoir", selected_reservoir, str(metadata.get("district") or "-"))
     metric_cols[1].metric("Current Storage", fmt_number(metadata.get("current_storage_mcm"), " MCM"), fmt_number(metadata.get("current_filling_percent"), "%"))
@@ -10123,7 +10417,7 @@ def render_reservoir_inflow_runoff_dss(
     metric_cols[3].metric("Projected Filling", fmt_number(projected_filling, "%"), f"FRL gap {fmt_number(min_frl_gap, ' m')}")
     metric_cols[4].metric("Risk", str(latest_alert.get("forecast_alert")), metadata.get("model_confidence", "Screening DSS"))
     metric_cols[5].metric("Nearest River Signal", metadata.get("nearest_gd_station") or "-", fmt_number(metadata.get("nearest_gd_distance_km"), " km"))
-    st.caption(weather_status)
+    st.markdown(f'<div class="v02-mini-note">{escape(weather_status)}</div>', unsafe_allow_html=True)
 
     inflow_long = forecast.melt(
         id_vars=["lead_day", "forecast_time"],
@@ -10139,6 +10433,7 @@ def render_reservoir_inflow_runoff_dss(
             "net_inflow_mcm": "Net reservoir inflow",
         }
     )
+    st.markdown('<div class="v02-section-label">Linked Forecast Charts</div>', unsafe_allow_html=True)
     top_left, top_right = st.columns([1.15, 0.85])
     with top_left:
         inflow_chart = (
@@ -10350,7 +10645,11 @@ def render_reservoir_inflow_runoff_dss(
 
 
 def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_reports: list[Path]) -> None:
-    st.subheader("Administration")
+    v02_module_banner(
+        "Administration",
+        "Secure operational controls for PDF upload, manual data entry, alert messaging, scheduled jobs, database sync and version governance.",
+        "Restricted Console",
+    )
     if not is_admin:
         st.info("Administration is locked. Sign in as admin_nitaai to upload PDFs and manage SMS/WhatsApp/email alert messaging.")
         if not ADMIN_PASSWORD:
@@ -10872,7 +11171,11 @@ if main_page == "Administration":
     render_admin_operations(is_admin, map_status, dirs)
 
 if main_page == "Report Generation":
-    st.subheader("Report Generation")
+    v02_module_banner(
+        "Report Generation",
+        "Generate professional executive, DSS, weather, inflow and season reports from the active dashboard filters with maps, charts and tables.",
+        "Briefing Outputs",
+    )
     if not reportlab_available():
         st.error("ReportLab is not installed. Install reportlab to enable professional PDF report generation.")
     else:
@@ -10987,6 +11290,11 @@ if main_page == "Report Generation":
             st.download_button("Download Season Data Report", season_pdf, "mpwrd_monsoon_season_data_report.pdf", "application/pdf", use_container_width=True)
 
 if main_page == "GD Site Analytics":
+    v02_module_banner(
+        "GD Site Analytics",
+        "River gauge intelligence with forecast flow, historical calibration context, warning levels and gauge-to-gauge lead/lag travel-time analysis.",
+        "River Forecast DSS",
+    )
     render_gd_site_analytics(map_status, reservoir_view)
 
 if main_page == "Reservoir Inflow DSS":
@@ -10999,7 +11307,11 @@ if main_page == "Reservoir Inflow DSS":
     )
 
 if main_page == "Dam DSS & Analytics":
-    st.subheader("Dam Locations and District Status")
+    v02_module_banner(
+        "Dam DSS & Analytics",
+        "Operational dam map, FRL alert status, current filling, storage trend and reservoir inflow intelligence connected through the selected dam.",
+        "Map + Inflow Intelligence",
+    )
     if map_status.empty:
         st.info("Dam location shapefile is not available or no dam points match the current filters.")
     else:
@@ -11015,27 +11327,132 @@ if main_page == "Dam DSS & Analytics":
         )
         latest_map_observed_at = map_status["observed_at"].dropna().max() if "observed_at" in map_status else pd.NaT
         latest_map_label = time_label(latest_map_observed_at) if pd.notna(latest_map_observed_at) else "not available"
-
-        render_arcgis_dam_timeseries_map(map_status, reservoir_view, latest_map_label)
         alert_counts = map_status["alert_level"].value_counts().to_dict()
 
-        controls_left, controls_right = st.columns([0.58, 0.42])
-        with controls_left:
-            alert_legend_html = f"""
-            <div class="alert-legend-panel">
-              <b>FRL Alert Legend</b>
-              <div><span class="legend-dot" style="background:#ef4444"></span>Critical: FRL gap <= 0.5 m</div>
-              <div><span class="legend-dot" style="background:#f59e0b"></span>Warning: <= 1.5 m</div>
-              <div><span class="legend-dot" style="background:#eab308"></span>Watch: >= 90% filling</div>
-              <div><span class="legend-dot" style="background:#2563eb"></span>Normal</div>
-              <div style="margin-top:0.35rem;color:#64748b">
-                Current: Critical {alert_counts.get('Critical', 0)}, Warning {alert_counts.get('Warning', 0)}, Watch {alert_counts.get('Watch', 0)}, Normal {alert_counts.get('Normal', 0)}
-              </div>
-            </div>
-            """
-            st.markdown(alert_legend_html, unsafe_allow_html=True)
-            st.markdown('<div class="panel-note">Hover a dam for water level, alert type, filling percent, and trend. Click a dam or map location to load the nearest river forecast comparison below the map.</div>', unsafe_allow_html=True)
-        show_selected_dam_accelerometer = True
+        selectable_dams = (
+            map_status.assign(select_label=map_status["reservoir_name"].fillna(map_status["dam_name"]))
+            .dropna(subset=["select_label"])
+            .sort_values("select_label")
+        )
+        selected_dam_label = None
+        selected_dam = pd.DataFrame()
+        selected_history = pd.DataFrame()
+        selected_forecast = pd.DataFrame()
+        selected_observed_inflow = pd.DataFrame()
+        selected_metadata = {}
+        if not selectable_dams.empty:
+            default_context = (
+                st.session_state.get("linked_reservoir_context")
+                or st.session_state.get("selected_dam_speedometer")
+                or st.session_state.get("infographic_focus_dam")
+            )
+            dam_options = selectable_dams["select_label"].drop_duplicates().tolist()
+            default_dam_index = dam_options.index(default_context) if default_context in dam_options else 0
+            selected_dam_label = st.selectbox(
+                "Linked dam selection",
+                dam_options,
+                index=default_dam_index,
+                key="selected_dam_speedometer",
+                help="This selection updates the intelligence panel and linked charts while preserving all existing Dam DSS data logic.",
+            )
+            st.session_state["linked_reservoir_context"] = selected_dam_label
+            selected_dam = selectable_dams[selectable_dams["select_label"] == selected_dam_label].sort_values("observed_at").tail(1)
+            selected_history = selected_reservoir_history(reservoir_view, selected_dam_label)
+            curve_source_for_dam = capacity_curve_fabdem_view if not capacity_curve_fabdem_view.empty else capacity_curve_view
+            if not selected_dam.empty:
+                selected_forecast, selected_observed_inflow, _nearest_series, selected_metadata = build_reservoir_inflow_forecast(
+                    str(selected_dam_label),
+                    reservoir_view,
+                    map_status,
+                    capacity_view,
+                    curve_source_for_dam,
+                    load_latest_gd_site_forecast_slot(),
+                    pd.DataFrame(),
+                    0.35,
+                    18.0,
+                    0.35,
+                    0.8,
+                    7,
+                )
+
+        map_col, intel_col = st.columns([0.68, 0.32], gap="medium")
+        with map_col:
+            render_arcgis_dam_timeseries_map(map_status, reservoir_view, latest_map_label)
+            st.markdown(
+                f"""
+                <div class="v02-map-caption">
+                  <div><b>Latest map slot:</b> {escape(str(latest_map_label))}. Hover dams for status and use the linked dam selector to update the intelligence panel.</div>
+                  <div class="v02-legend-inline">
+                    <span><i style="background:#ef4444"></i>Critical {alert_counts.get('Critical', 0)}</span>
+                    <span><i style="background:#f59e0b"></i>Warning {alert_counts.get('Warning', 0)}</span>
+                    <span><i style="background:#eab308"></i>Watch {alert_counts.get('Watch', 0)}</span>
+                    <span><i style="background:#2563eb"></i>Normal {alert_counts.get('Normal', 0)}</span>
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with intel_col:
+            if not selected_dam.empty:
+                render_selected_dam_intelligence_panel(
+                    selected_dam.iloc[0],
+                    selected_forecast,
+                    selected_metadata,
+                    selected_observed_inflow,
+                )
+            else:
+                st.info("Select a dam to load the linked intelligence panel.")
+
+        st.markdown('<div class="v02-section-label">Linked Dam Charts</div>', unsafe_allow_html=True)
+        linked_left, linked_mid, linked_right = st.columns([0.34, 0.34, 0.32])
+        with linked_left:
+            if not selected_history.empty and {"observed_at", "water_level_m"}.issubset(selected_history.columns):
+                wl_chart = (
+                    alt.Chart(selected_history.dropna(subset=["observed_at", "water_level_m"]).tail(30))
+                    .mark_line(point=True, color="#2563eb", strokeWidth=3)
+                    .encode(
+                        x=alt.X("observed_at:T", title="Observation"),
+                        y=alt.Y("water_level_m:Q", title="Water level (m)"),
+                        tooltip=["observed_at:T", alt.Tooltip("water_level_m:Q", format=".2f"), alt.Tooltip("filling_percent:Q", format=".2f")],
+                    )
+                    .properties(height=220, title=f"{selected_dam_label}: Water Level Trend")
+                )
+                st.altair_chart(wl_chart, use_container_width=True)
+            else:
+                st.info("Water-level trend needs reservoir observations for the selected dam.")
+        with linked_mid:
+            if not selected_forecast.empty:
+                inflow_compact = (
+                    alt.Chart(selected_forecast)
+                    .mark_area(line={"color": "#0f766e"}, color=hex_to_rgba("#14b8a6", 0.22), point=True)
+                    .encode(
+                        x=alt.X("forecast_time:T", title="Forecast"),
+                        y=alt.Y("net_inflow_mcm:Q", title="Net inflow (MCM/day)"),
+                        tooltip=["forecast_time:T", alt.Tooltip("net_inflow_mcm:Q", format=".2f"), "forecast_alert"],
+                    )
+                    .properties(height=220, title="Forecast Inflow")
+                )
+                st.altair_chart(inflow_compact, use_container_width=True)
+            else:
+                st.info("Inflow forecast is not available for this selected dam.")
+        with linked_right:
+            if not selected_forecast.empty:
+                frl_compact = (
+                    alt.Chart(selected_forecast)
+                    .mark_line(point=True, color="#f59e0b", strokeWidth=3)
+                    .encode(
+                        x=alt.X("forecast_time:T", title="Forecast"),
+                        y=alt.Y("projected_frl_gap_m:Q", title="Projected FRL gap (m)"),
+                        color=alt.Color("forecast_alert:N", scale=alt.Scale(domain=["Normal", "Watch", "Warning", "Critical"], range=["#2563eb", "#eab308", "#f59e0b", "#ef4444"]), legend=None),
+                        tooltip=["forecast_time:T", alt.Tooltip("projected_frl_gap_m:Q", format=".2f"), alt.Tooltip("projected_filling_percent:Q", format=".2f"), "forecast_alert"],
+                    )
+                    .properties(height=220, title="Projected FRL Risk")
+                )
+                st.altair_chart(frl_compact, use_container_width=True)
+            else:
+                st.info("FRL projection needs the inflow forecast for this dam.")
+
+        show_selected_dam_accelerometer = False
         show_district_accelerometers = False
         if show_selected_dam_accelerometer:
             with controls_right:
@@ -11659,7 +12076,11 @@ if main_page == "Dam DSS & Analytics":
 
 
 if main_page == "Weather Forecast":
-    st.subheader("Weather Forecast")
+    v02_module_banner(
+        "Weather Forecast",
+        "Dam, district and town weather intelligence with current conditions, 24-hour rainfall, forecast precipitation, wind, UV, cloud and map layers.",
+        "Weather DSS",
+    )
     meteo_base = open_meteo_base_url()
     st.markdown(
         f"""
@@ -12172,10 +12593,10 @@ if main_page == "Weather Forecast":
 
 
 if main_page == "3D Flood Scenarios":
-    st.subheader("3D Flood Scenarios")
-    st.markdown(
-        '<div class="panel-note">3D terrain module for historical inundation review and planning scenarios. The current version generates screening footprints from selected dams; event inundation polygons can be connected as secure spatial inputs in the next data stage.</div>',
-        unsafe_allow_html=True,
+    v02_module_banner(
+        "3D Flood Scenarios",
+        "Scenario workspace for WSE depth corridors, terrain context, drainage alignment, 3D building exposure and planning return-period review.",
+        "3D Risk Scene",
     )
     if map_status.empty:
         st.info("Dam map data is not available for 3D flood scenario generation under the current filters.")
@@ -12315,7 +12736,11 @@ if main_page == "3D Flood Scenarios":
 
 
 if main_page == "Water Watch":
-    st.subheader("WaterWatch Live - Enabled with AI")
+    v02_module_banner(
+        "Water Watch",
+        "Executive situation board for reservoir filling, FRL alerts, district snapshots, linked map view and AI-enabled operational briefings.",
+        "Live Overview",
+    )
     if reservoir_view.empty and map_status.empty:
         st.info("No data is available for infographic generation under the current filters.")
     else:
@@ -12772,6 +13197,11 @@ if main_page == "Water Watch":
 
 
 if main_page == "Data & Timeseries":
+    v02_module_banner(
+        "Data & Timeseries",
+        "Chronological reservoir, river, gate, capacity and export analytics with filters for date, time slot, district, basin, reservoir and gauge.",
+        "Historical Analytics",
+    )
     st.subheader("Reservoir Trends and Latest Ranking")
     if reservoir_view.empty:
         st.info("No reservoir observations match the current filters.")
