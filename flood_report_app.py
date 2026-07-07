@@ -1724,7 +1724,7 @@ st.markdown(
     }
     .v02-intel-panel .v02-card-title:first-child,
     .selected-dam-panel .v02-card-title:first-child {
-        margin: -0.72rem -0.72rem 0.72rem !important;
+        margin: 0 0 0.72rem !important;
         padding: 0.7rem 0.9rem !important;
         background: linear-gradient(180deg, #078c91 0%, #007d83 100%) !important;
         color: #ffffff !important;
@@ -1732,6 +1732,19 @@ st.markdown(
         font-size: 0.86rem !important;
         letter-spacing: 0 !important;
         text-transform: none !important;
+    }
+    .v02-intel-panel > h3,
+    .v02-intel-panel > .v02-intel-sub,
+    .v02-intel-panel > .v02-alert-pill,
+    .v02-intel-panel > .v02-mini-note {
+        margin-left: 0.86rem !important;
+        margin-right: 0.86rem !important;
+    }
+    .v02-intel-panel > .v02-info-grid {
+        margin: 0.65rem 0.86rem 0.7rem !important;
+    }
+    .v02-intel-panel > .v02-mini-note {
+        margin-bottom: 0.86rem !important;
     }
     .v02-intel-panel h3 {
         color: var(--red) !important;
@@ -7104,7 +7117,7 @@ def render_infographic_leaflet_map(map_frame: pd.DataFrame, district_geojson: di
                 margin: 0 0 8px;
             }}
             #{map_id} {{
-                height: 375px;
+                height: 348px;
                 width: 100%;
                 border: 1px solid #dbe6f4;
                 border-radius: 8px;
@@ -7164,11 +7177,14 @@ def render_infographic_leaflet_map(map_frame: pd.DataFrame, district_geojson: di
                 background: rgba(255,255,255,0.96);
                 border: 1px solid #dbe6f4;
                 border-radius: 8px;
-                padding: 8px 10px;
+                padding: 10px 12px;
                 color: #334155;
                 font: 11px Roboto, Inter, Segoe UI, sans-serif;
+                line-height: 1.38;
                 box-shadow: 0 8px 20px rgba(15,23,42,0.12);
-                width: 230px;
+                width: 246px;
+                box-sizing: border-box;
+                overflow-wrap: anywhere;
             }}
             .profile-panel b {{
                 display: block;
@@ -7189,18 +7205,21 @@ def render_infographic_leaflet_map(map_frame: pd.DataFrame, district_geojson: di
                 background: rgba(255,255,255,0.96);
                 border: 1px solid #dbe6f4;
                 border-radius: 8px;
-                padding: 9px 10px;
+                padding: 11px 13px;
                 color: #334155;
                 font: 11px Roboto, Inter, Segoe UI, sans-serif;
-                line-height: 1.35;
+                line-height: 1.42;
                 box-shadow: 0 8px 20px rgba(15,23,42,0.12);
-                width: 245px;
+                width: 268px;
+                max-width: 286px;
+                box-sizing: border-box;
+                overflow-wrap: anywhere;
             }}
             .dam-focus-panel b {{
                 display: block;
                 color: #172033;
                 font-size: 13px;
-                margin-bottom: 3px;
+                margin-bottom: 5px;
             }}
             .dam-focus-grid {{
                 display: grid;
@@ -7212,7 +7231,8 @@ def render_infographic_leaflet_map(map_frame: pd.DataFrame, district_geojson: di
                 background: #f8fafc;
                 border: 1px solid #e2e8f0;
                 border-radius: 7px;
-                padding: 5px;
+                padding: 6px 7px;
+                min-width: 0;
             }}
             .dam-focus-chip span {{
                 display: block;
@@ -7227,6 +7247,7 @@ def render_infographic_leaflet_map(map_frame: pd.DataFrame, district_geojson: di
                 color: #0f172a;
                 font-size: 12px;
                 margin-top: 2px;
+                overflow-wrap: anywhere;
             }}
             .dam-focus-bar {{
                 height: 8px;
@@ -13626,7 +13647,7 @@ if main_page == "Water Watch":
         with map_chart_cols[1]:
             st.markdown(
                 f"""
-                <div class="v02-intel-panel" style="min-height:0;padding:.82rem">
+                <div class="v02-intel-panel" style="min-height:0">
                   <div class="v02-card-title">Situation Board</div>
                   <h3>WaterWatch Live</h3>
                   <div class="v02-intel-sub">Active report context: {escape(str(latest_label))}</div>
@@ -13643,9 +13664,10 @@ if main_page == "Water Watch":
                 """,
                 unsafe_allow_html=True,
             )
+            st.markdown('<div class="v02-section-label" style="margin:.38rem 0 .15rem">FRL Alert Composition</div>', unsafe_allow_html=True)
             alert_chart = (
                 alt.Chart(alert_summary)
-                .mark_arc(innerRadius=60, outerRadius=105)
+                .mark_arc(innerRadius=48, outerRadius=82)
                 .encode(
                     theta=alt.Theta("reservoirs:Q"),
                     color=alt.Color(
@@ -13658,7 +13680,7 @@ if main_page == "Water Watch":
                     ),
                     tooltip=["alert_level", "reservoirs"],
                 )
-                .properties(height=250, title="FRL Alert Composition")
+                .properties(height=190)
             )
             st.altair_chart(alert_chart, use_container_width=True)
 
