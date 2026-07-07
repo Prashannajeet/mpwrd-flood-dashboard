@@ -3599,6 +3599,233 @@ def time_label(value) -> str:
     return pd.Timestamp(value).strftime("%d %b %Y %I:%M %p")
 
 
+def haversine_km(lat1, lon1, lat2, lon2) -> float:
+    try:
+        lat1, lon1, lat2, lon2 = map(float, [lat1, lon1, lat2, lon2])
+    except Exception:
+        return math.nan
+    radius_km = 6371.0
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    return radius_km * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def reservoir_inflow_alert(projected_filling: float, projected_frl_gap: float) -> str:
+    if pd.notna(projected_frl_gap) and projected_frl_gap <= 0.5:
+        return "Critical"
+    if pd.notna(projected_frl_gap) and projected_frl_gap <= 1.5:
+        return "Warning"
+    if pd.notna(projected_filling) and projected_filling >= 90:
+        return "Watch"
+    return "Normal"
+
+
+def alert_sort_value(alert: str) -> int:
+    return {"Critical": 4, "Warning": 3, "Watch": 2, "Normal": 1}.get(str(alert), 0)
+
+
+def interpolate_capacity_level(curve_df: pd.DataFrame, storage_mcm: float) -> float:
+    if curve_df.empty or pd.isna(storage_mcm):
+        return math.nan
+    frame = curve_df.copy()
+    frame["cumulative_storage_mcm"] = pd.to_numeric(frame.get("cumulative_storage_mcm"), errors="coerce")
+    frame["elevation_m"] = pd.to_numeric(frame.get("elevation_m"), errors="coerce")
+    frame = frame.dropna(subset=["cumulative_storage_mcm", "elevation_m"]).sort_values("cumulative_storage_mcm")
+    if frame.empty:
+        return math.nan
+    if len(frame) == 1:
+        return float(frame.iloc[0]["elevation_m"])
+    storage_values = frame["cumulative_storage_mcm"].to_numpy(dtype=float)
+    level_values = frame["elevation_m"].to_numpy(dtype=float)
+    clipped_storage = min(max(float(storage_mcm), float(storage_values.min())), float(storage_values.max()))
+    for idx in range(1, len(storage_values)):
+        if clipped_storage <= storage_values[idx]:
+            x0, x1 = storage_values[idx - 1], storage_values[idx]
+            y0, y1 = level_values[idx - 1], level_values[idx]
+            if x1 == x0:
+                return float(y1)
+            ratio = (clipped_storage - x0) / (x1 - x0)
+            return float(y0 + ratio * (y1 - y0))
+    return float(level_values[-1])
+
+
+def nearest_gd_forecast_for_reservoir(reservoir_row: pd.Series, gd_forecasts: pd.DataFrame) -> tuple[pd.DataFrame, str, float]:
+    if gd_forecasts.empty:
+        return pd.DataFrame(), "", math.nan
+    lat = reservoir_row.get("latitude")
+    lon = reservoir_row.get("longitude")
+    if pd.isna(lat) or pd.isna(lon) or "latitude" not in gd_forecasts or "longitude" not in gd_forecasts:
+        return pd.DataFrame(), "", math.nan
+    candidates = gd_forecasts.dropna(subset=["latitude", "longitude"]).copy()
+    if candidates.empty:
+        return pd.DataFrame(), "", math.nan
+    candidates["reservoir_distance_km"] = candidates.apply(
+        lambda row: haversine_km(lat, lon, row.get("latitude"), row.get("longitude")),
+        axis=1,
+    )
+    nearest_row = candidates.sort_values("reservoir_distance_km").iloc[0]
+    station_code = nearest_row.get("station_code")
+    station_name = str(nearest_row.get("station_name") or station_code or "Nearest forecast reach")
+    nearest_series = candidates[candidates["station_code"].astype(str) == str(station_code)].copy()
+    nearest_series["forecast_time"] = pd.to_datetime(nearest_series.get("forecast_time"), errors="coerce")
+    if "meanflow_cms" not in nearest_series.columns and "combined_forecast_flow_cms" in nearest_series.columns:
+        nearest_series["meanflow_cms"] = nearest_series["combined_forecast_flow_cms"]
+    nearest_series["meanflow_cms"] = pd.to_numeric(nearest_series.get("meanflow_cms"), errors="coerce")
+    nearest_series = nearest_series.dropna(subset=["forecast_time"]).sort_values("forecast_time")
+    return nearest_series, station_name, float(nearest_row.get("reservoir_distance_km", math.nan))
+
+
+def estimate_observed_reservoir_inflow(history: pd.DataFrame, release_factor: float = 0.0) -> pd.DataFrame:
+    if history.empty or "observed_at" not in history:
+        return pd.DataFrame()
+    frame = history.copy()
+    frame["observed_at"] = pd.to_datetime(frame["observed_at"], errors="coerce")
+    frame["current_live_capacity_mcm"] = pd.to_numeric(frame.get("current_live_capacity_mcm"), errors="coerce")
+    frame["rainfall_daily_mm"] = pd.to_numeric(frame.get("rainfall_daily_mm"), errors="coerce").fillna(0)
+    frame = frame.dropna(subset=["observed_at", "current_live_capacity_mcm"]).sort_values("observed_at")
+    if len(frame) < 2:
+        return pd.DataFrame()
+    frame["storage_change_mcm"] = frame["current_live_capacity_mcm"].diff()
+    frame["hours_delta"] = frame["observed_at"].diff().dt.total_seconds() / 3600
+    frame["release_proxy_mcm"] = frame["current_live_capacity_mcm"].shift(1).fillna(frame["current_live_capacity_mcm"]) * float(release_factor) / 100
+    frame["observed_inflow_mcm"] = (frame["storage_change_mcm"].fillna(0) + frame["release_proxy_mcm"]).clip(lower=0)
+    frame["observed_inflow_cms"] = frame.apply(
+        lambda row: row["observed_inflow_mcm"] * 1_000_000 / (row["hours_delta"] * 3600) if pd.notna(row.get("hours_delta")) and row.get("hours_delta", 0) > 0 else math.nan,
+        axis=1,
+    )
+    return frame
+
+
+def build_reservoir_inflow_forecast(
+    reservoir_name: str,
+    reservoir_view_frame: pd.DataFrame,
+    map_status_frame: pd.DataFrame,
+    capacity_frame: pd.DataFrame,
+    curve_frame: pd.DataFrame,
+    gd_forecasts: pd.DataFrame,
+    daily_weather: pd.DataFrame,
+    runoff_coefficient: float,
+    catchment_multiplier: float,
+    upstream_weight: float,
+    release_factor: float,
+    forecast_days: int,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict]:
+    history = reservoir_view_frame[
+        reservoir_view_frame.get("reservoir_name", pd.Series(dtype=str)).astype(str) == str(reservoir_name)
+    ].copy() if not reservoir_view_frame.empty else pd.DataFrame()
+    latest = latest_by_asset(history, "reservoir_name").tail(1) if not history.empty else pd.DataFrame()
+    map_match = map_status_frame[
+        map_status_frame.get("reservoir_name", pd.Series(dtype=str)).astype(str) == str(reservoir_name)
+    ].tail(1) if not map_status_frame.empty else pd.DataFrame()
+    capacity_match = capacity_frame[
+        capacity_frame.get("reservoir_name", pd.Series(dtype=str)).astype(str) == str(reservoir_name)
+    ].tail(1) if not capacity_frame.empty else pd.DataFrame()
+    base_row = pd.Series(dtype=object)
+    for candidate in [latest, map_match, capacity_match]:
+        if not candidate.empty:
+            base_row = pd.concat([base_row, candidate.iloc[0]]).groupby(level=0).last()
+    if base_row.empty:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), {"status": "No reservoir data"}
+
+    capacity_mcm = pd.to_numeric(pd.Series([base_row.get("live_capacity_frl_mcm", base_row.get("official_live_capacity_mcm", base_row.get("calibrated_capacity_mcm")))]), errors="coerce").iloc[0]
+    if pd.isna(capacity_mcm) and not capacity_match.empty:
+        capacity_mcm = pd.to_numeric(pd.Series([capacity_match.iloc[0].get("calibrated_capacity_mcm")]), errors="coerce").iloc[0]
+    current_storage = pd.to_numeric(pd.Series([base_row.get("current_live_capacity_mcm", base_row.get("latest_reported_storage_mcm", base_row.get("model_storage_from_level_mcm")))]), errors="coerce").iloc[0]
+    current_wl = pd.to_numeric(pd.Series([base_row.get("water_level_m", base_row.get("latest_water_level_m"))]), errors="coerce").iloc[0]
+    frl_m = pd.to_numeric(pd.Series([base_row.get("frl_m")]), errors="coerce").iloc[0]
+    lsl_m = pd.to_numeric(pd.Series([base_row.get("lsl_m")]), errors="coerce").iloc[0]
+    waterbody_area = pd.to_numeric(pd.Series([base_row.get("waterbody_area_sqkm")]), errors="coerce").iloc[0]
+    if pd.isna(waterbody_area) and not capacity_match.empty:
+        waterbody_area = pd.to_numeric(pd.Series([capacity_match.iloc[0].get("waterbody_area_sqkm")]), errors="coerce").iloc[0]
+    if pd.isna(waterbody_area):
+        waterbody_area = max(float(capacity_mcm or 100) / 25, 5)
+    effective_catchment_area = max(float(waterbody_area) * float(catchment_multiplier), float(waterbody_area))
+    if pd.isna(current_storage):
+        current_storage = float(capacity_mcm or 0) * pd.to_numeric(pd.Series([base_row.get("display_filling", base_row.get("filling_percent", 0))]), errors="coerce").fillna(0).iloc[0] / 100
+    if pd.isna(capacity_mcm) or capacity_mcm <= 0:
+        capacity_mcm = max(float(current_storage or 0), 1)
+
+    nearest_series, nearest_station, nearest_distance_km = nearest_gd_forecast_for_reservoir(base_row, gd_forecasts)
+    forecast_start = pd.Timestamp.now(tz="Asia/Kolkata").normalize().tz_localize(None)
+    if not daily_weather.empty and "date" in daily_weather:
+        weather_forecast = daily_weather[daily_weather.get("period", pd.Series("", index=daily_weather.index)).astype(str).eq("Forecast")].copy()
+        if weather_forecast.empty:
+            weather_forecast = daily_weather.copy()
+    else:
+        weather_forecast = pd.DataFrame()
+
+    rows = []
+    cumulative_inflow = 0.0
+    for lead_day in range(0, int(forecast_days) + 1):
+        forecast_time = forecast_start + pd.Timedelta(days=lead_day)
+        if not weather_forecast.empty:
+            day_weather = weather_forecast.iloc[min(lead_day, len(weather_forecast) - 1)]
+            rainfall_mm = pd.to_numeric(pd.Series([day_weather.get("precipitation_sum", day_weather.get("rain_sum", day_weather.get("precipitation", 0)))]), errors="coerce").fillna(0).iloc[0]
+        else:
+            recent_rain = pd.to_numeric(history.get("rainfall_daily_mm", pd.Series(dtype=float)), errors="coerce").dropna()
+            rainfall_mm = float(recent_rain.tail(3).mean()) if not recent_rain.empty else 10.0
+        runoff_mcm = max(0.0, float(rainfall_mm) * float(runoff_coefficient) * effective_catchment_area / 1000)
+        if not nearest_series.empty:
+            series_sorted = nearest_series.sort_values("forecast_time")
+            gd_row = series_sorted.iloc[min(lead_day, len(series_sorted) - 1)]
+            upstream_flow_cms = pd.to_numeric(pd.Series([gd_row.get("meanflow_cms", gd_row.get("combined_forecast_flow_cms"))]), errors="coerce").fillna(0).iloc[0]
+        else:
+            upstream_flow_cms = 0.0
+        upstream_mcm = max(0.0, float(upstream_flow_cms) * 86400 / 1_000_000 * float(upstream_weight))
+        release_mcm = max(0.0, (float(current_storage or 0) + cumulative_inflow) * float(release_factor) / 100)
+        net_inflow_mcm = max(0.0, runoff_mcm + upstream_mcm - release_mcm)
+        cumulative_inflow += net_inflow_mcm
+        projected_storage = min(float(capacity_mcm), float(current_storage or 0) + cumulative_inflow)
+        projected_filling = projected_storage / float(capacity_mcm) * 100 if capacity_mcm else math.nan
+        reservoir_curve = curve_frame[curve_frame.get("reservoir_name", pd.Series(dtype=str)).astype(str) == str(reservoir_name)].copy() if not curve_frame.empty else pd.DataFrame()
+        projected_level = interpolate_capacity_level(reservoir_curve, projected_storage)
+        if pd.isna(projected_level) and pd.notna(current_wl) and pd.notna(frl_m):
+            level_span = max(float(frl_m) - float(lsl_m if pd.notna(lsl_m) else current_wl - 5), 1.0)
+            current_filling = float(current_storage or 0) / float(capacity_mcm) if capacity_mcm else 0
+            projected_level = float(frl_m) - max(0, 1 - projected_filling / 100) * level_span
+            projected_level = max(float(current_wl or projected_level), projected_level) if projected_filling >= current_filling * 100 else projected_level
+        projected_frl_gap = float(frl_m) - projected_level if pd.notna(frl_m) and pd.notna(projected_level) else math.nan
+        rows.append(
+            {
+                "lead_day": lead_day,
+                "forecast_time": forecast_time,
+                "rainfall_mm": round(float(rainfall_mm), 2),
+                "effective_catchment_area_sqkm": round(effective_catchment_area, 2),
+                "runoff_inflow_mcm": round(runoff_mcm, 3),
+                "upstream_flow_cms": round(float(upstream_flow_cms), 3),
+                "upstream_inflow_mcm": round(upstream_mcm, 3),
+                "release_proxy_mcm": round(release_mcm, 3),
+                "net_inflow_mcm": round(net_inflow_mcm, 3),
+                "cumulative_inflow_mcm": round(cumulative_inflow, 3),
+                "projected_storage_mcm": round(projected_storage, 3),
+                "projected_filling_percent": round(projected_filling, 2),
+                "projected_water_level_m": round(projected_level, 3) if pd.notna(projected_level) else math.nan,
+                "projected_frl_gap_m": round(projected_frl_gap, 3) if pd.notna(projected_frl_gap) else math.nan,
+                "forecast_alert": reservoir_inflow_alert(projected_filling, projected_frl_gap),
+            }
+        )
+    forecast = pd.DataFrame(rows)
+    observed_inflow = estimate_observed_reservoir_inflow(history, release_factor)
+    metadata = {
+        "reservoir_name": reservoir_name,
+        "district": base_row.get("district") or base_row.get("map_district"),
+        "basin": base_row.get("sub_basin") or base_row.get("major_basin"),
+        "capacity_mcm": capacity_mcm,
+        "current_storage_mcm": current_storage,
+        "current_water_level_m": current_wl,
+        "frl_m": frl_m,
+        "current_filling_percent": float(current_storage) / float(capacity_mcm) * 100 if capacity_mcm else math.nan,
+        "waterbody_area_sqkm": waterbody_area,
+        "effective_catchment_area_sqkm": effective_catchment_area,
+        "nearest_gd_station": nearest_station,
+        "nearest_gd_distance_km": nearest_distance_km,
+        "model_confidence": "Screening DSS - catchment boundary and reservoir release calibration pending",
+    }
+    return forecast, observed_inflow, nearest_series, metadata
+
+
 def return_period_label(value: float | int | None) -> str:
     rp = float(value or 0)
     if rp >= 50:
@@ -8881,6 +9108,9 @@ def dashboard_assistant_answer(
     page_name: str,
     weather_points_frame: pd.DataFrame | None = None,
     historical_reservoir_frame: pd.DataFrame | None = None,
+    capacity_frame: pd.DataFrame | None = None,
+    capacity_curve_frame: pd.DataFrame | None = None,
+    capacity_curve_fabdem_frame: pd.DataFrame | None = None,
 ) -> dict:
     query = normalize_name(question)
     history_reservoir_frame = (
@@ -8902,6 +9132,89 @@ def dashboard_assistant_answer(
         map_frame = pd.DataFrame()
 
     filters = assistant_query_filters(query, map_frame, history_reservoir_frame, river_frame)
+    inflow_terms = [
+        "inflow",
+        "runoff",
+        "rainfall runoff",
+        "rainfall-runoff",
+        "reservoir forecast",
+        "storage forecast",
+        "frl risk",
+        "projected filling",
+        "projected storage",
+        "catchment response",
+    ]
+    if query and any(term in query for term in inflow_terms):
+        capacity_data = capacity_frame.copy() if isinstance(capacity_frame, pd.DataFrame) else pd.DataFrame()
+        curve_data = capacity_curve_fabdem_frame.copy() if isinstance(capacity_curve_fabdem_frame, pd.DataFrame) and not capacity_curve_fabdem_frame.empty else (
+            capacity_curve_frame.copy() if isinstance(capacity_curve_frame, pd.DataFrame) else pd.DataFrame()
+        )
+        matched_dam = assistant_match_dam(query, map_frame)
+        selected_reservoir = (
+            matched_dam
+            or (filters.get("reservoirs") or [None])[0]
+            or st.session_state.get("linked_reservoir_context")
+            or st.session_state.get("inflow_selected_reservoir")
+        )
+        if not selected_reservoir:
+            if not map_frame.empty and "reservoir_name" in map_frame:
+                candidate = map_frame.sort_values("frl_gap_m", na_position="last").head(1)
+                selected_reservoir = candidate["reservoir_name"].iloc[0] if not candidate.empty else None
+            elif not history_reservoir_frame.empty and "reservoir_name" in history_reservoir_frame:
+                selected_reservoir = history_reservoir_frame["reservoir_name"].dropna().astype(str).iloc[0]
+        if not selected_reservoir:
+            return {"text": "Reservoir inflow DSS needs at least one selected or named reservoir.", "table": pd.DataFrame()}
+        forecast_days = assistant_days_requested(query, default=7)
+        gd_forecasts = load_latest_gd_site_forecast_slot()
+        forecast, observed_inflow, nearest_series, metadata = build_reservoir_inflow_forecast(
+            str(selected_reservoir),
+            history_reservoir_frame,
+            map_frame,
+            capacity_data,
+            curve_data,
+            gd_forecasts,
+            pd.DataFrame(),
+            0.35,
+            18.0,
+            0.35,
+            0.8,
+            forecast_days,
+        )
+        if forecast.empty:
+            return {
+                "text": f"Reservoir inflow DSS could not prepare a forecast for {selected_reservoir}: {metadata.get('status', 'missing capacity, location, or reservoir observation data')}.",
+                "table": pd.DataFrame(),
+            }
+        final_row = forecast.sort_values("lead_day").tail(1).iloc[0]
+        peak_row = forecast.sort_values("net_inflow_mcm", ascending=False).head(1).iloc[0]
+        observed_note = ""
+        if not observed_inflow.empty:
+            recent_obs = observed_inflow.tail(1).iloc[0]
+            observed_note = f" Recent storage-change inflow proxy is {fmt_number(recent_obs.get('observed_inflow_mcm'), ' MCM/slot')}."
+        text = (
+            f"Reservoir inflow DSS for {selected_reservoir} projects {fmt_number(forecast['net_inflow_mcm'].sum(), ' MCM')} "
+            f"net inflow over the next {forecast_days} day(s). Peak daily inflow is {fmt_number(peak_row.get('net_inflow_mcm'), ' MCM')} "
+            f"on {time_label(peak_row.get('forecast_time'))}. Final projected filling is {fmt_number(final_row.get('projected_filling_percent'), '%')} "
+            f"with FRL gap {fmt_number(final_row.get('projected_frl_gap_m'), ' m')} and {final_row.get('forecast_alert')} risk. "
+            f"Nearest river signal: {metadata.get('nearest_gd_station') or 'not linked'}."
+            f"{observed_note} Treat this as a screening forecast until calibrated catchment area, releases, and observed inflow training data are approved."
+        )
+        table_cols = [
+            "forecast_time",
+            "rainfall_mm",
+            "runoff_inflow_mcm",
+            "upstream_flow_cms",
+            "upstream_inflow_mcm",
+            "release_proxy_mcm",
+            "net_inflow_mcm",
+            "projected_storage_mcm",
+            "projected_filling_percent",
+            "projected_water_level_m",
+            "projected_frl_gap_m",
+            "forecast_alert",
+        ]
+        return {"text": text, "table": prettify_dataframe_columns(forecast[[col for col in table_cols if col in forecast.columns]])}
+
     advanced_terms = [
         "query",
         "get",
@@ -9259,6 +9572,9 @@ def render_dashboard_assistant(
     page_name: str,
     weather_points_frame: pd.DataFrame | None = None,
     historical_reservoir_frame: pd.DataFrame | None = None,
+    capacity_frame: pd.DataFrame | None = None,
+    capacity_curve_frame: pd.DataFrame | None = None,
+    capacity_curve_fabdem_frame: pd.DataFrame | None = None,
 ) -> None:
     if "assistant_history" not in st.session_state:
         st.session_state.assistant_history = []
@@ -9300,6 +9616,11 @@ def render_dashboard_assistant(
                 "River gauges near danger",
                 "Opened gates",
                 "Show river and gate status requiring operational attention.",
+            ],
+            "Inflow DSS": [
+                "Reservoir inflow forecast for selected dam",
+                "Explain rainfall-runoff contribution and FRL risk for the selected reservoir.",
+                "Show projected storage forecast and inflow table for the linked dam.",
             ],
             "Trends & Tables": [
                 "Rising reservoir trends",
@@ -9343,6 +9664,9 @@ def render_dashboard_assistant(
                 page_name,
                 weather_points_frame,
                 historical_reservoir_frame,
+                capacity_frame,
+                capacity_curve_frame,
+                capacity_curve_fabdem_frame,
             )
             answer = local_ai_enhance_answer(command, answer)
             st.session_state.assistant_history.insert(0, {"question": command, "intent": intent, "output_style": output_style, **answer})
@@ -9375,6 +9699,9 @@ def render_dashboard_assistant(
                 page_name,
                 weather_points_frame,
                 historical_reservoir_frame,
+                capacity_frame,
+                capacity_curve_frame,
+                capacity_curve_fabdem_frame,
             )
             st.info(overview["text"])
 
@@ -9687,6 +10014,327 @@ def write_manual_entry_report(
         "gate_observation_rows": len(gates),
         "river_observation_rows": len(river_obs),
     }
+
+
+def render_reservoir_inflow_runoff_dss(
+    map_status_frame: pd.DataFrame,
+    reservoir_view_frame: pd.DataFrame,
+    capacity_frame: pd.DataFrame,
+    capacity_curve_frame: pd.DataFrame,
+    capacity_curve_fabdem_frame: pd.DataFrame,
+) -> None:
+    st.subheader("Reservoir Inflow & Rainfall-Runoff DSS")
+    st.markdown(
+        """
+        <div class="panel-note">
+        Integrated inflow forecasting combines reservoir storage trend, rainfall-runoff response, nearest river forecast context,
+        capacity curves and FRL risk projection. This is the first operational DSS layer; future calibrated AI/ML models can
+        replace the internal equations while keeping the same dashboard and database structure.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    reservoir_options = sorted(
+        set(reservoir_view_frame.get("reservoir_name", pd.Series(dtype=str)).dropna().astype(str))
+        | set(map_status_frame.get("reservoir_name", pd.Series(dtype=str)).dropna().astype(str))
+        | set(capacity_frame.get("reservoir_name", pd.Series(dtype=str)).dropna().astype(str))
+    )
+    if not reservoir_options:
+        st.info("No reservoir records are available under the current filters.")
+        return
+
+    context_name = (
+        st.session_state.get("linked_reservoir_context")
+        or st.session_state.get("infographic_focus_dam")
+        or st.session_state.get("selected_dam_speedometer")
+    )
+    default_index = reservoir_options.index(context_name) if context_name in reservoir_options else 0
+    control_cols = st.columns([0.28, 0.18, 0.18, 0.18, 0.18])
+    with control_cols[0]:
+        selected_reservoir = st.selectbox(
+            "Linked reservoir",
+            reservoir_options,
+            index=default_index,
+            key="inflow_selected_reservoir",
+            help="This selected reservoir drives all inflow, runoff, storage and risk charts in this module.",
+        )
+    st.session_state["linked_reservoir_context"] = selected_reservoir
+    with control_cols[1]:
+        forecast_days = st.slider("Forecast days", 3, 10, 7, 1, key="inflow_forecast_days")
+    with control_cols[2]:
+        runoff_coefficient = st.slider("Runoff coefficient", 0.05, 0.95, 0.35, 0.05, key="inflow_runoff_coeff")
+    with control_cols[3]:
+        catchment_multiplier = st.slider("Catchment multiplier", 3.0, 80.0, 18.0, 1.0, key="inflow_catchment_multiplier")
+    with control_cols[4]:
+        upstream_weight = st.slider("Upstream river weight", 0.0, 1.0, 0.35, 0.05, key="inflow_upstream_weight")
+    release_factor = st.slider(
+        "Daily release / loss proxy (% of current storage)",
+        0.0,
+        8.0,
+        0.8,
+        0.1,
+        key="inflow_release_factor",
+        help="Screening proxy for releases, spill, evaporation and operational drawdown when detailed gate release data is unavailable.",
+    )
+
+    curve_source = capacity_curve_fabdem_frame if not capacity_curve_fabdem_frame.empty else capacity_curve_frame
+    gd_forecasts = load_latest_gd_site_forecast_slot()
+    selected_geo = map_status_frame[map_status_frame.get("reservoir_name", pd.Series(dtype=str)).astype(str) == selected_reservoir].tail(1)
+    if selected_geo.empty:
+        selected_geo = capacity_frame[capacity_frame.get("reservoir_name", pd.Series(dtype=str)).astype(str) == selected_reservoir].tail(1)
+    daily_weather = pd.DataFrame()
+    weather_status = "No dam coordinates available for weather/runoff forecast."
+    if not selected_geo.empty:
+        lat = pd.to_numeric(pd.Series([selected_geo.iloc[0].get("latitude")]), errors="coerce").iloc[0]
+        lon = pd.to_numeric(pd.Series([selected_geo.iloc[0].get("longitude")]), errors="coerce").iloc[0]
+        if pd.notna(lat) and pd.notna(lon):
+            daily_weather, _hourly_weather, _current_weather, weather_error, weather_source = get_cached_open_meteo_weather(float(lat), float(lon))
+            weather_status = "Ready" if not weather_error else f"Using stored/fallback weather context: {weather_error}"
+            if weather_source:
+                weather_status += f" | Source status: {weather_source}"
+
+    forecast, observed_inflow, nearest_series, metadata = build_reservoir_inflow_forecast(
+        selected_reservoir,
+        reservoir_view_frame,
+        map_status_frame,
+        capacity_frame,
+        curve_source,
+        gd_forecasts,
+        daily_weather,
+        runoff_coefficient,
+        catchment_multiplier,
+        upstream_weight,
+        release_factor,
+        forecast_days,
+    )
+    if forecast.empty:
+        st.warning(f"Unable to build inflow forecast for {selected_reservoir}: {metadata.get('status', 'missing input data')}")
+        return
+
+    latest_alert = forecast.sort_values("lead_day").tail(1).iloc[0]
+    peak_inflow = pd.to_numeric(forecast["net_inflow_mcm"], errors="coerce").max()
+    cumulative_inflow = pd.to_numeric(forecast["cumulative_inflow_mcm"], errors="coerce").max()
+    projected_filling = latest_alert.get("projected_filling_percent")
+    min_frl_gap = pd.to_numeric(forecast["projected_frl_gap_m"], errors="coerce").min()
+    metric_cols = st.columns(6)
+    metric_cols[0].metric("Reservoir", selected_reservoir, str(metadata.get("district") or "-"))
+    metric_cols[1].metric("Current Storage", fmt_number(metadata.get("current_storage_mcm"), " MCM"), fmt_number(metadata.get("current_filling_percent"), "%"))
+    metric_cols[2].metric("Forecast Inflow", fmt_number(cumulative_inflow, " MCM"), f"Peak {fmt_number(peak_inflow, ' MCM/day')}")
+    metric_cols[3].metric("Projected Filling", fmt_number(projected_filling, "%"), f"FRL gap {fmt_number(min_frl_gap, ' m')}")
+    metric_cols[4].metric("Risk", str(latest_alert.get("forecast_alert")), metadata.get("model_confidence", "Screening DSS"))
+    metric_cols[5].metric("Nearest River Signal", metadata.get("nearest_gd_station") or "-", fmt_number(metadata.get("nearest_gd_distance_km"), " km"))
+    st.caption(weather_status)
+
+    inflow_long = forecast.melt(
+        id_vars=["lead_day", "forecast_time"],
+        value_vars=["runoff_inflow_mcm", "upstream_inflow_mcm", "release_proxy_mcm", "net_inflow_mcm"],
+        var_name="component",
+        value_name="mcm",
+    )
+    inflow_long["component"] = inflow_long["component"].replace(
+        {
+            "runoff_inflow_mcm": "Rainfall-runoff inflow",
+            "upstream_inflow_mcm": "Upstream river contribution",
+            "release_proxy_mcm": "Release/loss proxy",
+            "net_inflow_mcm": "Net reservoir inflow",
+        }
+    )
+    top_left, top_right = st.columns([1.15, 0.85])
+    with top_left:
+        inflow_chart = (
+            alt.Chart(inflow_long)
+            .mark_line(point=True, strokeWidth=3)
+            .encode(
+                x=alt.X("forecast_time:T", title="Forecast date"),
+                y=alt.Y("mcm:Q", title="Daily volume (MCM)"),
+                color=alt.Color("component:N", title="Component"),
+                tooltip=["forecast_time:T", "component:N", alt.Tooltip("mcm:Q", format=".2f")],
+            )
+            .properties(height=330, title=f"{selected_reservoir}: Inflow Forecast Hydrograph")
+        )
+        st.altair_chart(inflow_chart, use_container_width=True)
+    with top_right:
+        risk_chart = (
+            alt.Chart(forecast.assign(alert_rank=forecast["forecast_alert"].map(alert_sort_value)))
+            .mark_rect(cornerRadius=5)
+            .encode(
+                x=alt.X("forecast_time:T", title="Forecast date"),
+                y=alt.Y("forecast_alert:N", title="Alert"),
+                color=alt.Color(
+                    "forecast_alert:N",
+                    scale=alt.Scale(domain=["Normal", "Watch", "Warning", "Critical"], range=["#2563eb", "#eab308", "#f59e0b", "#ef4444"]),
+                    legend=None,
+                ),
+                tooltip=["forecast_time:T", "forecast_alert:N", "projected_frl_gap_m:Q", "projected_filling_percent:Q"],
+            )
+            .properties(height=160, title="FRL Risk Timeline")
+        )
+        st.altair_chart(risk_chart, use_container_width=True)
+        runoff_chart = (
+            alt.Chart(forecast)
+            .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
+            .encode(
+                x=alt.X("forecast_time:T", title="Forecast date"),
+                y=alt.Y("rainfall_mm:Q", title="Rainfall (mm)"),
+                color=alt.Color("runoff_inflow_mcm:Q", title="Runoff MCM", scale=alt.Scale(scheme="turbo")),
+                tooltip=["forecast_time:T", "rainfall_mm:Q", "runoff_inflow_mcm:Q", "effective_catchment_area_sqkm:Q"],
+            )
+            .properties(height=160, title="Rainfall-Runoff Response")
+        )
+        st.altair_chart(runoff_chart, use_container_width=True)
+
+    storage_long = forecast.melt(
+        id_vars=["lead_day", "forecast_time"],
+        value_vars=["projected_storage_mcm", "projected_filling_percent", "projected_water_level_m", "projected_frl_gap_m"],
+        var_name="metric",
+        value_name="value",
+    )
+    storage_long["metric"] = storage_long["metric"].replace(
+        {
+            "projected_storage_mcm": "Projected storage (MCM)",
+            "projected_filling_percent": "Projected filling (%)",
+            "projected_water_level_m": "Projected water level (m)",
+            "projected_frl_gap_m": "Projected FRL gap (m)",
+        }
+    )
+    storage_chart = (
+        alt.Chart(storage_long)
+        .mark_line(point=True)
+        .encode(
+            x=alt.X("forecast_time:T", title="Forecast date"),
+            y=alt.Y("value:Q", title="Value"),
+            color=alt.Color("metric:N", title="Projection"),
+            tooltip=["forecast_time:T", "metric:N", alt.Tooltip("value:Q", format=".2f")],
+        )
+        .properties(height=320, title="Projected Storage, Filling, Water Level and FRL Gap")
+    )
+    st.altair_chart(storage_chart, use_container_width=True)
+
+    lower_left, lower_right = st.columns([0.55, 0.45])
+    with lower_left:
+        if not observed_inflow.empty:
+            observed_plot = observed_inflow.tail(20).dropna(subset=["observed_at"])
+            obs_chart = (
+                alt.Chart(observed_plot)
+                .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
+                .encode(
+                    x=alt.X("observed_at:T", title="Observed report time"),
+                    y=alt.Y("observed_inflow_mcm:Q", title="Back-calculated inflow (MCM/slot)"),
+                    color=alt.Color("rainfall_daily_mm:Q", title="Rainfall", scale=alt.Scale(scheme="blues")),
+                    tooltip=["observed_at:T", "storage_change_mcm:Q", "observed_inflow_mcm:Q", "observed_inflow_cms:Q", "rainfall_daily_mm:Q"],
+                )
+                .properties(height=285, title="Observed Storage-Change Inflow Back-Calculation")
+            )
+            st.altair_chart(obs_chart, use_container_width=True)
+        else:
+            st.info("Observed inflow back-calculation needs at least two storage observations for the selected reservoir.")
+    with lower_right:
+        if not nearest_series.empty:
+            gd_chart = (
+                alt.Chart(nearest_series)
+                .mark_line(point=True, color="#0f766e")
+                .encode(
+                    x=alt.X("forecast_time:T", title="Forecast time"),
+                    y=alt.Y("meanflow_cms:Q", title="Nearest river flow (cumecs)"),
+                    tooltip=["station_name", "forecast_time:T", "meanflow_cms:Q", "returnperiod"],
+                )
+                .properties(height=285, title=f"Nearest River Forecast: {metadata.get('nearest_gd_station') or '-'}")
+            )
+            st.altair_chart(gd_chart, use_container_width=True)
+        else:
+            st.info("No nearest GD/river forecast series is available for this reservoir.")
+
+    scenario_rows = []
+    for scenario, coeff, up_weight in [
+        ("Dry response", max(0.05, runoff_coefficient * 0.65), max(0.0, upstream_weight * 0.7)),
+        ("Base response", runoff_coefficient, upstream_weight),
+        ("Wet catchment response", min(0.95, runoff_coefficient * 1.35), min(1.0, upstream_weight * 1.25)),
+    ]:
+        scenario_forecast, _, _, _ = build_reservoir_inflow_forecast(
+            selected_reservoir,
+            reservoir_view_frame,
+            map_status_frame,
+            capacity_frame,
+            curve_source,
+            gd_forecasts,
+            daily_weather,
+            coeff,
+            catchment_multiplier,
+            up_weight,
+            release_factor,
+            forecast_days,
+        )
+        if not scenario_forecast.empty:
+            final_row = scenario_forecast.sort_values("lead_day").tail(1).iloc[0]
+            scenario_rows.append(
+                {
+                    "scenario": scenario,
+                    "runoff_coefficient": round(coeff, 2),
+                    "upstream_weight": round(up_weight, 2),
+                    "total_inflow_mcm": round(pd.to_numeric(scenario_forecast["net_inflow_mcm"], errors="coerce").sum(), 3),
+                    "projected_filling_percent": final_row.get("projected_filling_percent"),
+                    "minimum_frl_gap_m": pd.to_numeric(scenario_forecast["projected_frl_gap_m"], errors="coerce").min(),
+                    "forecast_alert": final_row.get("forecast_alert"),
+                }
+            )
+    scenario_df = pd.DataFrame(scenario_rows)
+    if not scenario_df.empty:
+        scenario_chart = (
+            alt.Chart(scenario_df)
+            .mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5)
+            .encode(
+                x=alt.X("scenario:N", title="Runoff scenario"),
+                y=alt.Y("total_inflow_mcm:Q", title="Total inflow (MCM)"),
+                color=alt.Color(
+                    "forecast_alert:N",
+                    title="Alert",
+                    scale=alt.Scale(domain=["Normal", "Watch", "Warning", "Critical"], range=["#2563eb", "#eab308", "#f59e0b", "#ef4444"]),
+                ),
+                tooltip=["scenario", "runoff_coefficient", "upstream_weight", "total_inflow_mcm", "projected_filling_percent", "minimum_frl_gap_m", "forecast_alert"],
+            )
+            .properties(height=260, title="Runoff Sensitivity and Alert Outcome")
+        )
+        st.altair_chart(scenario_chart, use_container_width=True)
+
+    display_cols = [
+        "forecast_time",
+        "rainfall_mm",
+        "runoff_inflow_mcm",
+        "upstream_flow_cms",
+        "upstream_inflow_mcm",
+        "release_proxy_mcm",
+        "net_inflow_mcm",
+        "cumulative_inflow_mcm",
+        "projected_storage_mcm",
+        "projected_filling_percent",
+        "projected_water_level_m",
+        "projected_frl_gap_m",
+        "forecast_alert",
+    ]
+    with st.expander("Review forecast table, scenario table and model assumptions", expanded=False):
+        table_tabs = st.tabs(["Forecast Table", "Sensitivity Scenarios", "Model Assumptions"])
+        with table_tabs[0]:
+            st.dataframe(forecast[display_cols], use_container_width=True, hide_index=True, height=330)
+            st.download_button(
+                "Download Reservoir Inflow Forecast CSV",
+                forecast[display_cols].to_csv(index=False).encode("utf-8"),
+                file_name=f"{selected_reservoir.replace(' ', '_').lower()}_inflow_runoff_forecast.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+        with table_tabs[1]:
+            st.dataframe(scenario_df, use_container_width=True, hide_index=True, height=220)
+        with table_tabs[2]:
+            assumptions = pd.DataFrame(
+                [
+                    {"parameter": "Runoff coefficient", "value": runoff_coefficient, "meaning": "Fraction of forecast rainfall converted to catchment runoff."},
+                    {"parameter": "Effective catchment area", "value": f"{metadata.get('effective_catchment_area_sqkm', math.nan):,.2f} sq.km", "meaning": "Waterbody area multiplied by catchment multiplier until real catchment polygons are connected."},
+                    {"parameter": "Upstream river weight", "value": upstream_weight, "meaning": "Fraction of nearest river forecast converted into reservoir contribution proxy."},
+                    {"parameter": "Release/loss proxy", "value": f"{release_factor:.2f}% storage/day", "meaning": "Screening approximation for releases, spill and losses until detailed gate/outlet rules are connected."},
+                    {"parameter": "Model confidence", "value": metadata.get("model_confidence"), "meaning": "Current model is transparent screening DSS; calibration with observed inflow, CWC and catchment boundaries is recommended."},
+                ]
+            )
+            st.dataframe(assumptions, use_container_width=True, hide_index=True, height=260)
 
 
 def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_reports: list[Path]) -> None:
@@ -10157,7 +10805,7 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
 if "main_dashboard_page" not in st.session_state:
     st.session_state.main_dashboard_page = "Water Watch"
 
-nav_pages = ["Water Watch", "Dam DSS & Analytics", "GD Site Analytics", "Weather Forecast", "3D Flood Scenarios", "Data & Timeseries", "Report Generation", "Administration"]
+nav_pages = ["Water Watch", "Dam DSS & Analytics", "Reservoir Inflow DSS", "GD Site Analytics", "Weather Forecast", "3D Flood Scenarios", "Data & Timeseries", "Report Generation", "Administration"]
 st.markdown('<div class="dashboard-topnav-title">Dashboard Navigation</div>', unsafe_allow_html=True)
 nav_cols = st.columns(len(nav_pages))
 for nav_col, page in zip(nav_cols, nav_pages):
@@ -10195,7 +10843,18 @@ assistant_weather_points = (
     if assistant_weather_frames
     else pd.DataFrame(columns=["point_type", "point_name", "district", "latitude", "longitude"])
 )
-render_dashboard_assistant(map_status, reservoir_view, river_view, gate_view_all, main_page, assistant_weather_points, reservoirs)
+render_dashboard_assistant(
+    map_status,
+    reservoir_view,
+    river_view,
+    gate_view_all,
+    main_page,
+    assistant_weather_points,
+    reservoirs,
+    capacity_view,
+    capacity_curve_view,
+    capacity_curve_fabdem_view,
+)
 
 if main_page == "Administration":
     render_admin_operations(is_admin, map_status, dirs)
@@ -10317,6 +10976,15 @@ if main_page == "Report Generation":
 
 if main_page == "GD Site Analytics":
     render_gd_site_analytics(map_status, reservoir_view)
+
+if main_page == "Reservoir Inflow DSS":
+    render_reservoir_inflow_runoff_dss(
+        map_status,
+        reservoir_view,
+        capacity_view,
+        capacity_curve_view,
+        capacity_curve_fabdem_view,
+    )
 
 if main_page == "Dam DSS & Analytics":
     st.subheader("Dam Locations and District Status")
@@ -11751,6 +12419,7 @@ if main_page == "Water Watch":
                     key="infographic_focus_dam",
                     help="Use this selector to link all Python-side infographic cards and charts to one dam. Map clicks update the in-map linked panel instantly.",
                 )
+                st.session_state["linked_reservoir_context"] = selected_focus_dam
                 focus_rows = focus_source[focus_source["reservoir_name"].astype(str) == selected_focus_dam].copy()
                 focus_history = reservoir_view[
                     reservoir_view.get("reservoir_name", pd.Series(dtype=str)).astype(str) == selected_focus_dam
