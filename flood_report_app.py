@@ -3404,9 +3404,8 @@ def render_selected_cwc_context(selected_station_code: str, cwc_context: dict) -
 
 
 def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFrame) -> None:
-    st.subheader("GD Site Analytics")
     st.markdown(
-        '<div class="panel-note">Observed GD station water levels are reviewed with operational river and basin forecast signals. This page is separated from Dam DSS so more GD-site modules can be added independently.</div>',
+        '<div class="v02-mini-note">Observed GD station water levels are reviewed with operational river and basin forecast signals. This page is separated from Dam DSS so more GD-site modules can be added independently.</div>',
         unsafe_allow_html=True,
     )
     gd_sites = load_gd_sites_swedes(str(GD_SITES_SWEDES_LAYER))
@@ -3455,12 +3454,14 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
         cache_note += f" Latest cached generation: {time_label(latest_cache.iloc[0].get('generated_at'))}; cached rows: {len(cached_gd):,}."
     else:
         cache_note += " Run the GD refresh job to populate station-specific discharge values."
-    st.markdown(f'<div class="panel-note">{escape(cache_note)}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="v02-mini-note">{escape(cache_note)}</div>', unsafe_allow_html=True)
     cwc_context = load_cwc_bias_context(str(CWC_BIAS_CORRECTION_DB))
     render_cwc_bias_readiness_panel(cwc_context)
 
+    st.markdown('<div class="v02-section-label">GD Site Map and River Forecast Layer</div>', unsafe_allow_html=True)
     render_gd_site_leaflet_map(gd_sites, gd_forecasts)
 
+    st.markdown('<div class="v02-section-label">GD Site Filters and Selected Site Intelligence</div>', unsafe_allow_html=True)
     filter_cols = st.columns([0.22, 0.22, 0.32, 0.24])
     gd_filtered = gd_forecasts.copy()
     with filter_cols[0]:
@@ -3557,19 +3558,38 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
         with hist_cols[1]:
             latest_forecast_row = station_forecast.sort_values("forecast_time").head(1)
             linked_summary = "-"
+            selected_alert_level = "Normal"
+            selected_current_flow = math.nan
+            selected_forecast_flow = math.nan
+            selected_return_period = math.nan
             if not latest_forecast_row.empty:
+                selected_alert_level = gd_return_period_alert(
+                    latest_forecast_row.iloc[0].get("return_period"),
+                    latest_forecast_row.iloc[0].get("combined_forecast_flow_cms"),
+                )[0]
+                selected_current_flow = latest_forecast_row.iloc[0].get("current_flow_cms")
+                selected_forecast_flow = latest_forecast_row.iloc[0].get("combined_forecast_flow_cms")
+                selected_return_period = latest_forecast_row.iloc[0].get("return_period")
                 linked_summary = (
                     f"Stream order {fmt_number(latest_forecast_row.iloc[0].get('streamorder'))}, "
                     f"flow {fmt_number(latest_forecast_row.iloc[0].get('current_flow_cms'), ' cumecs')}"
                 )
             st.markdown(
                 f"""
-                <div class="selected-dam-panel">
-                    <span class="district-gauge-title">Selected GD Site Data Window</span>
-                    <span class="district-gauge-meta">Site: {escape(station_name)}</span>
-                    <span class="district-gauge-meta">Historical rows: {len(station_history):,}</span>
-                    <span class="district-gauge-meta">Forecast rows: {len(station_forecast):,}</span>
-                    <span class="district-gauge-meta">River forecast context: {escape(linked_summary)}</span>
+                <div class="v02-intel-panel" style="min-height:0">
+                    <div class="v02-card-title">Selected GD Site Intelligence</div>
+                    <h3>{escape(station_name)}</h3>
+                    <div class="v02-intel-sub">{escape(str(selected_station_code))} | {escape(linked_summary)}</div>
+                    {v02_alert_pill(selected_alert_level)}
+                    <div class="v02-info-grid">
+                        {v02_info_tile("Historical rows", f"{len(station_history):,}")}
+                        {v02_info_tile("Forecast rows", f"{len(station_forecast):,}")}
+                        {v02_info_tile("Current flow", fmt_number(selected_current_flow, " cumecs"))}
+                        {v02_info_tile("Forecast flow", fmt_number(selected_forecast_flow, " cumecs"))}
+                        {v02_info_tile("Return period", fmt_number(selected_return_period))}
+                        {v02_info_tile("Alert", selected_alert_level, alert_color(selected_alert_level))}
+                    </div>
+                    <div class="v02-mini-note">The table below combines available historical archive rows and forecast rows for the selected gauge site.</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -12084,7 +12104,7 @@ if main_page == "Weather Forecast":
     meteo_base = open_meteo_base_url()
     st.markdown(
         f"""
-        <div class="panel-note">
+        <div class="v02-mini-note">
             Weather Data supports town, dam, and district-level decision support using forecast, current condition, and recent weather context.
             A hosted or self-managed meteorological backend can be configured for operational deployments.
         </div>
@@ -12122,6 +12142,7 @@ if main_page == "Weather Forecast":
     if not available_weather_sets:
         st.info("No weather point master data is available. Add towns, dam locations, or district centroids to enable weather forecasting.")
     else:
+        st.markdown('<div class="v02-section-label">Weather Coverage and Selected Location</div>', unsafe_allow_html=True)
         weather_top = st.columns([0.25, 0.32, 0.43])
         with weather_top[0]:
             selected_weather_set = st.selectbox("Weather coverage", available_weather_sets, key="weather_point_set")
@@ -12191,6 +12212,7 @@ if main_page == "Weather Forecast":
             elif daily_weather.empty:
                 st.warning("Weather service returned no daily weather rows for the selected town.")
             else:
+                st.markdown('<div class="v02-section-label">Selected Location Forecast and Current Conditions</div>', unsafe_allow_html=True)
                 if weather_error:
                     st.warning(weather_error)
                 forecast_daily = daily_weather[daily_weather["period"] == "Forecast"].head(7).copy()
@@ -12437,6 +12459,7 @@ if main_page == "Weather Forecast":
 
                 weather_tile_api_key = get_app_secret("openweather_api_key", "OPENWEATHER_API_KEY", "")
                 weather_district_geojson = load_light_district_geojson(str(MP_DISTRICTS_GEOJSON))
+                st.markdown('<div class="v02-section-label">Weather Map Layer</div>', unsafe_allow_html=True)
                 render_weather_town_leaflet_map(
                     summary_towns,
                     selected_town_name,
@@ -12756,24 +12779,6 @@ if main_page == "Water Watch":
         river_station_count = int(river_view["gauge_station"].dropna().nunique()) if not river_view.empty else 0
         active_alerts = int(infographic_alert_counts.get("Critical", 0) + infographic_alert_counts.get("Warning", 0))
 
-        st.markdown(
-            f"""
-            <div class="infographic-frame">
-                <div class="infographic-title">Nita AI WaterWatch Live Situation Board</div>
-                <div class="infographic-subtitle">Presentation-ready snapshot from the selected report window. Values update with the sidebar date, time, district, basin, reservoir, and gauge filters.</div>
-                <div class="infographic-grid">
-                    <div class="infographic-card"><span>Latest Slot</span><b>{escape(str(latest_label))}</b><small>Current observation context</small></div>
-                    <div class="infographic-card"><span>Monitored Dams</span><b>{monitored_dams}</b><small>Mapped reservoirs in view</small></div>
-                    <div class="infographic-card"><span>Avg Filling</span><b>{fmt_number(latest_avg_filling, "%")}</b><small>Latest reservoir average</small></div>
-                    <div class="infographic-card"><span>Live Storage</span><b>{fmt_number(latest_storage, " MCM")}</b><small>Latest summed storage</small></div>
-                    <div class="infographic-card"><span>Active FRL Alerts</span><b>{active_alerts}</b><small>Critical + warning reservoirs</small></div>
-                    <div class="infographic-card"><span>River Gauges</span><b>{river_station_count}</b><small>Gauge stations in selected data</small></div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
         alert_summary = pd.DataFrame(
             [
                 {"alert_level": "Critical", "reservoirs": infographic_alert_counts.get("Critical", 0), "color": "#ef4444"},
@@ -12783,8 +12788,9 @@ if main_page == "Water Watch":
             ]
         )
 
-        map_chart_cols = st.columns([0.68, 0.32])
+        map_chart_cols = st.columns([0.66, 0.34], gap="medium")
         with map_chart_cols[0]:
+            st.markdown('<div class="v02-card-title">Operational Map</div>', unsafe_allow_html=True)
             infographic_map = pd.DataFrame()
             if not map_status.empty and {"latitude", "longitude"}.issubset(map_status.columns):
                 infographic_map = map_status.copy()
@@ -12818,9 +12824,28 @@ if main_page == "Water Watch":
                         load_light_district_geojson(str(MP_DISTRICTS_GEOJSON)),
                     )
         with map_chart_cols[1]:
+            st.markdown(
+                f"""
+                <div class="v02-intel-panel" style="min-height:0;padding:.82rem">
+                  <div class="v02-card-title">Situation Board</div>
+                  <h3>WaterWatch Live</h3>
+                  <div class="v02-intel-sub">Active report context: {escape(str(latest_label))}</div>
+                  <div class="v02-info-grid">
+                    {v02_info_tile("Monitored dams", monitored_dams)}
+                    {v02_info_tile("Avg filling", fmt_number(latest_avg_filling, "%"))}
+                    {v02_info_tile("Live storage", fmt_number(latest_storage, " MCM"))}
+                    {v02_info_tile("FRL alerts", active_alerts, "#ef4444" if active_alerts else "#0f766e")}
+                    {v02_info_tile("River gauges", river_station_count)}
+                    {v02_info_tile("Latest slot", latest_label)}
+                  </div>
+                  <div class="v02-mini-note">Values respond to sidebar report, district, basin, reservoir and gauge filters.</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
             alert_chart = (
                 alt.Chart(alert_summary)
-                .mark_arc(innerRadius=82, outerRadius=144)
+                .mark_arc(innerRadius=60, outerRadius=105)
                 .encode(
                     theta=alt.Theta("reservoirs:Q"),
                     color=alt.Color(
@@ -12833,7 +12858,7 @@ if main_page == "Water Watch":
                     ),
                     tooltip=["alert_level", "reservoirs"],
                 )
-                .properties(height=375, title="FRL Alert Composition")
+                .properties(height=250, title="FRL Alert Composition")
             )
             st.altair_chart(alert_chart, use_container_width=True)
 
@@ -12888,23 +12913,21 @@ if main_page == "Water Watch":
                 focus_cols = st.columns([0.42, 0.58])
                 with focus_cols[0]:
                     focus_alert = str(focus_latest.get("alert_level") or "Normal")
-                    focus_color = {
-                        "Critical": "#ef4444",
-                        "Warning": "#f59e0b",
-                        "Watch": "#eab308",
-                        "Normal": "#2563eb",
-                    }.get(focus_alert, "#2563eb")
+                    focus_color = alert_color(focus_alert)
                     st.markdown(
                         f"""
-                        <div class="infographic-frame" style="border-left:5px solid {focus_color};padding:.8rem">
-                            <div class="infographic-title" style="font-size:1rem">{escape(selected_focus_dam)} Focus</div>
-                            <div class="infographic-grid" style="grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem">
-                                <div class="infographic-card"><span>District</span><b>{escape(str(focus_latest.get("district_label") or focus_latest.get("map_district") or focus_latest.get("district") or "-"))}</b><small>administrative context</small></div>
-                                <div class="infographic-card"><span>Alert</span><b style="color:{focus_color}">{escape(focus_alert)}</b><small>FRL/filling status</small></div>
-                                <div class="infographic-card"><span>Filling</span><b>{fmt_number(focus_latest.get("display_filling"), "%")}</b><small>latest selected slot</small></div>
-                                <div class="infographic-card"><span>FRL Gap</span><b>{fmt_number(focus_latest.get("frl_gap_m"), " m")}</b><small>headroom to FRL</small></div>
+                        <div class="v02-intel-panel" style="min-height:0;border-left:5px solid {focus_color}">
+                            <div class="v02-card-title">Selected Reservoir Focus</div>
+                            <h3>{escape(selected_focus_dam)}</h3>
+                            <div class="v02-intel-sub">{escape(str(focus_latest.get("district_label") or focus_latest.get("map_district") or focus_latest.get("district") or "-"))} | {escape(str(focus_latest.get("sub_basin") or focus_latest.get("major_basin") or "Reservoir DSS"))}</div>
+                            {v02_alert_pill(focus_alert)}
+                            <div class="v02-info-grid">
+                                {v02_info_tile("Filling", fmt_number(focus_latest.get("display_filling"), "%"))}
+                                {v02_info_tile("FRL gap", fmt_number(focus_latest.get("frl_gap_m"), " m"), focus_color)}
+                                {v02_info_tile("Water level", fmt_number(focus_latest.get("water_level_m"), " m"))}
+                                {v02_info_tile("Rainfall", fmt_number(focus_latest.get("rainfall_daily_mm"), " mm"))}
                             </div>
-                            <div style="margin-top:.5rem;color:#64748b;font-size:.78rem">Data source: {escape(str(focus_latest.get("status_data_source") or "Parsed PDF"))}</div>
+                            <div class="v02-mini-note">Source: {escape(str(focus_latest.get("status_data_source") or "Parsed PDF"))}. This selected reservoir links Water Watch to Dam DSS and Inflow DSS.</div>
                         </div>
                         """,
                         unsafe_allow_html=True,
