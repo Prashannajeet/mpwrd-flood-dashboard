@@ -10689,10 +10689,20 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
                 st.error("Invalid admin credentials.")
         return
 
+    admin_overview_cols = st.columns(4)
+    admin_overview_cols[0].metric("Parsed Reports", len(parsed_reports))
+    admin_overview_cols[1].metric("Mapped Dams", int(map_status["dam_name"].dropna().nunique()) if not map_status.empty and "dam_name" in map_status else 0)
+    admin_overview_cols[2].metric("Alert Log", len(st.session_state.get("alert_test_log", [])))
+    admin_overview_cols[3].metric("Admin Session", "Unlocked")
+    st.markdown(
+        '<div class="v02-mini-note">Administration is the controlled workspace for data ingestion, validation, alert communication, scheduled refresh, audit review and version governance.</div>',
+        unsafe_allow_html=True,
+    )
+
     admin_tabs = st.tabs(["PDF Upload & Data Refresh", "Manual Data Entry", "Messaging Alerts", "Database Sync", "Audit Log", "Visitor Analytics", "Version Governance"])
     with admin_tabs[0]:
         st.markdown(
-            '<div class="panel-note">Upload official water resources report PDFs. The parser creates a new parsed report folder that becomes available in the dashboard report selector.</div>',
+            '<div class="v02-section-label">PDF Upload and OCR Processing</div><div class="v02-mini-note">Upload official water resources report PDFs. The parser creates a new parsed report folder that becomes available in the dashboard report selector.</div>',
             unsafe_allow_html=True,
         )
         upload_cols = st.columns([0.58, 0.42])
@@ -10775,7 +10785,7 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
 
     with admin_tabs[1]:
         st.markdown(
-            '<div class="panel-note">Use this as a secondary source when a PDF is delayed or OCR needs correction. Saved rows are written in the same parsed-report format as uploaded PDFs.</div>',
+            '<div class="v02-section-label">Manual Data Entry</div><div class="v02-mini-note">Use this as a secondary source when a PDF is delayed or OCR needs correction. Saved rows are written in the same parsed-report format as uploaded PDFs.</div>',
             unsafe_allow_html=True,
         )
         entry_meta_cols = st.columns(3)
@@ -10891,7 +10901,7 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
 
     with admin_tabs[2]:
         st.markdown(
-            '<div class="panel-note">Configure alert thresholds and prepare Email, SMS and WhatsApp messages. Email can send through HTTPS email API providers for online deployments or SMTP for local deployments; SMS/WhatsApp remain preview/link mode until provider gateways are connected.</div>',
+            '<div class="v02-section-label">Alert Messaging Console</div><div class="v02-mini-note">Configure alert thresholds and prepare Email, SMS and WhatsApp messages. Email can send through HTTPS email API providers for online deployments or SMTP for local deployments; SMS/WhatsApp remain preview/link mode until provider gateways are connected.</div>',
             unsafe_allow_html=True,
         )
         if "alert_test_log" not in st.session_state:
@@ -11200,10 +11210,11 @@ if main_page == "Report Generation":
         st.error("ReportLab is not installed. Install reportlab to enable professional PDF report generation.")
     else:
         st.markdown(
-            '<div class="panel-note">Generate professional PDF reports from the active dashboard filters. Reports include static report maps, charts, and concise tables for briefings and record keeping.</div>',
+            '<div class="v02-mini-note">Generate professional PDF reports from the active dashboard filters. Reports include static report maps, charts, and concise tables for briefings and record keeping.</div>',
             unsafe_allow_html=True,
         )
         latest_label_for_report = time_label(latest_reservoirs["observed_at"].dropna().max()) if not latest_reservoirs.empty else "Current filter"
+        st.markdown('<div class="v02-section-label">Report Template Gallery</div>', unsafe_allow_html=True)
         report_cols = st.columns(4)
 
         snapshot_kpis = pd.DataFrame(
@@ -11228,6 +11239,10 @@ if main_page == "Report Generation":
         ) if not latest_fill.empty else pd.DataFrame()
 
         with report_cols[0]:
+            st.markdown(
+                '<div class="v02-card"><div class="v02-card-title">Executive Snapshot</div><div class="v02-mini-note">Map, filling bands, top/least reservoirs and core tables.</div></div>',
+                unsafe_allow_html=True,
+            )
             infographic_pdf = build_pdf_report(
                 "WaterWatch Live - Enabled with AI Report",
                 "Snapshot report with maps, filling bands, top/least reservoirs and key tables.",
@@ -11243,6 +11258,10 @@ if main_page == "Report Generation":
             st.download_button("Download WaterWatch Report", infographic_pdf, "mpwrd_waterwatch_live_report.pdf", "application/pdf", use_container_width=True)
 
         with report_cols[1]:
+            st.markdown(
+                '<div class="v02-card"><div class="v02-card-title">Dam DSS Report</div><div class="v02-mini-note">FRL alerts, dam map context, filling ranking and DSS table.</div></div>',
+                unsafe_allow_html=True,
+            )
             dss_alerts = map_status[map_status.get("alert_level", pd.Series(dtype=str)).isin(["Critical", "Warning", "Watch"])].copy() if not map_status.empty else pd.DataFrame()
             dss_pdf = build_pdf_report(
                 "Dam DSS & Analytics Report",
@@ -11257,6 +11276,10 @@ if main_page == "Report Generation":
             st.download_button("Download Dam DSS Report", dss_pdf, "mpwrd_dam_dss_analytics_report.pdf", "application/pdf", use_container_width=True)
 
         with report_cols[2]:
+            st.markdown(
+                '<div class="v02-card"><div class="v02-card-title">Weather Forecast Report</div><div class="v02-mini-note">Town-wise current weather, map and forecast-risk indicators.</div></div>',
+                unsafe_allow_html=True,
+            )
             towns_report = read_csv(MP_TOWNS_CSV)
             if not towns_report.empty:
                 towns_report["latitude"] = pd.to_numeric(towns_report["latitude"], errors="coerce")
@@ -11287,6 +11310,10 @@ if main_page == "Report Generation":
                 st.caption(f"Prepared current weather report for {st.session_state.get('weather_pdf_rows', 0)} towns.")
 
         with report_cols[3]:
+            st.markdown(
+                '<div class="v02-card"><div class="v02-card-title">Season Data Report</div><div class="v02-mini-note">PDF-template time series for reservoir, river and gate observations.</div></div>',
+                unsafe_allow_html=True,
+            )
             season_summary = (
                 reservoir_view.assign(
                     observed_at=pd.to_datetime(reservoir_view["observed_at"], errors="coerce"),
@@ -13225,24 +13252,33 @@ if main_page == "Data & Timeseries":
         "Chronological reservoir, river, gate, capacity and export analytics with filters for date, time slot, district, basin, reservoir and gauge.",
         "Historical Analytics",
     )
-    st.subheader("Reservoir Trends and Latest Ranking")
+    st.markdown('<div class="v02-section-label">Reservoir Trends and Latest Ranking</div>', unsafe_allow_html=True)
     if reservoir_view.empty:
         st.info("No reservoir observations match the current filters.")
     else:
-        metric_label = st.selectbox("Reservoir metric", list(RESERVOIR_METRICS), index=0)
-        metric_col, metric_unit = RESERVOIR_METRICS[metric_label]
         reservoir_options = sorted(reservoir_view["reservoir_name"].dropna().unique())
         default_reservoirs = [name for name in ["Bansagar", "Gandhisagar", "Kolar", "Tawa"] if name in reservoir_options]
-        selected_reservoirs = st.multiselect(
-            "Reservoirs",
-            reservoir_options,
-            default=default_reservoirs or reservoir_options[: min(6, len(reservoir_options))],
-        )
+        trend_control_cols = st.columns([0.24, 0.52, 0.24])
+        with trend_control_cols[0]:
+            metric_label = st.selectbox("Reservoir metric", list(RESERVOIR_METRICS), index=0)
+        metric_col, metric_unit = RESERVOIR_METRICS[metric_label]
+        with trend_control_cols[1]:
+            selected_reservoirs = st.multiselect(
+                "Reservoirs",
+                reservoir_options,
+                default=default_reservoirs or reservoir_options[: min(6, len(reservoir_options))],
+            )
+        with trend_control_cols[2]:
+            rank_count = st.slider("Ranking count", min_value=8, max_value=30, value=16, step=4)
         trend_df = reservoir_view[reservoir_view["reservoir_name"].isin(selected_reservoirs)].dropna(subset=[metric_col])
         latest_time = max(reservoir_view["observed_at"].dropna())
         snapshot = reservoir_view[reservoir_view["observed_at"] == latest_time].dropna(subset=[metric_col])
-        rank_count = st.slider("Reservoirs in latest ranking", min_value=8, max_value=30, value=16, step=4)
         rank_df = snapshot.nlargest(rank_count, metric_col)
+        trend_kpis = st.columns(4)
+        trend_kpis[0].metric("Latest Slot", time_label(latest_time))
+        trend_kpis[1].metric("Observation Rows", f"{len(reservoir_view):,}")
+        trend_kpis[2].metric("Reservoirs", int(reservoir_view["reservoir_name"].dropna().nunique()))
+        trend_kpis[3].metric("Selected Series", len(selected_reservoirs))
         res_left, res_right = st.columns([1.2, 0.8])
         with res_left:
             trend_chart = (
@@ -13274,7 +13310,7 @@ if main_page == "Data & Timeseries":
     )
 
     with tab_time:
-        st.subheader("Observation Timeline")
+        st.markdown('<div class="v02-section-label">Observation Timeline</div>', unsafe_allow_html=True)
         if reservoir_view.empty:
             st.info("No reservoir observations match the current filters.")
         else:
@@ -13340,7 +13376,7 @@ if main_page == "Data & Timeseries":
                 st.altair_chart(river_chart, use_container_width=True)
 
     with tab_rivers:
-        st.subheader("River Gauge Trends Over Time")
+        st.markdown('<div class="v02-section-label">River Gauge Trends Over Time</div>', unsafe_allow_html=True)
         if river_view.empty:
             st.info("No river observations match the current filters.")
         else:
