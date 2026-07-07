@@ -1228,6 +1228,564 @@ st.markdown(
         background: #ffffff;
         box-shadow: 0 12px 28px rgba(15, 23, 42, 0.04);
     }
+
+    /* WaterWatch V02 concept theme override */
+    :root {
+        --bg: #f7fbff;
+        --panel: #ffffff;
+        --panel-soft: #f5f9fd;
+        --line: #d7e5f2;
+        --line-strong: #82cbe2;
+        --text: #06224a;
+        --muted: #536a86;
+        --nav: #06345d;
+        --nav-deep: #042746;
+        --teal: #008c8d;
+        --teal-bright: #00a6a0;
+        --blue: #075fc8;
+        --cyan: #0697bd;
+        --green: #2ca02c;
+        --amber: #ff8a00;
+        --red: #ef1d2f;
+        --violet: #6e49c9;
+        --shadow-sm: 0 8px 20px rgba(6, 34, 74, 0.06);
+        --shadow-md: 0 16px 36px rgba(6, 34, 74, 0.08);
+    }
+    html,
+    body,
+    [data-testid="stAppViewContainer"] {
+        background: linear-gradient(180deg, #ffffff 0%, #f8fbff 54%, #f3f8fd 100%) !important;
+        color: var(--text) !important;
+        font-family: "Roboto", "Inter", "Segoe UI", Arial, sans-serif !important;
+    }
+    .stApp {
+        background: transparent !important;
+    }
+    .block-container {
+        max-width: 1880px !important;
+        padding: 0.35rem 0.65rem 1.4rem !important;
+    }
+    h1, h2, h3, h4, h5, h6, p, label, div, span {
+        color: var(--text);
+        font-family: "Roboto", "Inter", "Segoe UI", Arial, sans-serif !important;
+        letter-spacing: 0 !important;
+    }
+    span[class*="material"],
+    i[class*="material"],
+    [data-testid="stIconMaterial"] {
+        font-family: "Material Symbols Rounded", "Material Symbols Outlined", "Material Icons" !important;
+        font-weight: 400 !important;
+        font-style: normal !important;
+        letter-spacing: normal !important;
+        text-transform: none !important;
+        line-height: 1 !important;
+    }
+    h1 {
+        font-size: 1.8rem !important;
+        font-weight: 900 !important;
+        line-height: 1.12 !important;
+    }
+    h2, h3 {
+        font-weight: 850 !important;
+    }
+    [data-testid="stSidebar"] {
+        background: #ffffff !important;
+        border-right: 1px solid var(--line) !important;
+        box-shadow: 8px 0 26px rgba(6, 34, 74, 0.05);
+    }
+    .masthead {
+        display: block;
+        border: 0 !important;
+        border-bottom: 1px solid var(--line) !important;
+        border-radius: 0 !important;
+        background: #ffffff !important;
+        box-shadow: none !important;
+        margin: 0 0 0.35rem !important;
+        padding: 0.42rem 0.7rem 0.46rem !important;
+        overflow: visible !important;
+    }
+    .masthead::before {
+        display: none !important;
+    }
+    .masthead-top {
+        align-items: center !important;
+        gap: 1rem !important;
+    }
+    .brand-lockup {
+        gap: 0.82rem !important;
+    }
+    .brand-logo,
+    .sidebar-logo {
+        border-radius: 7px !important;
+        background: linear-gradient(145deg, #0a65c8 0%, #00a58c 72%) !important;
+        box-shadow: 0 8px 18px rgba(0, 130, 150, 0.16) !important;
+        color: #ffffff !important;
+    }
+    .brand-logo {
+        width: 44px !important;
+        height: 44px !important;
+        font-size: 1.22rem !important;
+    }
+    .brand-kicker {
+        color: var(--nav) !important;
+        font-size: 0.66rem !important;
+        font-weight: 900 !important;
+        letter-spacing: 0.04em !important;
+    }
+    .brand-name {
+        color: var(--nav-deep) !important;
+        font-size: 0.98rem !important;
+        font-weight: 900 !important;
+    }
+    .brand-domain {
+        color: #275b7c !important;
+        font-size: 0.68rem !important;
+        font-weight: 650 !important;
+    }
+    .title-group {
+        border-left: 1px solid var(--line) !important;
+        padding-left: 1.05rem !important;
+        margin-left: 0.35rem !important;
+    }
+    .title {
+        color: var(--nav-deep) !important;
+        font-size: 1.78rem !important;
+        font-weight: 900 !important;
+        line-height: 1.05 !important;
+    }
+    .subtitle {
+        color: #00619d !important;
+        font-size: 0.86rem !important;
+        font-weight: 600 !important;
+        margin-top: 0.24rem !important;
+    }
+    .meta-row {
+        gap: 0.5rem !important;
+        align-items: center !important;
+    }
+    .meta {
+        background: #ffffff !important;
+        border: 1px solid #cfdeec !important;
+        border-radius: 6px !important;
+        box-shadow: none !important;
+        padding: 0.38rem 0.62rem !important;
+        min-height: 32px;
+    }
+    .meta-label {
+        color: #60748f !important;
+        font-size: 0.56rem !important;
+        font-weight: 800 !important;
+        margin-bottom: 0.1rem !important;
+    }
+    .meta-value {
+        color: var(--nav-deep) !important;
+        font-size: 0.78rem !important;
+        font-weight: 850 !important;
+    }
+    .sidebar-brand,
+    .visitor-counter-card {
+        background: #ffffff !important;
+        border: 1px solid var(--line) !important;
+        border-radius: 8px !important;
+        box-shadow: var(--shadow-sm) !important;
+    }
+    .sidebar-brand-title,
+    .visitor-counter-card b {
+        color: var(--nav-deep) !important;
+    }
+    .sidebar-brand-subtitle,
+    .visitor-counter-card span {
+        color: var(--teal) !important;
+    }
+
+    .dashboard-topnav-title {
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        overflow: hidden !important;
+        color: transparent !important;
+        background: transparent !important;
+        box-shadow: none !important;
+    }
+    .dashboard-topnav-title + div[data-testid="stHorizontalBlock"] {
+        background: linear-gradient(180deg, var(--nav) 0%, var(--nav-deep) 100%) !important;
+        border: 1px solid #0b416e !important;
+        border-radius: 6px !important;
+        box-shadow: 0 10px 24px rgba(4, 39, 70, 0.16) !important;
+        padding: 0.22rem !important;
+        margin: 0.15rem 0 0.55rem !important;
+        gap: 0 !important;
+        overflow-x: auto !important;
+        overflow-y: visible !important;
+        flex-wrap: nowrap !important;
+        scrollbar-width: thin;
+    }
+    .dashboard-topnav-title + div[data-testid="stHorizontalBlock"] > div {
+        border-left: 1px solid rgba(255,255,255,0.08);
+        padding: 0 !important;
+        flex: 1 0 132px !important;
+        min-width: 132px !important;
+    }
+    .dashboard-topnav-title + div[data-testid="stHorizontalBlock"] > div:first-child {
+        border-left: 0;
+    }
+    .dashboard-topnav-title + div[data-testid="stHorizontalBlock"] button {
+        min-height: 45px !important;
+        width: 100% !important;
+        border: 0 !important;
+        border-radius: 5px !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        color: #ffffff !important;
+        font-size: 0.82rem !important;
+        font-weight: 800 !important;
+        position: relative;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+    .dashboard-topnav-title + div[data-testid="stHorizontalBlock"] button p {
+        color: #ffffff !important;
+        font-weight: 800 !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+    }
+    .dashboard-topnav-title + div[data-testid="stHorizontalBlock"] button:hover {
+        background: rgba(255,255,255,0.10) !important;
+        border: 0 !important;
+    }
+    .dashboard-topnav-title + div[data-testid="stHorizontalBlock"] button[data-testid="baseButton-primary"],
+    .dashboard-topnav-title + div[data-testid="stHorizontalBlock"] button[kind="primary"] {
+        background: linear-gradient(180deg, var(--teal-bright) 0%, var(--teal) 100%) !important;
+        box-shadow: inset 0 -3px 0 rgba(255,255,255,0.12), 0 8px 18px rgba(0, 140, 141, 0.28) !important;
+    }
+    .dashboard-topnav-title + div[data-testid="stHorizontalBlock"] button[data-testid="baseButton-primary"]::after,
+    .dashboard-topnav-title + div[data-testid="stHorizontalBlock"] button[kind="primary"]::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: -8px;
+        transform: translateX(-50%);
+        border-left: 7px solid transparent;
+        border-right: 7px solid transparent;
+        border-top: 8px solid var(--teal);
+    }
+    .dashboard-topnav-active {
+        display: none !important;
+    }
+    .waterwatch-nav {
+        display: flex;
+        align-items: stretch;
+        gap: 0;
+        background: linear-gradient(180deg, var(--nav) 0%, var(--nav-deep) 100%);
+        border: 1px solid #0b416e;
+        border-radius: 6px;
+        box-shadow: 0 10px 24px rgba(4, 39, 70, 0.16);
+        margin: 0.15rem 0 0.55rem;
+        padding: 0.22rem;
+        overflow-x: auto;
+        overflow-y: visible;
+        scrollbar-width: thin;
+    }
+    .waterwatch-nav a {
+        position: relative;
+        flex: 1 0 132px;
+        min-height: 45px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.45rem 0.65rem;
+        color: #ffffff !important;
+        text-decoration: none !important;
+        font-size: 0.82rem;
+        font-weight: 800;
+        line-height: 1.15;
+        text-align: center;
+        white-space: nowrap;
+        border-left: 1px solid rgba(255,255,255,0.08);
+        border-radius: 5px;
+    }
+    .waterwatch-nav a:first-child {
+        border-left: 0;
+    }
+    .waterwatch-nav a:hover {
+        background: rgba(255,255,255,0.10);
+        color: #ffffff !important;
+    }
+    .waterwatch-nav a.active {
+        background: linear-gradient(180deg, var(--teal-bright) 0%, var(--teal) 100%);
+        box-shadow: inset 0 -3px 0 rgba(255,255,255,0.12), 0 8px 18px rgba(0, 140, 141, 0.28);
+        font-weight: 900;
+    }
+    .waterwatch-nav a.active::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: -8px;
+        transform: translateX(-50%);
+        border-left: 7px solid transparent;
+        border-right: 7px solid transparent;
+        border-top: 8px solid var(--teal);
+    }
+
+    .v02-module-banner {
+        border: 1px solid var(--line) !important;
+        border-radius: 7px !important;
+        background: #ffffff !important;
+        box-shadow: var(--shadow-sm) !important;
+        margin: 0.3rem 0 0.58rem !important;
+        padding: 0.66rem 0.82rem !important;
+    }
+    .v02-module-banner h2 {
+        color: var(--nav-deep) !important;
+        font-size: 1rem !important;
+        font-weight: 900 !important;
+    }
+    .v02-module-banner p {
+        color: #46617e !important;
+        font-size: 0.76rem !important;
+        font-weight: 560 !important;
+    }
+    .v02-module-tag {
+        border: 1px solid #bdd5e9 !important;
+        border-radius: 6px !important;
+        background: #f8fbff !important;
+        color: var(--nav) !important;
+        box-shadow: none !important;
+    }
+    .v02-card,
+    .v02-intel-panel,
+    .v02-chart-row,
+    .selected-dam-panel,
+    .infographic-frame,
+    .glofas-card,
+    .api-card,
+    .side-kpi-panel,
+    .district-gauge-card,
+    div[data-testid="stExpander"],
+    [data-testid="stTabs"] {
+        background: #ffffff !important;
+        border: 1px solid var(--line-strong) !important;
+        border-radius: 8px !important;
+        box-shadow: var(--shadow-sm) !important;
+    }
+    .v02-card,
+    .selected-dam-panel,
+    .infographic-frame,
+    .glofas-card,
+    .api-card,
+    .side-kpi-panel,
+    .district-gauge-card {
+        padding: 0.72rem !important;
+    }
+    .v02-card-title,
+    .v02-section-label {
+        color: var(--teal) !important;
+        font-size: 0.72rem !important;
+        font-weight: 900 !important;
+        letter-spacing: 0.055em !important;
+        text-transform: uppercase !important;
+    }
+    .v02-intel-panel {
+        padding: 0 !important;
+        overflow: hidden;
+    }
+    .v02-intel-panel .v02-card-title:first-child,
+    .selected-dam-panel .v02-card-title:first-child {
+        margin: -0.72rem -0.72rem 0.72rem !important;
+        padding: 0.7rem 0.9rem !important;
+        background: linear-gradient(180deg, #078c91 0%, #007d83 100%) !important;
+        color: #ffffff !important;
+        border-radius: 7px 7px 0 0 !important;
+        font-size: 0.86rem !important;
+        letter-spacing: 0 !important;
+        text-transform: none !important;
+    }
+    .v02-intel-panel h3 {
+        color: var(--red) !important;
+        font-size: 1.3rem !important;
+        font-weight: 900 !important;
+    }
+    .v02-intel-sub {
+        color: #36516d !important;
+        font-size: 0.76rem !important;
+        font-weight: 600 !important;
+    }
+    .v02-info-grid {
+        gap: 0.56rem !important;
+    }
+    .v02-info-tile,
+    .side-kpi,
+    .infographic-card {
+        background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%) !important;
+        border: 1px solid #d7e5f2 !important;
+        border-radius: 7px !important;
+        box-shadow: none !important;
+    }
+    .v02-info-tile span,
+    .side-kpi span,
+    .infographic-card span,
+    .glofas-card span {
+        color: #49627e !important;
+        font-size: 0.64rem !important;
+        font-weight: 850 !important;
+        text-transform: uppercase !important;
+    }
+    .v02-info-tile b,
+    .side-kpi b,
+    .infographic-card b,
+    .glofas-card b {
+        color: var(--nav-deep) !important;
+        font-weight: 900 !important;
+    }
+    .infographic-title {
+        color: var(--nav-deep) !important;
+        font-size: 1.05rem !important;
+        font-weight: 900 !important;
+    }
+    .infographic-subtitle,
+    .panel-note,
+    .v02-mini-note {
+        color: #526a85 !important;
+        font-size: 0.76rem !important;
+        line-height: 1.38 !important;
+        font-weight: 560 !important;
+    }
+    .infographic-card {
+        border-top: 3px solid var(--teal) !important;
+        min-height: 66px !important;
+    }
+    .alert-legend-panel {
+        background: #ffffff !important;
+        border: 1px solid #ffd7a8 !important;
+        border-radius: 8px !important;
+        box-shadow: var(--shadow-sm) !important;
+    }
+
+    div[data-testid="stMetric"] {
+        background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%) !important;
+        border: 1px solid #bcdff0 !important;
+        border-radius: 8px !important;
+        box-shadow: var(--shadow-sm) !important;
+        padding: 0.65rem 0.78rem !important;
+        min-height: 74px !important;
+    }
+    div[data-testid="stMetricLabel"] p {
+        color: #506884 !important;
+        font-size: 0.66rem !important;
+        font-weight: 850 !important;
+        text-transform: uppercase !important;
+    }
+    div[data-testid="stMetricValue"] {
+        color: var(--nav-deep) !important;
+        font-size: 1.36rem !important;
+        font-weight: 900 !important;
+    }
+    div[data-testid="stMetricDelta"] {
+        color: var(--teal) !important;
+    }
+
+    div[data-testid="stButton"] button {
+        border-radius: 6px !important;
+        min-height: 36px !important;
+        font-weight: 800 !important;
+        border: 1px solid #bcd3e8 !important;
+        background: #ffffff !important;
+        color: var(--nav) !important;
+        box-shadow: none !important;
+    }
+    div[data-testid="stButton"] button p {
+        color: inherit !important;
+        font-weight: inherit !important;
+    }
+    div[data-testid="stButton"] button:hover {
+        border-color: var(--teal) !important;
+        color: var(--teal) !important;
+        background: #f2fbfc !important;
+    }
+    div[data-testid="stButton"] button[kind="primary"],
+    div[data-testid="stButton"] button[data-testid="baseButton-primary"] {
+        background: linear-gradient(180deg, var(--teal-bright), var(--teal)) !important;
+        border-color: var(--teal) !important;
+        color: #ffffff !important;
+        box-shadow: 0 8px 18px rgba(0, 140, 141, 0.18) !important;
+    }
+
+    [data-testid="stTabs"] {
+        padding: 0.38rem !important;
+    }
+    button[data-baseweb="tab"] {
+        color: #49627e !important;
+        border-radius: 6px 6px 0 0 !important;
+        font-weight: 800 !important;
+        padding: 0.55rem 0.78rem !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        color: var(--teal) !important;
+        border-bottom: 3px solid var(--teal-bright) !important;
+        font-weight: 900 !important;
+    }
+    [data-testid="stSelectbox"] > div,
+    [data-testid="stMultiSelect"] > div,
+    [data-testid="stTextInput"] > div,
+    [data-testid="stNumberInput"] > div,
+    [data-testid="stDateInput"] > div {
+        border-radius: 6px !important;
+    }
+    [data-baseweb="select"] > div,
+    [data-baseweb="input"] > div,
+    textarea {
+        background: #ffffff !important;
+        border-color: #bfd3e7 !important;
+        border-radius: 6px !important;
+    }
+    div[data-testid="stDataFrame"],
+    div[data-testid="stTable"] {
+        border: 1px solid var(--line) !important;
+        border-radius: 8px !important;
+        overflow: hidden !important;
+        box-shadow: var(--shadow-sm) !important;
+    }
+    div[data-testid="stVegaLiteChart"],
+    div[data-testid="stPlotlyChart"],
+    iframe {
+        border-radius: 8px !important;
+    }
+    [data-testid="stMarkdownContainer"] code {
+        color: var(--teal) !important;
+        background: #eefafa !important;
+        border-radius: 4px !important;
+    }
+    hr {
+        border-color: var(--line) !important;
+        margin: 0.7rem 0 !important;
+    }
+
+    @media (max-width: 1100px) {
+        .title {
+            font-size: 1.38rem !important;
+        }
+        .dashboard-topnav-title + div[data-testid="stHorizontalBlock"] button {
+            min-height: 40px !important;
+            font-size: 0.74rem !important;
+        }
+    }
+    @media (max-width: 900px) {
+        .masthead-top {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+        }
+        .title-group {
+            border-left: 0 !important;
+            margin-left: 0 !important;
+            padding-left: 0 !important;
+        }
+        .meta-row {
+            justify-content: flex-start !important;
+        }
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -11147,14 +11705,18 @@ if "main_dashboard_page" not in st.session_state:
     st.session_state.main_dashboard_page = "Water Watch"
 
 nav_pages = ["Water Watch", "Dam DSS & Analytics", "Reservoir Inflow DSS", "GD Site Analytics", "Weather Forecast", "3D Flood Scenarios", "Data & Timeseries", "Report Generation", "Administration"]
-st.markdown('<div class="dashboard-topnav-title">Dashboard Navigation</div>', unsafe_allow_html=True)
-nav_cols = st.columns(len(nav_pages))
-for nav_col, page in zip(nav_cols, nav_pages):
-    if nav_col.button(page, key=f"main_nav_{page}", type="primary" if page == st.session_state.main_dashboard_page else "secondary", use_container_width=True):
-        st.session_state.main_dashboard_page = page
-        st.rerun()
+query_page = st.query_params.get("page", "")
+if isinstance(query_page, list):
+    query_page = query_page[0] if query_page else ""
+if query_page in nav_pages:
+    st.session_state.main_dashboard_page = query_page
 main_page = st.session_state.main_dashboard_page
-st.markdown(f'<div class="dashboard-topnav-active">Active page: <b>{escape(main_page)}</b></div>', unsafe_allow_html=True)
+nav_items = []
+for page in nav_pages:
+    active_class = " active" if page == main_page else ""
+    href = f"?page={urllib.parse.quote(page)}"
+    nav_items.append(f'<a class="{active_class}" href="{href}">{escape(page)}</a>')
+st.markdown('<nav class="waterwatch-nav" aria-label="Dashboard navigation">' + "".join(nav_items) + "</nav>", unsafe_allow_html=True)
 
 assistant_weather_frames = []
 assistant_dam_weather = weather_points_from_dams(map_status)
