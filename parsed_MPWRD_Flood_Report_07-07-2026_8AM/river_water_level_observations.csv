@@ -1,0 +1,31 @@
+source_row_no,river_name,gauge_station,district,danger_or_max_water_level_m,observed_at,water_level_m
+1,Betwa,Neemkheda,Raisen,431.5,2026-07-06 16:00:00,415.1
+1,Betwa,Neemkheda,Raisen,431.5,2026-07-06 20:00:00,415.1
+1,Betwa,Neemkheda,Raisen,431.5,2026-07-07 08:00:00,415.1
+2,Chambal,Nagda,Ujjain,460.9,2026-07-06 16:00:00,450.4
+2,Chambal,Nagda,Ujjain,460.9,2026-07-06 20:00:00,450.4
+2,Chambal,Nagda,Ujjain,460.9,2026-07-07 08:00:00,450.4
+3,Chambal,Barkheda,Ratlam,419.1,2026-07-06 16:00:00,408.6
+3,Chambal,Barkheda,Ratlam,419.1,2026-07-06 20:00:00,408.6
+3,Chambal,Barkheda,Ratlam,419.1,2026-07-07 08:00:00,408.6
+4,Ken,Pandwan,Panna,296.75,2026-07-06 16:00:00,289.18
+4,Ken,Pandwan,Panna,296.75,2026-07-06 20:00:00,289.18
+4,Ken,Pandwan,Panna,296.75,2026-07-07 08:00:00,289.25
+5,Narmada,Barman Ghat,Narsinghpur,323.0,2026-07-06 16:00:00,309.34
+5,Narmada,Barman Ghat,Narsinghpur,323.0,2026-07-06 20:00:00,309.39
+5,Narmada,Barman Ghat,Narsinghpur,323.0,2026-07-07 08:00:00,309.08
+6,Narmada,Sethani Ghat,Narmadapuram,293.83,2026-07-06 16:00:00,285.55
+6,Narmada,Sethani Ghat,Narmadapuram,293.83,2026-07-06 20:00:00,285.55
+6,Narmada,Sethani Ghat,Narmadapuram,293.83,2026-07-07 08:00:00,285.75
+7,Narmada,Mortakka,Khargone,163.98,2026-07-06 16:00:00,157.13
+7,Narmada,Mortakka,Khargone,163.98,2026-07-06 20:00:00,157.08
+7,Narmada,Mortakka,Khargone,163.98,2026-07-07 08:00:00,157.28
+8,Parwati,Maksudangarh,Guna,409.96,2026-07-06 16:00:00,401.41
+8,Parwati,Maksudangarh,Guna,409.96,2026-07-06 20:00:00,401.41
+8,Parwati,Maksudangarh,Guna,409.96,2026-07-07 08:00:00,401.41
+9,Tamas,Maihar,Satna,323.9,2026-07-06 16:00:00,317.2
+9,Tamas,Maihar,Satna,323.9,2026-07-06 20:00:00,317.2
+9,Tamas,Maihar,Satna,323.9,2026-07-07 08:00:00,317.2
+10,Tamas,Patehera,Rewa,110.38,2026-07-06 16:00:00,94.08
+10,Tamas,Patehera,Rewa,110.38,2026-07-06 20:00:00,94.05
+10,Tamas,Patehera,Rewa,110.38,2026-07-07 08:00:00,94.0
