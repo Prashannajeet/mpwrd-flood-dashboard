@@ -5,6 +5,7 @@ import math
 import os
 import hmac
 import hashlib
+import shutil
 import smtplib
 import sqlite3
 import sys
@@ -1062,17 +1063,74 @@ components.html(
 )
 
 
-def parsed_directories() -> list[Path]:
-    return sorted(
-        [
-            path
-            for path in APP_DIR.iterdir()
-            if path.is_dir()
-            and (path / "report_meta.json").exists()
-            and (path / "river_water_level_observations.csv").exists()
-        ],
-        key=lambda path: path.name,
+def parsed_report_status(path: Path) -> dict:
+    status = {
+        "valid": False,
+        "report_date": "",
+        "report_time": "",
+        "reservoir_rows": 0,
+        "river_rows": 0,
+        "gate_rows": 0,
+        "reason": "",
+    }
+    meta_path = path / "report_meta.json"
+    river_path = path / "river_water_level_observations.csv"
+    reservoir_path = path / "reservoir_status_observations.csv"
+    gate_path = path / "reservoir_gate_observations.csv"
+    if not meta_path.exists():
+        status["reason"] = "Missing report metadata"
+        return status
+    if not river_path.exists() or not reservoir_path.exists():
+        status["reason"] = "Missing parsed observation tables"
+        return status
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        status["report_date"] = str(meta.get("report_date") or "")
+        status["report_time"] = str(meta.get("report_time") or "")
+        status["river_rows"] = len(pd.read_csv(river_path)) if river_path.stat().st_size else 0
+        status["reservoir_rows"] = len(pd.read_csv(reservoir_path)) if reservoir_path.stat().st_size else 0
+        status["gate_rows"] = len(pd.read_csv(gate_path)) if gate_path.exists() and gate_path.stat().st_size else 0
+    except Exception as exc:
+        status["reason"] = f"Unreadable parsed report: {exc}"
+        return status
+    if status["river_rows"] <= 0 or status["reservoir_rows"] <= 0:
+        status["reason"] = "No usable river/reservoir rows"
+        return status
+    status["valid"] = True
+    return status
+
+
+def parsed_report_sort_key(path: Path) -> tuple[str, str, str]:
+    status = parsed_report_status(path)
+    return (status.get("report_date") or "", status.get("report_time") or "", path.name)
+
+
+def parsed_report_quality_key(path: Path) -> tuple[int, int, float]:
+    status = parsed_report_status(path)
+    return (
+        int(status.get("reservoir_rows") or 0),
+        int(status.get("river_rows") or 0),
+        float(path.stat().st_mtime),
     )
+
+
+def parsed_directories(include_invalid: bool = False) -> list[Path]:
+    parsed_paths = [
+        path
+        for path in APP_DIR.iterdir()
+        if path.is_dir() and path.name.startswith("parsed_") and (path / "report_meta.json").exists()
+    ]
+    if not include_invalid:
+        parsed_paths = [path for path in parsed_paths if parsed_report_status(path)["valid"]]
+        unique_by_slot: dict[tuple[str, str], Path] = {}
+        for path in parsed_paths:
+            status = parsed_report_status(path)
+            slot_key = (status.get("report_date") or path.name, status.get("report_time") or "")
+            existing = unique_by_slot.get(slot_key)
+            if existing is None or parsed_report_quality_key(path) >= parsed_report_quality_key(existing):
+                unique_by_slot[slot_key] = path
+        parsed_paths = list(unique_by_slot.values())
+    return sorted(parsed_paths, key=parsed_report_sort_key)
 
 
 def read_csv(path: Path) -> pd.DataFrame:
@@ -7526,17 +7584,33 @@ with st.sidebar:
             output_dir = APP_DIR / f"parsed_{saved_pdf.stem.replace(' ', '_')}"
             with st.spinner("Parsing uploaded report..."):
                 counts = parse_pdf(saved_pdf, output_dir)
-            st.success(
-                f"Captured {counts['river_observation_rows']} river, "
-                f"{counts['reservoir_observation_rows']} reservoir, "
-                f"{counts['gate_observation_rows']} gate rows."
-            )
+            if counts["river_observation_rows"] <= 0 or counts["reservoir_observation_rows"] <= 0:
+                shutil.rmtree(output_dir, ignore_errors=True)
+                st.error(
+                    "Uploaded PDF could not be converted into usable reservoir/river tables. "
+                    "The parsed folder was not published to the dashboard."
+                )
+            else:
+                st.success(
+                    f"Captured {counts['river_observation_rows']} river, "
+                    f"{counts['reservoir_observation_rows']} reservoir, "
+                    f"{counts['gate_observation_rows']} gate rows."
+                )
     else:
         st.info("Dashboard is in read-only mode. Sign in as admin to upload PDFs and refresh captured data.")
 
     dirs = parsed_directories()
     if not dirs:
         st.stop()
+    latest_status = parsed_report_status(dirs[-1])
+    st.caption(
+        f"Latest valid report: {latest_status.get('report_date')} "
+        f"{latest_status.get('report_time')} | {latest_status.get('reservoir_rows')} reservoir rows"
+    )
+    if is_admin:
+        invalid_dirs = [path for path in parsed_directories(include_invalid=True) if not parsed_report_status(path)["valid"]]
+        if invalid_dirs:
+            st.warning(f"{len(invalid_dirs)} invalid parsed report folder(s) are hidden from public dashboard selection.")
     selected_names = st.multiselect(
         "Captured reports",
         [path.name for path in dirs],
@@ -9187,18 +9261,27 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
                 output_dir = APP_DIR / f"parsed_{saved_pdf.stem.replace(' ', '_')}"
                 with st.spinner("Parsing uploaded report and refreshing captured tables..."):
                     counts = parse_pdf(saved_pdf, output_dir)
-                st.success(
-                    f"Captured {counts['river_observation_rows']} river rows, "
-                    f"{counts['reservoir_observation_rows']} reservoir rows, "
-                    f"and {counts['gate_observation_rows']} gate rows."
-                )
+                if counts["river_observation_rows"] <= 0 or counts["reservoir_observation_rows"] <= 0:
+                    shutil.rmtree(output_dir, ignore_errors=True)
+                    st.error(
+                        "Uploaded PDF could not be converted into usable reservoir/river tables. "
+                        "The parsed folder was not published to the dashboard."
+                    )
+                    audit_status = "Rejected: zero usable rows"
+                else:
+                    st.success(
+                        f"Captured {counts['river_observation_rows']} river rows, "
+                        f"{counts['reservoir_observation_rows']} reservoir rows, "
+                        f"and {counts['gate_observation_rows']} gate rows."
+                    )
+                    audit_status = "Completed"
                 st.session_state.setdefault("admin_audit_log", []).insert(
                     0,
                     {
                         "time": pd.Timestamp.now(tz="Asia/Kolkata").strftime("%d %b %Y %I:%M %p"),
                         "module": "PDF Upload",
                         "action": f"Parsed {uploaded.name}",
-                        "status": "Completed",
+                        "status": audit_status,
                     },
                 )
         with upload_cols[1]:
@@ -9211,11 +9294,14 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
                 [
                     {
                         "report_folder": report.name,
+                        "report_date": parsed_report_status(report).get("report_date"),
+                        "reservoir_rows": parsed_report_status(report).get("reservoir_rows"),
+                        "river_rows": parsed_report_status(report).get("river_rows"),
                         "modified": pd.Timestamp(report.stat().st_mtime, unit="s").strftime("%d %b %Y %I:%M %p"),
                     }
                     for report in parsed_reports
                 ]
-            ).sort_values("modified", ascending=False)
+            ).sort_values(["report_date", "modified"], ascending=False)
             st.dataframe(report_inventory, use_container_width=True, hide_index=True, height=220)
 
         st.markdown("#### Nita AI River Flow TensorFlow Model")

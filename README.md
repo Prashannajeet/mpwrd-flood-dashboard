@@ -29,6 +29,29 @@ Optional secure data service:
 uvicorn flood_report_api:app --host 0.0.0.0 --port 8600
 ```
 
+## Stable Report Data Update
+
+For the public stable app, keep parsed report folders synchronized from the official local report archive before pushing to Streamlit Cloud:
+
+```bat
+sync_stable_reports.bat
+```
+
+The wrapper reads PDFs from:
+
+```text
+D:\01 Project\Development\Flood Reports
+```
+
+It parses every PDF, rejects zero-row/invalid outputs, and writes a coverage manifest:
+
+```text
+data\stable_report_sync_manifest.csv
+data\stable_report_sync_manifest.json
+```
+
+Review the manifest before committing. Missing PDF dates, such as a missing 14 July or 15 July report, must be added to the source folder before the online app can display those dates.
+
 ## Operational Rainfall Database
 
 The app includes a backend-ready rainfall store for MP rain gauges, dams, and GD sites:
