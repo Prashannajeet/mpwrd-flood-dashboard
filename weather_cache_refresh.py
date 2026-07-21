@@ -264,10 +264,13 @@ def seconds_until_daily_time(daily_at: str) -> float:
     return max(1.0, (target - now).total_seconds())
 
 
-def run_once(include_forecast: bool, include_dams: bool) -> None:
+def run_once(include_forecast: bool, include_dams: bool, max_points: int = 0) -> None:
     init_database()
     started_at = now_utc()
     points, point_group = load_points(include_dams)
+    if max_points and max_points > 0:
+        points = points.head(max_points).reset_index(drop=True)
+        point_group = f"{point_group}-sample"
     run_id = f"{point_group.replace('+', '_')}_{pd.Timestamp.now(tz='UTC').strftime('%Y%m%dT%H%M%SZ')}"
     try:
         current_count = refresh_current(points)
@@ -288,6 +291,7 @@ def main() -> None:
     parser.add_argument("--daily-at", default="", help="Run once daily at HH:MM in Asia/Kolkata, for example 00:30.")
     parser.add_argument("--forecast-all", action="store_true", help="Also refresh 7-day forecast and 92-day hindcast for all towns.")
     parser.add_argument("--include-dams", action="store_true", help="Also refresh dam weather points.")
+    parser.add_argument("--max-points", type=int, default=0, help="Optional cap for test or emergency refresh runs. Default refreshes all points.")
     args = parser.parse_args()
 
     while True:
@@ -295,7 +299,7 @@ def main() -> None:
             sleep_seconds = seconds_until_daily_time(args.daily_at)
             print(f"{now_utc()} next scheduled weather refresh at {args.daily_at} IST in {sleep_seconds / 3600:.2f} hours.")
             time.sleep(sleep_seconds)
-        run_once(args.forecast_all, args.include_dams)
+        run_once(args.forecast_all, args.include_dams, args.max_points)
         if not args.loop and not args.daily_at:
             break
         if args.loop and not args.daily_at:

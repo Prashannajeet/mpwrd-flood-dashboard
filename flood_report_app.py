@@ -55,6 +55,7 @@ GD_SITE_FORECAST_DB = APP_DIR / "data" / "gd_site_forecasts.sqlite"
 GD_SITE_ONLINE_FORECAST_CSV = APP_DIR / "data" / "gd_site_online_forecasts.csv"
 RIVER_FLOW_MODEL_DIR = APP_DIR / "models" / "river_flow_tensorflow"
 WEATHER_REFRESH_HOURS = 3
+WEATHER_AUTO_REFRESH_MAX_POINTS = int(os.getenv("WEATHER_AUTO_REFRESH_MAX_POINTS", "64"))
 RESERVOIR_CAPACITY_ESTIMATES_CSV = APP_DIR / "data" / "reservoir_capacity_estimates.csv"
 RESERVOIR_CAPACITY_CURVES_CSV = APP_DIR / "data" / "reservoir_capacity_curves.csv"
 RESERVOIR_CAPACITY_CURVES_FABDEM_CSV = APP_DIR / "data" / "reservoir_capacity_curves_fabdem.csv"
@@ -1289,6 +1290,81 @@ def get_weather_cache_summary() -> dict:
         ).fetchone()
     latest = latest_row[0] if latest_row and latest_row[0] else ""
     return {"forecast_locations": forecast_count, "current_locations": current_count, "latest_refresh": latest}
+
+
+def weather_cache_needs_refresh(latest_refresh: str | None) -> bool:
+    if not latest_refresh:
+        return True
+    try:
+        return (weather_now_utc() - pd.Timestamp(latest_refresh)) > pd.Timedelta(hours=WEATHER_REFRESH_HOURS)
+    except Exception:
+        return True
+
+
+def compact_weather_refresh_points(points: pd.DataFrame, max_points: int = WEATHER_AUTO_REFRESH_MAX_POINTS) -> pd.DataFrame:
+    if points.empty:
+        return pd.DataFrame(columns=["town_name", "district", "latitude", "longitude"])
+    frame = points.copy()
+    frame["latitude"] = pd.to_numeric(frame.get("latitude"), errors="coerce")
+    frame["longitude"] = pd.to_numeric(frame.get("longitude"), errors="coerce")
+    if "town_name" not in frame:
+        frame["town_name"] = frame.get("reservoir_name", frame.get("dam_name", "Weather point"))
+    if "district" not in frame:
+        frame["district"] = frame.get("map_district", "Unassigned")
+    frame = frame.dropna(subset=["latitude", "longitude"]).copy()
+    if frame.empty:
+        return pd.DataFrame(columns=["town_name", "district", "latitude", "longitude"])
+    frame["_refresh_key"] = frame.apply(lambda row: weather_location_key(row["latitude"], row["longitude"]), axis=1)
+    frame = frame.drop_duplicates("_refresh_key")
+    return frame[["town_name", "district", "latitude", "longitude"]].head(max_points).reset_index(drop=True)
+
+
+def refresh_weather_cache_for_points(points: pd.DataFrame, max_points: int = WEATHER_AUTO_REFRESH_MAX_POINTS) -> dict:
+    refresh_points = compact_weather_refresh_points(points, max_points=max_points)
+    if refresh_points.empty:
+        return {"attempted": 0, "updated": 0, "failed": 0, "message": "No weather points available."}
+    try:
+        fetch_open_meteo_weather.clear()
+    except Exception:
+        pass
+    updated = 0
+    failed = 0
+    last_error = ""
+    for row in refresh_points.itertuples(index=False):
+        daily, hourly, current, error, source = get_cached_open_meteo_weather(
+            float(row.latitude),
+            float(row.longitude),
+            force_refresh=True,
+        )
+        if error and daily.empty:
+            failed += 1
+            last_error = str(error)
+        else:
+            updated += 1
+    try:
+        build_cached_weather_forecast_for_points.clear()
+    except Exception:
+        pass
+    return {
+        "attempted": len(refresh_points),
+        "updated": updated,
+        "failed": failed,
+        "message": last_error if failed and not updated else "",
+    }
+
+
+def maybe_refresh_weather_cache_on_app_load(points: pd.DataFrame, label: str = "weather") -> dict:
+    summary = get_weather_cache_summary()
+    if not weather_cache_needs_refresh(summary.get("latest_refresh")):
+        return {"status": "fresh", "summary": summary}
+    session_key = f"auto_weather_refresh_attempted_{label}"
+    if st.session_state.get(session_key):
+        return {"status": "attempted", "summary": summary}
+    st.session_state[session_key] = weather_now_utc().isoformat()
+    with st.spinner("Updating operational weather database..."):
+        refresh_status = refresh_weather_cache_for_points(points)
+    summary = get_weather_cache_summary()
+    return {"status": "refreshed", "summary": summary, "refresh": refresh_status}
 
 
 def get_satellite_rainfall_summary() -> dict:
@@ -10546,6 +10622,7 @@ if main_page == "Weather Forecast":
     fallback_district_weather_points = weather_points_from_districts(dam_weather_source, towns_master)
     dam_layer_weather = dam_weather_points.copy()
     if not dam_weather_points.empty:
+        weather_refresh_state = maybe_refresh_weather_cache_on_app_load(dam_weather_points, label="dam_layer")
         dam_points_key = tuple(
             (
                 str(row.town_name),
@@ -10556,6 +10633,8 @@ if main_page == "Weather Forecast":
             for row in dam_weather_points.dropna(subset=["latitude", "longitude"]).itertuples(index=False)
         )
         dam_layer_weather = build_cached_weather_forecast_for_points(dam_points_key)
+    else:
+        weather_refresh_state = {"status": "no_points", "summary": get_weather_cache_summary()}
     district_weather_points = district_weather_from_dam_forecasts(dam_layer_weather, fallback_district_weather_points)
     weather_point_sets = {
         "Towns": towns_master,
@@ -10572,11 +10651,11 @@ if main_page == "Weather Forecast":
         weather_points = weather_point_sets[selected_weather_set].copy()
         if not dam_weather_points.empty:
             cached_count = int(dam_layer_weather["forecast_rain_mm"].notna().sum()) if "forecast_rain_mm" in dam_layer_weather else 0
-            st.caption(
-                f"Dam forecast layer loads by default from the daily weather database. "
-                f"Cached dam forecasts available: {cached_count}/{len(dam_layer_weather)}. "
-                "The backend refresh is designed for 12:30 AM IST daily execution."
-            )
+            refresh_status = weather_refresh_state.get("refresh", {}) if isinstance(weather_refresh_state, dict) else {}
+            refresh_note = ""
+            if refresh_status:
+                refresh_note = f" Auto-refresh updated {refresh_status.get('updated', 0)}/{refresh_status.get('attempted', 0)} point(s)."
+            st.caption(f"Dam weather cache: {cached_count}/{len(dam_layer_weather)} ready.{refresh_note}")
         with weather_top[1]:
             district_filter_options = ["All districts"] + sorted(weather_points["district"].dropna().astype(str).unique())
             selected_weather_district = st.selectbox("Weather district", district_filter_options, key="weather_district_filter")
@@ -10594,11 +10673,7 @@ if main_page == "Weather Forecast":
             selected_town = town_options_df[town_options_df["town_name"] == selected_town_name].iloc[0]
             cache_summary = get_weather_cache_summary()
             latest_refresh = cache_summary.get("latest_refresh") or "No stored weather data yet"
-            st.caption(
-                f"Weather backend database: {cache_summary.get('forecast_locations', 0)} forecast locations and "
-                f"{cache_summary.get('current_locations', 0)} current-condition locations stored. "
-                f"Automatic refresh interval: {WEATHER_REFRESH_HOURS} hours. Latest refresh: {latest_refresh}."
-            )
+            st.caption(f"Weather database updated: {latest_refresh}. Refresh cycle: {WEATHER_REFRESH_HOURS} hours.")
             force_weather_refresh = False
             if is_admin:
                 force_weather_refresh = st.button("Refresh selected weather point now", use_container_width=True, key="refresh_selected_weather_now")
