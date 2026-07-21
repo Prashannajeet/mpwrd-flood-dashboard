@@ -1368,6 +1368,7 @@ def maybe_refresh_weather_cache_on_app_load(points: pd.DataFrame, label: str = "
 
 
 def get_satellite_rainfall_summary() -> dict:
+    init_satellite_rainfall_database()
     if not SATELLITE_RAINFALL_DB.exists():
         return {
             "station_count": 0,
@@ -1398,6 +1399,7 @@ def get_satellite_rainfall_summary() -> dict:
 
 
 def read_satellite_rainfall_tables(limit: int = 600) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    init_satellite_rainfall_database()
     if not SATELLITE_RAINFALL_DB.exists():
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
     with sqlite3.connect(SATELLITE_RAINFALL_DB) as conn:
@@ -1439,7 +1441,252 @@ def read_satellite_rainfall_tables(limit: int = 600) -> tuple[pd.DataFrame, pd.D
     return stations, observations, logs
 
 
-def render_satellite_rainfall_dss(is_admin_user: bool) -> None:
+def init_satellite_rainfall_database() -> None:
+    SATELLITE_RAINFALL_DB.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(SATELLITE_RAINFALL_DB) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS rainfall_station_master (
+                station_id TEXT PRIMARY KEY,
+                station_name TEXT NOT NULL,
+                station_type TEXT NOT NULL,
+                district TEXT,
+                basin TEXT,
+                latitude REAL NOT NULL,
+                longitude REAL NOT NULL,
+                source TEXT NOT NULL,
+                active INTEGER NOT NULL DEFAULT 1,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS rainfall_3hour_observations (
+                station_id TEXT NOT NULL,
+                observed_at TEXT NOT NULL,
+                rainfall_3h_mm REAL,
+                rainfall_24h_mm REAL,
+                source_product TEXT NOT NULL,
+                source_latency_hours REAL,
+                quality_flag TEXT NOT NULL DEFAULT 'unchecked',
+                fetched_at TEXT NOT NULL,
+                raw_payload TEXT,
+                PRIMARY KEY (station_id, observed_at, source_product)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS rainfall_refresh_log (
+                run_id TEXT PRIMARY KEY,
+                started_at TEXT NOT NULL,
+                finished_at TEXT,
+                source_product TEXT NOT NULL,
+                requested_slot TEXT NOT NULL,
+                station_count INTEGER NOT NULL DEFAULT 0,
+                observation_count INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL,
+                message TEXT
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_rainfall_observed_at ON rainfall_3hour_observations(observed_at)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_rainfall_station_time ON rainfall_3hour_observations(station_id, observed_at)")
+        conn.commit()
+
+
+def rainfall_station_key(prefix: str, name: str, district: str, latitude: float, longitude: float) -> str:
+    raw = f"{prefix}|{name}|{district}|{latitude:.5f}|{longitude:.5f}".lower()
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10]
+    slug = re.sub(r"[^a-z0-9]+", "_", str(name).lower()).strip("_")[:24] or "point"
+    return f"{prefix}_{slug}_{digest}"
+
+
+def seed_operational_rainfall_stations(dam_points: pd.DataFrame, towns: pd.DataFrame) -> int:
+    init_satellite_rainfall_database()
+    rows = []
+    if not towns.empty and {"town_name", "district", "latitude", "longitude"}.issubset(towns.columns):
+        for row in towns.dropna(subset=["latitude", "longitude"]).itertuples(index=False):
+            rows.append(
+                {
+                    "station_id": rainfall_station_key("town", str(row.town_name), str(row.district), float(row.latitude), float(row.longitude)),
+                    "station_name": str(row.town_name),
+                    "station_type": "Town",
+                    "district": str(row.district),
+                    "basin": "",
+                    "latitude": float(row.latitude),
+                    "longitude": float(row.longitude),
+                    "source": "Operational point master",
+                }
+            )
+    if not dam_points.empty and {"latitude", "longitude"}.issubset(dam_points.columns):
+        frame = dam_points.copy()
+        frame["latitude"] = pd.to_numeric(frame.get("latitude"), errors="coerce")
+        frame["longitude"] = pd.to_numeric(frame.get("longitude"), errors="coerce")
+        for row in frame.dropna(subset=["latitude", "longitude"]).itertuples(index=False):
+            name = str(getattr(row, "town_name", getattr(row, "reservoir_name", "Dam")))
+            district = str(getattr(row, "district", getattr(row, "map_district", "")))
+            rows.append(
+                {
+                    "station_id": rainfall_station_key("dam", name, district, float(row.latitude), float(row.longitude)),
+                    "station_name": name,
+                    "station_type": "Dam",
+                    "district": district,
+                    "basin": str(getattr(row, "basin", "")),
+                    "latitude": float(row.latitude),
+                    "longitude": float(row.longitude),
+                    "source": "Operational point master",
+                }
+            )
+    try:
+        gd_sites = load_gd_sites_swedes(str(GD_SITES_SWEDES_LAYER))
+    except Exception:
+        gd_sites = pd.DataFrame()
+    if not gd_sites.empty and {"station_name", "district", "latitude", "longitude"}.issubset(gd_sites.columns):
+        for row in gd_sites.dropna(subset=["latitude", "longitude"]).itertuples(index=False):
+            rows.append(
+                {
+                    "station_id": str(getattr(row, "station_code", "")) or rainfall_station_key("gd", str(row.station_name), str(row.district), float(row.latitude), float(row.longitude)),
+                    "station_name": str(row.station_name),
+                    "station_type": "GD Site",
+                    "district": str(row.district),
+                    "basin": str(getattr(row, "river", "")),
+                    "latitude": float(row.latitude),
+                    "longitude": float(row.longitude),
+                    "source": "Operational point master",
+                }
+            )
+    if not rows:
+        return 0
+    now_text = weather_now_utc().isoformat()
+    with sqlite3.connect(SATELLITE_RAINFALL_DB) as conn:
+        for row in rows:
+            conn.execute(
+                """
+                INSERT INTO rainfall_station_master
+                (station_id, station_name, station_type, district, basin, latitude, longitude, source, active, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                ON CONFLICT(station_id) DO UPDATE SET
+                    station_name=excluded.station_name,
+                    station_type=excluded.station_type,
+                    district=excluded.district,
+                    basin=excluded.basin,
+                    latitude=excluded.latitude,
+                    longitude=excluded.longitude,
+                    source=excluded.source,
+                    active=1,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    row["station_id"],
+                    row["station_name"],
+                    row["station_type"],
+                    row["district"],
+                    row["basin"],
+                    row["latitude"],
+                    row["longitude"],
+                    row["source"],
+                    now_text,
+                ),
+            )
+        conn.commit()
+    return len(rows)
+
+
+def refresh_rainfall_observations_from_weather_cache() -> dict:
+    init_satellite_rainfall_database()
+    if not WEATHER_CACHE_DB.exists():
+        return {"inserted": 0, "message": "Weather cache pending"}
+    inserted = 0
+    now_text = weather_now_utc().isoformat()
+    with sqlite3.connect(SATELLITE_RAINFALL_DB) as rain_conn, sqlite3.connect(WEATHER_CACHE_DB) as weather_conn:
+        stations = rain_conn.execute(
+            """
+            SELECT station_id, station_name, latitude, longitude
+            FROM rainfall_station_master
+            WHERE active = 1
+            """
+        ).fetchall()
+        for station_id, station_name, latitude, longitude in stations:
+            row = weather_conn.execute(
+                """
+                SELECT hourly_json, fetched_at
+                FROM weather_forecast_cache
+                WHERE location_key = ?
+                """,
+                (weather_location_key(float(latitude), float(longitude)),),
+            ).fetchone()
+            if not row:
+                continue
+            hourly = dataframe_from_weather_json(row[0])
+            if hourly.empty or not {"time", "precipitation"}.issubset(hourly.columns):
+                continue
+            hourly["datetime"] = pd.to_datetime(hourly["time"], errors="coerce")
+            hourly["precipitation"] = pd.to_numeric(hourly["precipitation"], errors="coerce").fillna(0)
+            window_end = hourly["datetime"].dropna().max()
+            if pd.isna(window_end):
+                continue
+            window_start_3h = window_end - pd.Timedelta(hours=3)
+            window_start_24h = window_end - pd.Timedelta(hours=24)
+            rain_3h = hourly[(hourly["datetime"] > window_start_3h) & (hourly["datetime"] <= window_end)]["precipitation"].sum()
+            rain_24h = hourly[(hourly["datetime"] > window_start_24h) & (hourly["datetime"] <= window_end)]["precipitation"].sum()
+            rain_conn.execute(
+                """
+                INSERT OR REPLACE INTO rainfall_3hour_observations
+                (station_id, observed_at, rainfall_3h_mm, rainfall_24h_mm, source_product,
+                 source_latency_hours, quality_flag, fetched_at, raw_payload)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    station_id,
+                    pd.Timestamp(window_end).isoformat(),
+                    round(float(rain_3h), 2),
+                    round(float(rain_24h), 2),
+                    "Operational Weather Rainfall",
+                    0,
+                    "model-derived",
+                    now_text,
+                    json.dumps({"station_name": station_name, "weather_cache_fetched_at": row[1]}, default=str),
+                ),
+            )
+            inserted += 1
+        if inserted:
+            run_id = f"weather_rainfall_{pd.Timestamp.now(tz='UTC').strftime('%Y%m%dT%H%M%SZ')}"
+            rain_conn.execute(
+                """
+                INSERT OR REPLACE INTO rainfall_refresh_log
+                (run_id, started_at, finished_at, source_product, requested_slot, station_count,
+                 observation_count, status, message)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    run_id,
+                    now_text,
+                    now_text,
+                    "Operational Weather Rainfall",
+                    now_text,
+                    len(stations),
+                    inserted,
+                    "updated",
+                    "Rainfall observations derived from cached operational weather precipitation.",
+                ),
+            )
+        rain_conn.commit()
+    return {"inserted": inserted, "message": "Updated" if inserted else "Weather cache pending"}
+
+
+def render_satellite_rainfall_dss(
+    is_admin_user: bool,
+    dam_points: pd.DataFrame | None = None,
+    towns: pd.DataFrame | None = None,
+    sync_from_weather_cache: bool = True,
+) -> None:
+    seed_operational_rainfall_stations(
+        dam_points if dam_points is not None else pd.DataFrame(),
+        towns if towns is not None else pd.DataFrame(),
+    )
+    sync_status = refresh_rainfall_observations_from_weather_cache() if sync_from_weather_cache else {"inserted": 0, "message": ""}
     summary = get_satellite_rainfall_summary()
     stations, observations, logs = read_satellite_rainfall_tables()
     pps_username_configured = bool(get_app_secret("secure_feed_username", "SECURE_FEED_USERNAME", ""))
@@ -1468,11 +1715,12 @@ def render_satellite_rainfall_dss(is_admin_user: bool) -> None:
         )
 
     if observations.empty:
-        st.warning(
-            "Rainfall station master is ready, but 3-hour operational rainfall observations have not been populated yet. "
-            "Run the backend refresh workflow to update station rainfall values."
-        )
+        st.info(f"Updated at {pd.Timestamp.now(tz='Asia/Kolkata').strftime('%I:%M %p IST')}. Rainfall values will populate after the next operational refresh.")
     else:
+        st.caption(
+            f"Updated at {pd.Timestamp.now(tz='Asia/Kolkata').strftime('%I:%M %p IST')}"
+            + (f" | {sync_status.get('inserted', 0)} rainfall point(s) refreshed" if sync_status.get("inserted") else "")
+        )
         latest_slot = observations["observed_at"].dropna().max()
         latest_obs = observations[observations["observed_at"] == latest_slot].copy() if pd.notna(latest_slot) else observations.copy()
         latest_obs = latest_obs.sort_values("rainfall_3h_mm", ascending=False)
@@ -10611,7 +10859,6 @@ if main_page == "Weather Forecast":
         """,
         unsafe_allow_html=True,
     )
-    render_satellite_rainfall_dss(is_admin)
     towns_master = read_csv(MP_TOWNS_CSV)
     if not towns_master.empty:
         towns_master["latitude"] = pd.to_numeric(towns_master["latitude"], errors="coerce")
@@ -10636,6 +10883,12 @@ if main_page == "Weather Forecast":
     else:
         weather_refresh_state = {"status": "no_points", "summary": get_weather_cache_summary()}
     district_weather_points = district_weather_from_dam_forecasts(dam_layer_weather, fallback_district_weather_points)
+    render_satellite_rainfall_dss(
+        is_admin,
+        dam_points=dam_weather_points,
+        towns=towns_master,
+        sync_from_weather_cache=True,
+    )
     weather_point_sets = {
         "Towns": towns_master,
         "Dams": dam_weather_points,
