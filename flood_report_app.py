@@ -2761,6 +2761,12 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
         status = str(now.get("forecast_status") or "Layer pending")
         return_period_value = pd.to_numeric(pd.Series([now.get("return_period")]), errors="coerce").iloc[0]
         level, color = gd_return_period_alert(return_period_value, flow)
+        google_severity = str(row.get("google_flood_severity") or now.get("google_flood_severity") or "No nearby signal")
+        google_rank = pd.to_numeric(pd.Series([row.get("google_flood_rank", now.get("google_flood_rank"))]), errors="coerce").fillna(0).iloc[0]
+        if google_rank >= 3:
+            level, color = "Critical", google_flood_severity_color(google_severity)
+        elif google_rank >= 2 and level not in {"Critical"}:
+            level, color = "Warning", google_flood_severity_color(google_severity)
         wl_delta = pd.to_numeric(pd.Series([now.get("water_level_change_m")]), errors="coerce").iloc[0]
         if pd.notna(wl_delta) and wl_delta > 0.03:
             trend = "Rising"
@@ -2792,6 +2798,9 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
                 "forecast_status": status,
                 "alert_level": level,
                 "trend": trend,
+                "google_flood_severity": google_severity,
+                "google_flood_gauge_id": str(row.get("google_flood_gauge_id") or now.get("google_flood_gauge_id") or "-"),
+                "google_flood_distance_km": None if pd.isna(pd.to_numeric(pd.Series([row.get("google_flood_distance_km", now.get("google_flood_distance_km"))]), errors="coerce").iloc[0]) else round(float(pd.to_numeric(pd.Series([row.get("google_flood_distance_km", now.get("google_flood_distance_km"))]), errors="coerce").iloc[0]), 1),
                 "color": color,
                 "series": site_series.get(station_code, []),
             }
@@ -3041,6 +3050,9 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
                     <div class="gd-info-chip"><span>Forecast Time</span><strong>${{site.forecast_time || "-"}}</strong></div>
                     <div class="gd-info-chip"><span>Stream Order</span><strong>${{site.streamorder ?? "-"}}</strong></div>
                     <div class="gd-info-chip"><span>Return Period</span><strong>${{site.return_period ?? "Normal"}}</strong></div>
+                    <div class="gd-info-chip"><span>Flood Status</span><strong>${{site.google_flood_severity || "-"}}</strong></div>
+                    <div class="gd-info-chip"><span>Flood Gauge</span><strong>${{site.google_flood_gauge_id || "-"}}</strong></div>
+                    <div class="gd-info-chip"><span>Gauge Distance</span><strong>${{site.google_flood_distance_km ?? "-"}} km</strong></div>
                   </div>
                   ${{miniChart(site.series, color)}}
                 `;
@@ -3060,7 +3072,9 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
                                 site.streamorder = first.streamorder ?? site.streamorder;
                                 site.forecast_time = first.time;
                                 site.trend = last.flow > first.flow ? "Rising" : last.flow < first.flow ? "Falling" : "Stable";
-                                site.alert_level = returnPeriodAlert(site.return_period, site.current_flow);
+                                if (!site.google_flood_severity || !["FLOODING", "HIGH", "SEVERE", "EXTREME"].some((token) => String(site.google_flood_severity).toUpperCase().includes(token))) {{
+                                    site.alert_level = returnPeriodAlert(site.return_period, site.current_flow);
+                                }}
                                 site.color = alertColor(site.alert_level);
                                 openInfo(site, true);
                             }}
@@ -3111,8 +3125,10 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
         '<div class="panel-note">Observed GD station water levels are reviewed with operational river and basin forecast signals. This page is separated from Dam DSS so more GD-site modules can be added independently.</div>',
         unsafe_allow_html=True,
     )
-    render_google_flood_api_status()
+    google_flood_status, google_flood_error, google_flood_source = load_google_flood_status_layer()
+    render_google_flood_api_status(google_flood_status, google_flood_error, google_flood_source)
     gd_sites = load_gd_sites_swedes(str(GD_SITES_SWEDES_LAYER))
+    gd_sites = attach_nearest_google_flood_status(gd_sites, google_flood_status, max_distance_km=90.0)
     gd_latest_observed = load_latest_gd_observed(str(NARMADA_OBSERVED_CSV))
     online_now_time = fetch_online_river_forecast_time()
     cached_gd = load_latest_gd_site_forecast_slot()
@@ -3139,6 +3155,23 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
             lambda row: gd_return_period_alert(row.get("return_period"), row.get("combined_forecast_flow_cms"))[0],
             axis=1,
         )
+        flood_link_cols = [
+            "station_code",
+            "google_flood_severity",
+            "google_flood_gauge_id",
+            "google_flood_distance_km",
+            "google_flood_issued_time",
+            "google_flood_quality_verified",
+            "google_flood_rank",
+        ]
+        if all(column in gd_sites.columns for column in flood_link_cols):
+            gd_forecasts = gd_forecasts.merge(gd_sites[flood_link_cols].drop_duplicates("station_code"), on="station_code", how="left")
+            gd_forecasts["forecast_alert_level"] = gd_forecasts.apply(
+                lambda row: "Critical"
+                if pd.to_numeric(pd.Series([row.get("google_flood_rank")]), errors="coerce").fillna(0).iloc[0] >= 3
+                else row.get("forecast_alert_level"),
+                axis=1,
+            )
     gd_kpis = st.columns(5)
     gd_kpis[0].metric("GD Sites", int(len(gd_sites)))
     gd_kpis[1].metric("Located Sites", int(gd_sites["has_location"].sum()) if not gd_sites.empty and "has_location" in gd_sites else 0)
@@ -3151,6 +3184,22 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
     if gd_forecasts.empty:
         st.warning("GD Sites are available, but no observed/forecast rows could be prepared.")
         return
+    flood_kpis = google_flood_kpi_summary(google_flood_status, gd_sites)
+    st.markdown(
+        f"""
+        <div class="infographic-frame">
+            <div class="infographic-title">Integrated Flood Intelligence Layer</div>
+            <div class="infographic-subtitle">Official flood-status signals are spatially linked with GD sites and used with discharge forecast alerts for DSS screening.</div>
+            <div class="infographic-grid">
+                <div class="infographic-card"><span>Flood Gauges</span><b>{flood_kpis['gauges']}</b><small>Returned for MP operating window</small></div>
+                <div class="infographic-card"><span>Active Signals</span><b>{flood_kpis['active']}</b><small>Severity above normal / no flooding</small></div>
+                <div class="infographic-card"><span>Max Severity</span><b>{escape(flood_kpis['max_severity'])}</b><small>Highest current flood status</small></div>
+                <div class="infographic-card"><span>Linked GD Sites</span><b>{flood_kpis['linked']}</b><small>Nearest status gauge within review radius</small></div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     slot_date, slot_time, _slot_ts = gd_forecast_slot()
     cache_note = f"GD data mode: {gd_source_mode}. Reporting slot: {slot_date} {slot_time}."
     if not cached_gd.empty:
@@ -3192,6 +3241,33 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
         )
     if selected_periods:
         gd_filtered = gd_filtered[gd_filtered["data_period"].isin(selected_periods)]
+
+    if "google_flood_severity" in gd_filtered.columns:
+        flood_chart_source = (
+            gd_filtered.drop_duplicates("station_code")
+            .assign(google_flood_severity=lambda data: data["google_flood_severity"].fillna("No nearby signal"))
+            .groupby("google_flood_severity", as_index=False)
+            .agg(gd_sites=("station_code", "nunique"), linked_gauges=("google_flood_gauge_id", lambda values: int(values.astype(str).str.len().gt(0).sum())))
+        )
+        if not flood_chart_source.empty:
+            flood_composition = (
+                alt.Chart(flood_chart_source)
+                .mark_bar(cornerRadiusTopRight=5, cornerRadiusBottomRight=5)
+                .encode(
+                    y=alt.Y("google_flood_severity:N", title="Flood API status", sort="-x"),
+                    x=alt.X("gd_sites:Q", title="GD sites"),
+                    color=alt.Color(
+                        "google_flood_severity:N",
+                        title="Severity",
+                        scale=alt.Scale(
+                            range=[google_flood_severity_color(value) for value in flood_chart_source["google_flood_severity"].astype(str)]
+                        ),
+                    ),
+                    tooltip=["google_flood_severity", "gd_sites", "linked_gauges"],
+                )
+                .properties(height=160, title="GD Sites by Integrated Flood Status")
+            )
+            st.altair_chart(flood_composition, use_container_width=True)
 
     gd_history = load_gd_observed_history(str(NARMADA_OBSERVED_CSV), days=7)
     if selected_station != "All GD sites":
@@ -3325,6 +3401,9 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
                         "current_water_level_m",
                         "combined_forecast_flow_cms",
                         "forecast_alert_level",
+                        "google_flood_severity",
+                        "google_flood_gauge_id",
+                        "google_flood_distance_km",
                         "forecast_status",
                     ],
                 )
@@ -3343,6 +3422,9 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
                     "forecast_time",
                     "current_flow_cms",
                     "forecast_alert_level",
+                    "google_flood_severity",
+                    "google_flood_gauge_id",
+                    "google_flood_distance_km",
                     "current_water_level_m",
                     "observed_at",
                     "observed_age_days",
@@ -3367,6 +3449,11 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
         "data_period",
         "current_flow_cms",
         "forecast_alert_level",
+        "google_flood_severity",
+        "google_flood_gauge_id",
+        "google_flood_distance_km",
+        "google_flood_issued_time",
+        "google_flood_quality_verified",
         "linked_comid",
         "streamorder",
         "return_period",
@@ -6321,6 +6408,62 @@ def extract_google_flood_records(payload: dict | list | None) -> pd.DataFrame:
     return frame[ordered].drop_duplicates().reset_index(drop=True)
 
 
+def normalize_google_flood_status(payload: dict | list | None) -> pd.DataFrame:
+    rows = []
+    if isinstance(payload, dict):
+        items = payload.get("floodStatuses") or payload.get("floodStatus") or []
+    elif isinstance(payload, list):
+        items = payload
+    else:
+        items = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        location = item.get("gaugeLocation") if isinstance(item.get("gaugeLocation"), dict) else {}
+        rows.append(
+            {
+                "google_gauge_id": item.get("gaugeId") or item.get("gauge_id") or "",
+                "issued_time": item.get("issuedTime") or item.get("updateTime") or item.get("validTime") or "",
+                "flood_severity": item.get("severity") or item.get("floodStatus") or item.get("status") or "UNKNOWN",
+                "source": item.get("source") or "",
+                "quality_verified": bool(item.get("qualityVerified")) if item.get("qualityVerified") is not None else False,
+                "latitude": pd.to_numeric(pd.Series([location.get("latitude")]), errors="coerce").iloc[0],
+                "longitude": pd.to_numeric(pd.Series([location.get("longitude")]), errors="coerce").iloc[0],
+            }
+        )
+    frame = pd.DataFrame(rows)
+    if frame.empty:
+        return frame
+    frame["issued_time"] = pd.to_datetime(frame["issued_time"], errors="coerce")
+    frame["flood_severity"] = frame["flood_severity"].fillna("UNKNOWN").astype(str)
+    frame["flood_rank"] = frame["flood_severity"].map(google_flood_severity_rank).fillna(0).astype(int)
+    return frame.dropna(subset=["latitude", "longitude"]).drop_duplicates("google_gauge_id").reset_index(drop=True)
+
+
+def google_flood_severity_rank(severity: str) -> int:
+    text = str(severity or "").upper()
+    if any(token in text for token in ["EXTREME", "SEVERE", "DANGER"]):
+        return 4
+    if any(token in text for token in ["HIGH", "FLOODING"]):
+        if "NO_FLOODING" not in text:
+            return 3
+    if any(token in text for token in ["WARNING", "MODERATE"]):
+        return 2
+    if any(token in text for token in ["WATCH", "LOW"]):
+        return 1
+    return 0
+
+
+def google_flood_severity_color(severity: str) -> str:
+    return {
+        4: "#dc2626",
+        3: "#f97316",
+        2: "#f59e0b",
+        1: "#eab308",
+        0: "#2563eb",
+    }.get(google_flood_severity_rank(severity), "#64748b")
+
+
 @st.cache_data(ttl=WEATHER_REFRESH_HOURS * 3600, show_spinner=False)
 def fetch_google_flood_status_for_mp(_api_key: str) -> tuple[pd.DataFrame, str | None, str]:
     if not _api_key:
@@ -6334,20 +6477,101 @@ def fetch_google_flood_status_for_mp(_api_key: str) -> tuple[pd.DataFrame, str |
     if isinstance(payload, dict) and isinstance(payload.get("error"), dict):
         api_error = payload["error"]
         return pd.DataFrame(), api_error.get("message") or json.dumps(api_error), "api error"
-    rows = extract_google_flood_records(payload)
+    rows = normalize_google_flood_status(payload)
+    if rows.empty:
+        rows = extract_google_flood_records(payload)
     return rows, None if not rows.empty else "Flood forecasting service returned no MP flood-status rows.", "api refreshed"
 
 
-def render_google_flood_api_status() -> None:
+def load_google_flood_status_layer() -> tuple[pd.DataFrame, str | None, str]:
     api_key = google_flood_api_key_config()
+    return fetch_google_flood_status_for_mp(api_key)
+
+
+def haversine_km(lat1: object, lon1: object, lat2: object, lon2: object) -> float:
+    values = pd.to_numeric(pd.Series([lat1, lon1, lat2, lon2]), errors="coerce")
+    if values.isna().any():
+        return math.nan
+    lat1, lon1, lat2, lon2 = [math.radians(float(value)) for value in values]
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    return 6371.0 * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def attach_nearest_google_flood_status(points: pd.DataFrame, flood_status: pd.DataFrame, max_distance_km: float = 75.0) -> pd.DataFrame:
+    if points.empty or flood_status.empty or not {"latitude", "longitude"}.issubset(points.columns):
+        out = points.copy()
+        out["google_flood_severity"] = "Not linked"
+        out["google_flood_gauge_id"] = ""
+        out["google_flood_distance_km"] = math.nan
+        out["google_flood_issued_time"] = pd.NaT
+        return out
+    out = points.copy()
+    links = []
+    flood_records = flood_status.dropna(subset=["latitude", "longitude"]).to_dict("records")
+    for row in out.to_dict("records"):
+        best = None
+        best_distance = math.inf
+        for gauge in flood_records:
+            distance = haversine_km(row.get("latitude"), row.get("longitude"), gauge.get("latitude"), gauge.get("longitude"))
+            if pd.notna(distance) and distance < best_distance:
+                best = gauge
+                best_distance = distance
+        if best and best_distance <= max_distance_km:
+            links.append(
+                {
+                    "google_flood_severity": best.get("flood_severity", "UNKNOWN"),
+                    "google_flood_gauge_id": best.get("google_gauge_id", ""),
+                    "google_flood_distance_km": round(float(best_distance), 2),
+                    "google_flood_issued_time": best.get("issued_time"),
+                    "google_flood_quality_verified": best.get("quality_verified", False),
+                    "google_flood_rank": best.get("flood_rank", google_flood_severity_rank(best.get("flood_severity"))),
+                }
+            )
+        else:
+            links.append(
+                {
+                    "google_flood_severity": "No nearby signal",
+                    "google_flood_gauge_id": "",
+                    "google_flood_distance_km": math.nan,
+                    "google_flood_issued_time": pd.NaT,
+                    "google_flood_quality_verified": False,
+                    "google_flood_rank": 0,
+                }
+            )
+    return pd.concat([out.reset_index(drop=True), pd.DataFrame(links)], axis=1)
+
+
+def google_flood_kpi_summary(flood_status: pd.DataFrame, linked_points: pd.DataFrame | None = None) -> dict:
+    if flood_status.empty:
+        return {"gauges": 0, "active": 0, "max_severity": "No Data", "verified": 0, "linked": 0}
+    active = flood_status[pd.to_numeric(flood_status.get("flood_rank"), errors="coerce").fillna(0) > 0]
+    max_row = flood_status.sort_values("flood_rank", ascending=False).head(1)
+    linked = 0
+    if linked_points is not None and not linked_points.empty and "google_flood_gauge_id" in linked_points:
+        linked = int(linked_points["google_flood_gauge_id"].astype(str).str.len().gt(0).sum())
+    return {
+        "gauges": int(len(flood_status)),
+        "active": int(len(active)),
+        "max_severity": str(max_row.iloc[0].get("flood_severity")) if not max_row.empty else "No Data",
+        "verified": int(flood_status.get("quality_verified", pd.Series(dtype=bool)).fillna(False).sum()),
+        "linked": linked,
+    }
+
+
+def render_google_flood_api_status(flood_status: pd.DataFrame | None = None, flood_error: str | None = None, source: str = "") -> None:
     with st.expander("Flood Forecast API Status", expanded=False):
+        api_key = google_flood_api_key_config()
         status_cols = st.columns([0.22, 0.26, 0.52])
         status_cols[0].metric("API Key", "Configured" if api_key else "Pending")
         if not api_key:
             status_cols[1].metric("Latest Status", "Not connected")
             status_cols[2].info("Add `google_flood_api_key` in Streamlit secrets or `GOOGLE_FLOOD_API_KEY` in the environment.")
             return
-        flood_rows, flood_error, source = fetch_google_flood_status_for_mp(api_key)
+        if flood_status is None:
+            flood_status, flood_error, source = fetch_google_flood_status_for_mp(api_key)
+        flood_rows = flood_status if flood_status is not None else pd.DataFrame()
         status_cols[1].metric("Latest Status", "Ready" if flood_error is None else "Check access")
         status_cols[2].caption(f"Operational status: {source}. Area: Madhya Pradesh bounding region.")
         if flood_error and flood_rows.empty:
@@ -6358,6 +6582,30 @@ def render_google_flood_api_status() -> None:
             st.info(flood_error)
         st.dataframe(flood_rows.head(50), use_container_width=True, hide_index=True, height=260)
         st.caption(f"Rows received: {len(flood_rows):,}. Use GD-site locations to review nearby official flood-status signals when the API returns gauge coverage.")
+
+
+def render_google_flood_operational_brief(points: pd.DataFrame, title: str, point_label: str = "Locations") -> pd.DataFrame:
+    flood_status, flood_error, source = load_google_flood_status_layer()
+    linked = attach_nearest_google_flood_status(points, flood_status, max_distance_km=90.0)
+    summary = google_flood_kpi_summary(flood_status, linked)
+    st.markdown(
+        f"""
+        <div class="infographic-frame">
+            <div class="infographic-title">{escape(title)}</div>
+            <div class="infographic-subtitle">Flood-status intelligence is linked by nearest gauge and used as an additional DSS screening signal for map, chart and table interpretation.</div>
+            <div class="infographic-grid">
+                <div class="infographic-card"><span>Flood Gauges</span><b>{summary['gauges']}</b><small>Current official status records</small></div>
+                <div class="infographic-card"><span>Active Signals</span><b>{summary['active']}</b><small>Above normal/no-flood status</small></div>
+                <div class="infographic-card"><span>Linked {escape(point_label)}</span><b>{summary['linked']}</b><small>Within operational review radius</small></div>
+                <div class="infographic-card"><span>Max Severity</span><b>{escape(summary['max_severity'])}</b><small>{escape(source or ('Check access' if flood_error else 'Ready'))}</small></div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if flood_error and flood_status.empty:
+        st.caption(f"Flood API status: {flood_error}")
+    return linked
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -10342,6 +10590,7 @@ if main_page == "GD Site Analytics":
 
 if main_page == "Dam DSS & Analytics":
     st.subheader("Dam Locations and District Status")
+    render_google_flood_operational_brief(map_status, "Flood Status Context for Dam DSS", "Dams")
     if map_status.empty:
         st.info("Dam location shapefile is not available or no dam points match the current filters.")
     else:
@@ -11002,6 +11251,7 @@ if main_page == "Dam DSS & Analytics":
 
 if main_page == "Weather Forecast":
     st.subheader("Weather Forecast")
+    render_google_flood_operational_brief(weather_points_from_dams(map_status), "Flood Status Context for Weather DSS", "Dam Points")
     meteo_base = open_meteo_base_url()
     st.markdown(
         f"""
@@ -11523,6 +11773,7 @@ if main_page == "3D Flood Scenarios":
         '<div class="panel-note">3D terrain module for historical inundation review and planning scenarios. The current version generates screening footprints from selected dams; event inundation polygons can be connected as secure spatial inputs in the next data stage.</div>',
         unsafe_allow_html=True,
     )
+    render_google_flood_operational_brief(map_status, "Flood Status Context for 3D Scenarios", "Dams")
     if map_status.empty:
         st.info("Dam map data is not available for 3D flood scenario generation under the current filters.")
     else:
@@ -11662,6 +11913,7 @@ if main_page == "3D Flood Scenarios":
 
 if main_page == "Water Watch":
     st.subheader("WaterWatch Live - Enabled with AI")
+    render_google_flood_operational_brief(map_status, "Real-Time Flood Status Intelligence", "Dams")
     if reservoir_view.empty and map_status.empty:
         st.info("No data is available for infographic generation under the current filters.")
     else:
