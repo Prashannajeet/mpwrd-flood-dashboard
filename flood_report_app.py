@@ -1177,6 +1177,49 @@ def fetch_json_url(url: str) -> tuple[dict | list | None, str | None]:
         return None, f"Unable to read weather API response: {exc}"
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_json_post_url(url: str, payload: dict) -> tuple[dict | list | None, str | None]:
+    body = json.dumps(payload).encode("utf-8")
+    if os.name == "nt":
+        try:
+            result = subprocess.run(
+                [
+                    "curl.exe",
+                    "-s",
+                    "--max-time",
+                    "25",
+                    "-X",
+                    "POST",
+                    "-H",
+                    "Content-Type: application/json",
+                    "-d",
+                    json.dumps(payload),
+                    url,
+                ],
+                capture_output=True,
+                check=True,
+                text=True,
+                timeout=30,
+            )
+            if result.stdout.strip():
+                return json.loads(result.stdout), None
+        except Exception:
+            pass
+    try:
+        request = urllib.request.Request(
+            url,
+            data=body,
+            headers={"User-Agent": "waterwatch-dashboard/1.0", "Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=25) as response:
+            return json.loads(response.read().decode("utf-8")), None
+    except urllib.error.URLError as exc:
+        return None, f"Unable to reach flood forecasting service: {exc}"
+    except Exception as exc:
+        return None, f"Unable to read flood forecasting response: {exc}"
+
+
 def weather_now_utc() -> pd.Timestamp:
     return pd.Timestamp.now(tz="UTC")
 
@@ -3068,6 +3111,7 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
         '<div class="panel-note">Observed GD station water levels are reviewed with operational river and basin forecast signals. This page is separated from Dam DSS so more GD-site modules can be added independently.</div>',
         unsafe_allow_html=True,
     )
+    render_google_flood_api_status()
     gd_sites = load_gd_sites_swedes(str(GD_SITES_SWEDES_LAYER))
     gd_latest_observed = load_latest_gd_observed(str(NARMADA_OBSERVED_CSV))
     online_now_time = fetch_online_river_forecast_time()
@@ -6205,6 +6249,115 @@ def google_weather_summary(payload: dict) -> dict:
         "uv_index": payload.get("uvIndex"),
         "current_time": payload.get("currentTime"),
     }
+
+
+def google_flood_api_key_config() -> str:
+    return get_app_secret("google_flood_api_key", "GOOGLE_FLOOD_API_KEY", "").strip()
+
+
+def google_flood_api_url(method_path: str, api_key: str) -> str:
+    return f"https://floodforecasting.googleapis.com/v1/{method_path}?key={urllib.parse.quote(api_key)}"
+
+
+def mp_flood_api_area_payload() -> dict:
+    return {
+        "pageSize": 500,
+        "loop": {
+            "vertices": [
+                {"latitude": 21.0, "longitude": 74.0},
+                {"latitude": 21.0, "longitude": 83.0},
+                {"latitude": 26.9, "longitude": 83.0},
+                {"latitude": 26.9, "longitude": 74.0},
+            ]
+        },
+        "includeNonQualityVerified": True,
+    }
+
+
+def extract_google_flood_records(payload: dict | list | None) -> pd.DataFrame:
+    records: list[dict] = []
+
+    def visit(value: object, path: str = "") -> None:
+        if isinstance(value, dict):
+            keys = {str(key).lower() for key in value.keys()}
+            if any(token in keys for token in ["gaugeid", "gauge_id", "forecast", "floodstatus", "floodstatusvalue", "status"]):
+                flat = {}
+                for key, item in value.items():
+                    if isinstance(item, (dict, list)):
+                        flat[str(key)] = json.dumps(item, default=str)[:500]
+                    else:
+                        flat[str(key)] = item
+                flat["_path"] = path
+                records.append(flat)
+            for key, item in value.items():
+                visit(item, f"{path}.{key}" if path else str(key))
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                visit(item, f"{path}[{index}]")
+
+    visit(payload)
+    frame = pd.DataFrame(records)
+    if frame.empty:
+        return frame
+    preferred = [
+        "gaugeId",
+        "gauge_id",
+        "gaugeName",
+        "name",
+        "status",
+        "floodStatus",
+        "floodStatusValue",
+        "severity",
+        "forecast",
+        "forecastTrend",
+        "latitude",
+        "longitude",
+        "issuedTime",
+        "validTime",
+        "updateTime",
+        "_path",
+    ]
+    ordered = [column for column in preferred if column in frame.columns] + [column for column in frame.columns if column not in preferred]
+    return frame[ordered].drop_duplicates().reset_index(drop=True)
+
+
+@st.cache_data(ttl=WEATHER_REFRESH_HOURS * 3600, show_spinner=False)
+def fetch_google_flood_status_for_mp(_api_key: str) -> tuple[pd.DataFrame, str | None, str]:
+    if not _api_key:
+        return pd.DataFrame(), "Flood forecasting key is not configured.", "not configured"
+    payload, error = fetch_json_post_url(
+        google_flood_api_url("floodStatus:searchLatestFloodStatusByArea", _api_key),
+        mp_flood_api_area_payload(),
+    )
+    if error:
+        return pd.DataFrame(), error, "api failed"
+    if isinstance(payload, dict) and isinstance(payload.get("error"), dict):
+        api_error = payload["error"]
+        return pd.DataFrame(), api_error.get("message") or json.dumps(api_error), "api error"
+    rows = extract_google_flood_records(payload)
+    return rows, None if not rows.empty else "Flood forecasting service returned no MP flood-status rows.", "api refreshed"
+
+
+def render_google_flood_api_status() -> None:
+    api_key = google_flood_api_key_config()
+    with st.expander("Flood Forecast API Status", expanded=False):
+        status_cols = st.columns([0.22, 0.26, 0.52])
+        status_cols[0].metric("API Key", "Configured" if api_key else "Pending")
+        if not api_key:
+            status_cols[1].metric("Latest Status", "Not connected")
+            status_cols[2].info("Add `google_flood_api_key` in Streamlit secrets or `GOOGLE_FLOOD_API_KEY` in the environment.")
+            return
+        flood_rows, flood_error, source = fetch_google_flood_status_for_mp(api_key)
+        status_cols[1].metric("Latest Status", "Ready" if flood_error is None else "Check access")
+        status_cols[2].caption(f"Operational status: {source}. Area: Madhya Pradesh bounding region.")
+        if flood_error and flood_rows.empty:
+            st.warning(flood_error)
+            st.caption("If this persists online, confirm the Flood Forecasting API is enabled for the same Google Cloud project as the key.")
+            return
+        if flood_error:
+            st.info(flood_error)
+        st.dataframe(flood_rows.head(50), use_container_width=True, hide_index=True, height=260)
+        st.caption(f"Rows received: {len(flood_rows):,}. Use GD-site locations to review nearby official flood-status signals when the API returns gauge coverage.")
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
