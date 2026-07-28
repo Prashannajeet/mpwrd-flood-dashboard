@@ -27,19 +27,19 @@ MPWRD_Flood_Report_09-07-2026 8AM.pdf,parsed_MPWRD_Flood_Report_09-07-2026_8AM,e
 MPWRD_Flood_Report_10-07-2026 8AM.pdf,parsed_MPWRD_Flood_Report_10-07-2026_8AM,existing,2026-07-10,08:00:00,30,162,53,True,valid
 MPWRD_Flood_Report_11-07-2026 8AM.pdf,parsed_MPWRD_Flood_Report_11-07-2026_8AM,existing,2026-07-11,08:00:00,30,162,53,True,valid
 MPWRD_Flood_Report_12-07-2026 8AM.pdf,parsed_MPWRD_Flood_Report_12-07-2026_8AM,existing,2026-07-12,08:00:00,30,162,53,True,valid
-MPWRD_Flood_Report_13-07-26 8 Am.pdf,parsed_MPWRD_Flood_Report_13-07-26_8_Am,rejected,2026-07-13,08:00:00,0,0,0,False,zero/missing usable reservoir or river rows
+MPWRD_Flood_Report_13-07-26 8 Am.pdf,parsed_MPWRD_Flood_Report_13-07-26_8_Am,parsed,2026-07-13,08:00:00,30,162,53,True,valid
 MPWRD_Flood_Report_14-07-26 8 AM.pdf,parsed_MPWRD_Flood_Report_14-07-26_8_AM,existing,2026-07-14,08:00:00,30,162,53,True,valid
 MPWRD_Flood_Report_15-07-26 8 AM.pdf,parsed_MPWRD_Flood_Report_15-07-26_8_AM,existing,2026-07-15,08:00:00,30,162,53,True,valid
 MPWRD_Flood_Report_16-07-26 8 AM.pdf,parsed_MPWRD_Flood_Report_16-07-26_8_AM,existing,2026-07-16,08:00:00,30,162,54,True,valid
 MPWRD_Flood_Report_17-07-26 8 AM.pdf,parsed_MPWRD_Flood_Report_17-07-26_8_AM,existing,2026-07-17,08:00:00,30,162,54,True,valid
 MPWRD_Flood_Report_18-07-26  8AM.pdf,parsed_MPWRD_Flood_Report_18-07-26__8AM,existing,2026-07-18,08:00:00,30,162,53,True,valid
 MPWRD_Flood_Report_19-07-26 8am  .pdf,parsed_MPWRD_Flood_Report_19-07-26_8am__,existing,2026-07-19,08:00:00,30,162,53,True,valid
-MPWRD Flood Report 20-07-2026 8 AM.pdf,parsed_MPWRD_Flood_Report_20-07-2026_8_AM,parsed,2026-07-20,08:00:00,30,162,53,True,valid
-MPWRD_Flood _Report _21-07-2026 8 AM.pdf,parsed_MPWRD_Flood__Report__21-07-2026_8_AM,parsed,2026-07-21,08:00:00,30,162,53,True,valid
-MPWRD_Flood _Report _22-07-2026 8 am.pdf,parsed_MPWRD_Flood__Report__22-07-2026_8_am,parsed,2026-07-22,08:00:00,30,162,53,True,valid
-MPWRD_Flood _Report _23-07-2026 8 AM.pdf,parsed_MPWRD_Flood__Report__23-07-2026_8_AM,parsed,2026-07-23,08:00:00,30,162,53,True,valid
-MPWRD_Flood _Report _24-07-2026 8 AM.pdf,parsed_MPWRD_Flood__Report__24-07-2026_8_AM,parsed,2026-07-24,08:00:00,30,162,53,True,valid
-MPWRD_Flood _Report _25-07-2026 8AM.pdf,parsed_MPWRD_Flood__Report__25-07-2026_8AM,parsed,2026-07-25,08:00:00,30,162,52,True,valid
-MPWRD_Flood _Report _26-07-2026 8 AM.pdf,parsed_MPWRD_Flood__Report__26-07-2026_8_AM,parsed,2026-07-26,08:00:00,30,162,53,True,valid
-MPWRD_Flood_Report_27-07-2026 8am.pdf,parsed_MPWRD_Flood_Report_27-07-2026_8am,parsed,2026-07-27,08:00:00,30,162,53,True,valid
-MPWRD_Flood_Report_28-07-2026 8AM.pdf,parsed_MPWRD_Flood_Report_28-07-2026_8AM,parsed,2026-07-28,08:00:00,30,162,53,True,valid
+MPWRD Flood Report 20-07-2026 8 AM.pdf,parsed_MPWRD_Flood_Report_20-07-2026_8_AM,existing,2026-07-20,08:00:00,30,162,53,True,valid
+MPWRD_Flood _Report _21-07-2026 8 AM.pdf,parsed_MPWRD_Flood__Report__21-07-2026_8_AM,existing,2026-07-21,08:00:00,30,162,53,True,valid
+MPWRD_Flood _Report _22-07-2026 8 am.pdf,parsed_MPWRD_Flood__Report__22-07-2026_8_am,existing,2026-07-22,08:00:00,30,162,53,True,valid
+MPWRD_Flood _Report _23-07-2026 8 AM.pdf,parsed_MPWRD_Flood__Report__23-07-2026_8_AM,existing,2026-07-23,08:00:00,30,162,53,True,valid
+MPWRD_Flood _Report _24-07-2026 8 AM.pdf,parsed_MPWRD_Flood__Report__24-07-2026_8_AM,existing,2026-07-24,08:00:00,30,162,53,True,valid
+MPWRD_Flood _Report _25-07-2026 8AM.pdf,parsed_MPWRD_Flood__Report__25-07-2026_8AM,existing,2026-07-25,08:00:00,30,162,52,True,valid
+MPWRD_Flood _Report _26-07-2026 8 AM.pdf,parsed_MPWRD_Flood__Report__26-07-2026_8_AM,existing,2026-07-26,08:00:00,30,162,53,True,valid
+MPWRD_Flood_Report_27-07-2026 8am.pdf,parsed_MPWRD_Flood_Report_27-07-2026_8am,existing,2026-07-27,08:00:00,30,162,53,True,valid
+MPWRD_Flood_Report_28-07-2026 8AM.pdf,parsed_MPWRD_Flood_Report_28-07-2026_8AM,existing,2026-07-28,08:00:00,30,162,53,True,valid

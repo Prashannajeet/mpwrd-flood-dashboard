@@ -151,11 +151,38 @@ def latest_observation_times(report_date: date, report_time: time, count: int) -
     return available[-count:]
 
 
+def heading_key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
+
+
+def heading_index(text: str, heading: str) -> int:
+    exact_idx = text.find(heading)
+    if exact_idx != -1:
+        return exact_idx
+
+    target = heading_key(heading)
+    compact = []
+    source_indexes = []
+    for idx, char in enumerate(text):
+        if char.isalnum():
+            compact.append(char.lower())
+            source_indexes.append(idx)
+
+    compact_idx = "".join(compact).find(target)
+    if compact_idx == -1:
+        return -1
+    return source_indexes[compact_idx]
+
+
 def section(text: str, start: str, end: str | None = None) -> str:
-    start_idx = text.find(start)
+    start_idx = heading_index(text, start)
     if start_idx == -1:
         return ""
-    end_idx = text.find(end, start_idx) if end else len(text)
+    if end:
+        relative_end_idx = heading_index(text[start_idx:], end)
+        end_idx = relative_end_idx + start_idx if relative_end_idx != -1 else -1
+    else:
+        end_idx = len(text)
     if end_idx == -1:
         end_idx = len(text)
     return text[start_idx:end_idx]

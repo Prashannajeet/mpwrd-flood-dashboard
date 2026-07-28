@@ -338,14 +338,14 @@
   {
     "pdf_name": "MPWRD_Flood_Report_13-07-26 8 Am.pdf",
     "parsed_folder": "parsed_MPWRD_Flood_Report_13-07-26_8_Am",
-    "action": "rejected",
+    "action": "parsed",
     "report_date": "2026-07-13",
     "report_time": "08:00:00",
-    "river_rows": 0,
-    "reservoir_rows": 0,
-    "gate_rows": 0,
-    "valid": false,
-    "reason": "zero/missing usable reservoir or river rows"
+    "river_rows": 30,
+    "reservoir_rows": 162,
+    "gate_rows": 53,
+    "valid": true,
+    "reason": "valid"
   },
   {
     "pdf_name": "MPWRD_Flood_Report_14-07-26 8 AM.pdf",
@@ -422,7 +422,7 @@
   {
     "pdf_name": "MPWRD Flood Report 20-07-2026 8 AM.pdf",
     "parsed_folder": "parsed_MPWRD_Flood_Report_20-07-2026_8_AM",
-    "action": "parsed",
+    "action": "existing",
     "report_date": "2026-07-20",
     "report_time": "08:00:00",
     "river_rows": 30,
@@ -434,7 +434,7 @@
   {
     "pdf_name": "MPWRD_Flood _Report _21-07-2026 8 AM.pdf",
     "parsed_folder": "parsed_MPWRD_Flood__Report__21-07-2026_8_AM",
-    "action": "parsed",
+    "action": "existing",
     "report_date": "2026-07-21",
     "report_time": "08:00:00",
     "river_rows": 30,
@@ -446,7 +446,7 @@
   {
     "pdf_name": "MPWRD_Flood _Report _22-07-2026 8 am.pdf",
     "parsed_folder": "parsed_MPWRD_Flood__Report__22-07-2026_8_am",
-    "action": "parsed",
+    "action": "existing",
     "report_date": "2026-07-22",
     "report_time": "08:00:00",
     "river_rows": 30,
@@ -458,7 +458,7 @@
   {
     "pdf_name": "MPWRD_Flood _Report _23-07-2026 8 AM.pdf",
     "parsed_folder": "parsed_MPWRD_Flood__Report__23-07-2026_8_AM",
-    "action": "parsed",
+    "action": "existing",
     "report_date": "2026-07-23",
     "report_time": "08:00:00",
     "river_rows": 30,
@@ -470,7 +470,7 @@
   {
     "pdf_name": "MPWRD_Flood _Report _24-07-2026 8 AM.pdf",
     "parsed_folder": "parsed_MPWRD_Flood__Report__24-07-2026_8_AM",
-    "action": "parsed",
+    "action": "existing",
     "report_date": "2026-07-24",
     "report_time": "08:00:00",
     "river_rows": 30,
@@ -482,7 +482,7 @@
   {
     "pdf_name": "MPWRD_Flood _Report _25-07-2026 8AM.pdf",
     "parsed_folder": "parsed_MPWRD_Flood__Report__25-07-2026_8AM",
-    "action": "parsed",
+    "action": "existing",
     "report_date": "2026-07-25",
     "report_time": "08:00:00",
     "river_rows": 30,
@@ -494,7 +494,7 @@
   {
     "pdf_name": "MPWRD_Flood _Report _26-07-2026 8 AM.pdf",
     "parsed_folder": "parsed_MPWRD_Flood__Report__26-07-2026_8_AM",
-    "action": "parsed",
+    "action": "existing",
     "report_date": "2026-07-26",
     "report_time": "08:00:00",
     "river_rows": 30,
@@ -506,7 +506,7 @@
   {
     "pdf_name": "MPWRD_Flood_Report_27-07-2026 8am.pdf",
     "parsed_folder": "parsed_MPWRD_Flood_Report_27-07-2026_8am",
-    "action": "parsed",
+    "action": "existing",
     "report_date": "2026-07-27",
     "report_time": "08:00:00",
     "river_rows": 30,
@@ -518,7 +518,7 @@
   {
     "pdf_name": "MPWRD_Flood_Report_28-07-2026 8AM.pdf",
     "parsed_folder": "parsed_MPWRD_Flood_Report_28-07-2026_8AM",
-    "action": "parsed",
+    "action": "existing",
     "report_date": "2026-07-28",
     "report_time": "08:00:00",
     "river_rows": 30,
