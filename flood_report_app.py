@@ -1875,7 +1875,7 @@ def get_cached_open_meteo_weather(
             daily, hourly, current = normalize_weather_frames(daily, hourly, current)
             return daily, hourly, current, None, "database cache"
 
-    daily, hourly, current, error = fetch_open_meteo_weather(latitude, longitude)
+    daily, hourly, current, error, provider_source = fetch_operational_weather(latitude, longitude)
     if error:
         if row:
             daily = dataframe_from_weather_json(row[0])
@@ -1901,11 +1901,11 @@ def get_cached_open_meteo_weather(
                 dataframe_to_weather_json(hourly),
                 dataframe_to_weather_json(current),
                 fetched_at,
-                open_meteo_url(latitude, longitude),
+                provider_source,
             ),
         )
         conn.commit()
-    return daily, hourly, current, None, "api refreshed"
+    return daily, hourly, current, None, provider_source
 
 
 def get_cached_open_meteo_current(
@@ -1934,7 +1934,7 @@ def get_cached_open_meteo_current(
             except json.JSONDecodeError:
                 pass
 
-    current, error = fetch_open_meteo_current(latitude, longitude)
+    current, error, provider_source = fetch_operational_current_weather(latitude, longitude)
     if error:
         if row:
             try:
@@ -1960,11 +1960,11 @@ def get_cached_open_meteo_current(
                 json.dumps(current, default=str),
                 "Fetched",
                 fetched_at,
-                open_meteo_current_url(latitude, longitude),
+                provider_source,
             ),
         )
         conn.commit()
-    return current, None, "api refreshed"
+    return current, None, provider_source
 
 
 def normalize_name(value: str | float | None) -> str:
@@ -6314,6 +6314,20 @@ def google_weather_current_url(latitude: float, longitude: float, api_key: str) 
     return f"https://weather.googleapis.com/v1/currentConditions:lookup?{params}"
 
 
+def google_weather_daily_url(latitude: float, longitude: float, api_key: str, days: int = 7) -> str:
+    params = urllib.parse.urlencode(
+        {
+            "key": api_key,
+            "location.latitude": f"{float(latitude):.5f}",
+            "location.longitude": f"{float(longitude):.5f}",
+            "unitsSystem": "METRIC",
+            "days": max(1, min(int(days), 10)),
+            "pageSize": max(1, min(int(days), 10)),
+        }
+    )
+    return f"https://weather.googleapis.com/v1/forecast/days:lookup?{params}"
+
+
 @st.cache_data(ttl=1800, show_spinner=False)
 def fetch_google_weather_current(latitude: float, longitude: float, _api_key: str) -> tuple[dict, str | None]:
     if not _api_key:
@@ -6325,6 +6339,201 @@ def fetch_google_weather_current(latitude: float, longitude: float, _api_key: st
     if isinstance(api_error, dict):
         return {}, api_error.get("message") or json.dumps(api_error)
     return payload, None
+
+
+@st.cache_data(ttl=WEATHER_REFRESH_HOURS * 3600, show_spinner=False)
+def fetch_google_weather_daily(latitude: float, longitude: float, _api_key: str, days: int = 7) -> tuple[dict, str | None]:
+    if not _api_key:
+        return {}, "Operational weather key is not configured."
+    payload, error = fetch_json_url(google_weather_daily_url(latitude, longitude, _api_key, days=days))
+    if error or not isinstance(payload, dict):
+        return {}, error or "Operational weather forecast returned an empty response."
+    api_error = payload.get("error")
+    if isinstance(api_error, dict):
+        return {}, api_error.get("message") or json.dumps(api_error)
+    return payload, None
+
+
+def google_weather_number(value: object) -> float | None:
+    if isinstance(value, dict):
+        for key in ["degrees", "quantity", "value", "amount", "percent"]:
+            if key in value:
+                parsed = pd.to_numeric(pd.Series([value.get(key)]), errors="coerce").iloc[0]
+                if pd.notna(parsed):
+                    return float(parsed)
+        for key in ["qpf", "rainQpf", "snowQpf", "iceQpf", "precipitationAmount", "speed", "gust"]:
+            if key in value:
+                parsed = google_weather_number(value.get(key))
+                if parsed is not None:
+                    return parsed
+    parsed = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
+    return float(parsed) if pd.notna(parsed) else None
+
+
+def google_weather_description(value: object) -> str:
+    if not isinstance(value, dict):
+        return ""
+    description = value.get("description")
+    if isinstance(description, dict):
+        return str(description.get("text") or "")
+    return str(value.get("type") or "")
+
+
+def google_weather_precip_mm(value: object) -> float:
+    if not isinstance(value, dict):
+        return 0.0
+    for key in ["qpf", "rainQpf", "snowQpf", "iceQpf", "precipitationAmount"]:
+        parsed = google_weather_number(value.get(key))
+        if parsed is not None:
+            return float(parsed)
+    parsed = google_weather_number(value)
+    return float(parsed) if parsed is not None else 0.0
+
+
+def google_weather_wind_kmh(value: object) -> float | None:
+    if not isinstance(value, dict):
+        return None
+    candidates = [
+        google_weather_number(value.get("speed")),
+        google_weather_number(value.get("maxSpeed")),
+        google_weather_number(value.get("gust")),
+    ]
+    candidates = [item for item in candidates if item is not None]
+    return max(candidates) if candidates else None
+
+
+def google_weather_daily_frames(daily_payload: dict, current_payload: dict) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    daily_rows = []
+    for item in daily_payload.get("forecastDays") or []:
+        if not isinstance(item, dict):
+            continue
+        display_date = item.get("displayDate") or {}
+        date_text = ""
+        if isinstance(display_date, dict) and all(display_date.get(key) for key in ["year", "month", "day"]):
+            date_text = f"{int(display_date['year']):04d}-{int(display_date['month']):02d}-{int(display_date['day']):02d}"
+        if not date_text:
+            interval = item.get("interval") or {}
+            date_text = str(interval.get("startTime") or "")[:10]
+        daytime = item.get("daytimeForecast") or {}
+        nighttime = item.get("nighttimeForecast") or {}
+        day_precip = google_weather_precip_mm(daytime.get("precipitation") if isinstance(daytime, dict) else {})
+        night_precip = google_weather_precip_mm(nighttime.get("precipitation") if isinstance(nighttime, dict) else {})
+        day_wind = google_weather_wind_kmh(daytime.get("wind") if isinstance(daytime, dict) else {})
+        night_wind = google_weather_wind_kmh(nighttime.get("wind") if isinstance(nighttime, dict) else {})
+        daily_rows.append(
+            {
+                "time": date_text,
+                "date": pd.to_datetime(date_text, errors="coerce"),
+                "period": "Forecast",
+                "temperature_2m_max": google_weather_number(item.get("maxTemperature")),
+                "temperature_2m_min": google_weather_number(item.get("minTemperature")),
+                "temperature_2m_mean": math.nan,
+                "precipitation_sum": round(float(day_precip + night_precip), 2),
+                "rain_sum": round(float(day_precip + night_precip), 2),
+                "showers_sum": math.nan,
+                "snowfall_sum": math.nan,
+                "wind_speed_10m_max": max([v for v in [day_wind, night_wind] if v is not None], default=math.nan),
+                "uv_index_max": max(
+                    [
+                        pd.to_numeric(pd.Series([daytime.get("uvIndex") if isinstance(daytime, dict) else None]), errors="coerce").iloc[0],
+                        pd.to_numeric(pd.Series([nighttime.get("uvIndex") if isinstance(nighttime, dict) else None]), errors="coerce").iloc[0],
+                    ]
+                ),
+                "cloud_cover": max(
+                    [
+                        pd.to_numeric(pd.Series([daytime.get("cloudCover") if isinstance(daytime, dict) else None]), errors="coerce").iloc[0],
+                        pd.to_numeric(pd.Series([nighttime.get("cloudCover") if isinstance(nighttime, dict) else None]), errors="coerce").iloc[0],
+                    ]
+                ),
+            }
+        )
+    daily = pd.DataFrame(daily_rows)
+    if not daily.empty:
+        for column in daily.columns:
+            if column not in {"time", "date", "period"}:
+                daily[column] = pd.to_numeric(daily[column], errors="coerce")
+
+    current_summary = google_weather_summary(current_payload)
+    precipitation = current_payload.get("precipitation") if isinstance(current_payload, dict) else {}
+    current = pd.DataFrame(
+        [
+            {
+                "time": current_payload.get("currentTime"),
+                "datetime": pd.to_datetime(current_payload.get("currentTime"), errors="coerce"),
+                "temperature_2m": current_summary.get("temperature_c"),
+                "relative_humidity_2m": current_summary.get("humidity_percent"),
+                "apparent_temperature": current_summary.get("feels_like_c"),
+                "precipitation": google_weather_precip_mm(precipitation),
+                "rain": google_weather_precip_mm(precipitation),
+                "showers": math.nan,
+                "weather_code": math.nan,
+                "cloud_cover": current_payload.get("cloudCover"),
+                "wind_speed_10m": current_summary.get("wind_speed_kmh"),
+                "wind_direction_10m": (current_payload.get("wind") or {}).get("direction", {}).get("degrees") if isinstance(current_payload.get("wind"), dict) else math.nan,
+                "wind_gusts_10m": google_weather_number((current_payload.get("wind") or {}).get("gust")) if isinstance(current_payload.get("wind"), dict) else math.nan,
+                "uv_index": current_summary.get("uv_index"),
+                "weather_condition": current_summary.get("condition"),
+            }
+        ]
+    )
+    for column in current.columns:
+        if column not in {"time", "datetime", "weather_condition"}:
+            current[column] = pd.to_numeric(current[column], errors="coerce")
+    return daily, pd.DataFrame(), current
+
+
+@st.cache_data(ttl=WEATHER_REFRESH_HOURS * 3600, show_spinner=False)
+def fetch_google_weather_frames(latitude: float, longitude: float, _api_key: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, str | None]:
+    daily_payload, daily_error = fetch_google_weather_daily(latitude, longitude, _api_key, days=7)
+    current_payload, current_error = fetch_google_weather_current(latitude, longitude, _api_key)
+    if daily_error or current_error:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), daily_error or current_error
+    daily, hourly, current = google_weather_daily_frames(daily_payload, current_payload)
+    if daily.empty and current.empty:
+        return daily, hourly, current, "Operational weather service returned no usable values."
+    return daily, hourly, current, None
+
+
+def google_current_to_open_schema(payload: dict) -> dict:
+    current_summary = google_weather_summary(payload)
+    precipitation = payload.get("precipitation") if isinstance(payload, dict) else {}
+    wind = payload.get("wind") if isinstance(payload, dict) else {}
+    return {
+        "time": payload.get("currentTime"),
+        "temperature_2m": current_summary.get("temperature_c"),
+        "relative_humidity_2m": current_summary.get("humidity_percent"),
+        "apparent_temperature": current_summary.get("feels_like_c"),
+        "precipitation": google_weather_precip_mm(precipitation),
+        "rain": google_weather_precip_mm(precipitation),
+        "showers": math.nan,
+        "weather_code": math.nan,
+        "cloud_cover": payload.get("cloudCover"),
+        "wind_speed_10m": current_summary.get("wind_speed_kmh"),
+        "wind_direction_10m": (wind or {}).get("direction", {}).get("degrees") if isinstance(wind, dict) else math.nan,
+        "wind_gusts_10m": google_weather_number((wind or {}).get("gust")) if isinstance(wind, dict) else math.nan,
+        "uv_index": current_summary.get("uv_index"),
+        "weather_condition": current_summary.get("condition"),
+    }
+
+
+def fetch_operational_current_weather(latitude: float, longitude: float) -> tuple[dict, str | None, str]:
+    google_key = get_app_secret("google_weather_api_key", "GOOGLE_WEATHER_API_KEY", "").strip()
+    if google_key:
+        payload, error = fetch_google_weather_current(latitude, longitude, google_key)
+        if not error and payload:
+            return google_current_to_open_schema(payload), None, "operational weather service"
+    current, error = fetch_open_meteo_current(latitude, longitude)
+    return current, error, "operational weather fallback" if not error else "api failed"
+
+
+def fetch_operational_weather(latitude: float, longitude: float) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, str | None, str]:
+    google_key = get_app_secret("google_weather_api_key", "GOOGLE_WEATHER_API_KEY", "").strip()
+    if google_key:
+        daily, hourly, current, error = fetch_google_weather_frames(latitude, longitude, google_key)
+        if not error and (not daily.empty or not current.empty):
+            return daily, hourly, current, None, "operational weather service"
+    daily, hourly, current, error = fetch_open_meteo_weather(latitude, longitude)
+    return daily, hourly, current, error, "operational weather fallback" if not error else "api failed"
 
 
 def google_weather_summary(payload: dict) -> dict:
