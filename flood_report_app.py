@@ -7054,6 +7054,36 @@ def render_weather_town_leaflet_map(
     center = next((item for item in records if item["selected"]), records[0])
     tile_key = weather_tile_api_key.strip()
     districts_json = json.dumps(district_geojson or {"type": "FeatureCollection", "features": []})
+    district_label_records = []
+    for feature in (district_geojson or {}).get("features", []):
+        props = feature.get("properties", {}) or {}
+        geometry = feature.get("geometry") or {}
+        sample_points = []
+
+        def collect_geo_points(coords):
+            if isinstance(coords, list) and len(coords) >= 2 and all(isinstance(value, (int, float)) for value in coords[:2]):
+                sample_points.append(coords[:2])
+            elif isinstance(coords, list):
+                for item in coords:
+                    collect_geo_points(item)
+
+        collect_geo_points(geometry.get("coordinates", []))
+        valid_points = [
+            point
+            for point in sample_points[:: max(1, len(sample_points) // 80)]
+            if len(point) >= 2
+            and 73.0 <= float(point[0]) <= 84.5
+            and 20.0 <= float(point[1]) <= 27.5
+        ]
+        if not valid_points:
+            continue
+        district_label_records.append(
+            {
+                "name": str(props.get("district") or props.get("dist_nm_e") or ""),
+                "lat": round(sum(float(point[1]) for point in valid_points) / len(valid_points), 4),
+                "lon": round(sum(float(point[0]) for point in valid_points) / len(valid_points), 4),
+            }
+        )
     layer_note = (
         "Radar overlay is available when the operational weather layer is configured. Cloud and precipitation overlays require a configured weather layer key."
         if not tile_key
@@ -7135,6 +7165,20 @@ def render_weather_town_leaflet_map(
             }}
             .weather-legend b {{ display:block; color:#172033; margin-bottom:4px; }}
             .weather-legend span {{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; }}
+            .weather-district-label {{
+                color: #ffffff;
+                font: 800 10px Roboto, Inter, Segoe UI, sans-serif;
+                letter-spacing: 0.35px;
+                text-shadow: 0 1px 4px #000, 0 0 2px #000;
+                text-transform: uppercase;
+                white-space: nowrap;
+            }}
+            .weather-dam-label {{
+                color: #ffffff;
+                font: 900 10px Roboto, Inter, Segoe UI, sans-serif;
+                text-shadow: 0 1px 4px #000, 0 0 2px #000;
+                white-space: nowrap;
+            }}
         </style>
         <div class="weather-map-title">{escape(map_title)}</div>
         <div class="weather-map-note">Markers are colored by 7-day rainfall, wind and UV risk. Dam forecast points are available as a separate map layer. {escape(layer_note)}</div>
@@ -7148,6 +7192,7 @@ def render_weather_town_leaflet_map(
             const towns = {json.dumps(records)};
             const dams = {json.dumps(dam_records)};
             const districts = {districts_json};
+            const districtLabels = {json.dumps(district_label_records)};
             const weatherTileApiKey = {json.dumps(tile_key)};
             const map = L.map("{map_id}", {{ zoomControl: true, preferCanvas: true, scrollWheelZoom: true }})
                 .setView([{center["lat"]:.5f}, {center["lon"]:.5f}], 7);
@@ -7171,12 +7216,11 @@ def render_weather_town_leaflet_map(
             const overlays = {{}};
             const adminBoundary = L.geoJSON(districts, {{
                 style: () => ({{
-                    color: "#111827",
-                    weight: 1.15,
-                    opacity: 0.78,
-                    fillColor: "#ffffff",
-                    fillOpacity: 0.02,
-                    dashArray: "4 3"
+                    color: "#ffffff",
+                    weight: 1.55,
+                    opacity: 0.95,
+                    fillColor: "#0ea5e9",
+                    fillOpacity: 0.055
                 }}),
                 onEachFeature: (feature, layer) => {{
                     const name = feature.properties && feature.properties.district ? feature.properties.district : "MP boundary";
@@ -7184,6 +7228,20 @@ def render_weather_town_leaflet_map(
                 }}
             }}).addTo(map);
             overlays["MP admin boundaries"] = adminBoundary;
+            const districtLabelLayer = L.layerGroup().addTo(map);
+            districtLabels.forEach((district) => {{
+                if (!district.name) return;
+                L.marker([district.lat, district.lon], {{
+                    interactive: false,
+                    icon: L.divIcon({{
+                        className: "weather-district-label",
+                        html: district.name,
+                        iconSize: [95, 12],
+                        iconAnchor: [46, 6]
+                    }})
+                }}).addTo(districtLabelLayer);
+            }});
+            overlays["District labels"] = districtLabelLayer;
             if (weatherTileApiKey) {{
                 const cloudLayer = L.tileLayer(
                     `https://tile.openweathermap.org/map/clouds_new/{{z}}/{{x}}/{{y}}.png?appid=${{weatherTileApiKey}}`,
@@ -7255,14 +7313,15 @@ def render_weather_town_leaflet_map(
                 .catch(() => {{}});
             const bounds = [];
             const damLayer = L.layerGroup().addTo(map);
+            const damLabelLayer = L.layerGroup().addTo(map);
             dams.forEach((dam) => {{
                 bounds.push([dam.lat, dam.lon]);
                 const marker = L.circleMarker([dam.lat, dam.lon], {{
-                    radius: dam.selected ? 7.4 : 4.4,
+                    radius: dam.selected ? 7.4 : 5.6,
                     color: dam.selected ? "#111827" : "#ffffff",
-                    weight: dam.selected ? 2.2 : 1,
-                    fillColor: dam.has_forecast ? dam.color : "#7c3aed",
-                    fillOpacity: dam.has_forecast ? 0.92 : 0.72
+                    weight: dam.selected ? 2.2 : 1.6,
+                    fillColor: dam.has_forecast ? dam.color : "#147df5",
+                    fillOpacity: dam.has_forecast ? 0.92 : 0.82
                 }}).addTo(damLayer);
                 marker.bindTooltip(`${{dam.town}} | ${{dam.has_forecast ? dam.risk : "Forecast pending"}}`, {{ sticky: true }});
                 marker.bindPopup(`
@@ -7276,8 +7335,18 @@ def render_weather_town_leaflet_map(
                     Max UV: ${{dam.has_forecast ? dam.max_uv : "-"}}<br/>
                     Data status: ${{dam.has_forecast ? "Operational forecast ready" : "Forecast pending"}}
                 `);
+                L.marker([dam.lat, dam.lon], {{
+                    interactive: false,
+                    icon: L.divIcon({{
+                        className: "weather-dam-label",
+                        html: dam.town,
+                        iconSize: [120, 14],
+                        iconAnchor: [-10, 18]
+                    }})
+                }}).addTo(damLabelLayer);
             }});
-            layerControl.addOverlay(damLayer, "Dam forecast points");
+            layerControl.addOverlay(damLayer, "Dam points");
+            layerControl.addOverlay(damLabelLayer, "Dam labels");
             towns.forEach((town) => {{
                 bounds.push([town.lat, town.lon]);
                 const marker = L.circleMarker([town.lat, town.lon], {{
@@ -7299,6 +7368,7 @@ def render_weather_town_leaflet_map(
                     Max UV: ${{town.max_uv}}
                 `);
             }});
+            districtLabels.forEach((district) => bounds.push([district.lat, district.lon]));
             const boundsObj = L.latLngBounds(bounds);
             if (boundsObj.isValid()) map.fitBounds(boundsObj.pad(0.15), {{ maxZoom: 7 }});
             const legend = L.control({{ position: "bottomright" }});
@@ -11361,10 +11431,48 @@ if main_page == "Weather Forecast":
                                     use_container_width=True,
                                     hide_index=True,
                                 )
-            if weather_error and daily_weather.empty:
-                st.error(weather_error)
-            elif daily_weather.empty:
-                st.warning("Weather service returned no daily weather rows for the selected town.")
+            if daily_weather.empty:
+                if weather_error:
+                    st.error(weather_error)
+                else:
+                    st.warning("Weather service returned no daily weather rows for the selected town.")
+                fallback_summary_towns = weather_points.copy()
+                for column in ["forecast_rain_mm", "forecast_temp_max_c", "forecast_wind_max_kmh", "forecast_uv_max"]:
+                    if column not in fallback_summary_towns.columns:
+                        fallback_summary_towns[column] = math.nan
+                    fallback_summary_towns[column] = pd.to_numeric(fallback_summary_towns[column], errors="coerce")
+                if "weather_risk" not in fallback_summary_towns.columns:
+                    fallback_summary_towns["weather_risk"] = "No Data"
+                fallback_summary_towns["weather_risk"] = fallback_summary_towns["weather_risk"].fillna("No Data")
+                weather_tile_api_key = get_app_secret("openweather_api_key", "OPENWEATHER_API_KEY", "")
+                weather_district_geojson = load_light_district_geojson(str(MP_DISTRICTS_GEOJSON))
+                render_weather_town_leaflet_map(
+                    fallback_summary_towns,
+                    selected_town_name,
+                    weather_tile_api_key,
+                    weather_district_geojson,
+                    f"Weather Forecast Map: MP {selected_weather_set}",
+                    dam_layer_weather,
+                )
+                if not dam_layer_weather.empty:
+                    dam_cols = [
+                        col
+                        for col in [
+                            "town_name",
+                            "district",
+                            "forecast_rain_mm",
+                            "forecast_temp_max_c",
+                            "forecast_wind_max_kmh",
+                            "forecast_uv_max",
+                            "current_rain_mm",
+                            "current_temp_c",
+                            "weather_risk",
+                            "status",
+                        ]
+                        if col in dam_layer_weather.columns
+                    ]
+                    st.markdown("**Dam-wise Weather Forecast Layer**")
+                    st.dataframe(dam_layer_weather[dam_cols], use_container_width=True, hide_index=True, height=260)
             else:
                 if weather_error:
                     st.warning(weather_error)
