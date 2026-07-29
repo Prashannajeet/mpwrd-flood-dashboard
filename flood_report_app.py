@@ -7058,21 +7058,38 @@ def weather_summary_from_frames(
 
 
 @st.cache_data(ttl=600, show_spinner=False)
-def build_cached_weather_forecast_for_points(points_key: tuple[tuple[str, str, float, float], ...]) -> pd.DataFrame:
+def build_cached_weather_forecast_for_points(points_key: tuple[tuple[str, str, float, float], ...], cache_marker: str = "") -> pd.DataFrame:
     init_weather_database()
     rows = []
     with sqlite3.connect(WEATHER_CACHE_DB) as conn:
         for point_name, district, latitude, longitude in points_key:
+            source = "database cache"
+            error = ""
             key = weather_location_key(float(latitude), float(longitude))
             row = conn.execute(
                 """
-                SELECT daily_json, hourly_json, current_json, fetched_at
+                SELECT daily_json, hourly_json, current_json, fetched_at, source_url
                 FROM weather_forecast_cache
                 WHERE location_key = ?
                 """,
                 (key,),
             ).fetchone()
-            if not row:
+            if (not row) or (not weather_cache_is_fresh(row[3])) or (not weather_cache_source_is_primary(row[4] if len(row) > 4 else "")):
+                daily, hourly, current, error, source = get_cached_open_meteo_weather(float(latitude), float(longitude), force_refresh=True)
+                if not daily.empty:
+                    rows.append(
+                        weather_summary_from_frames(
+                            point_name,
+                            district,
+                            latitude,
+                            longitude,
+                            daily,
+                            current,
+                            source,
+                            error or "Ready",
+                        )
+                    )
+                    continue
                 rows.append(
                     weather_summary_from_frames(
                         point_name,
@@ -7081,8 +7098,8 @@ def build_cached_weather_forecast_for_points(points_key: tuple[tuple[str, str, f
                         longitude,
                         pd.DataFrame(),
                         pd.DataFrame(),
-                        "database cache",
-                        "Cache pending - scheduled daily refresh not completed",
+                        source,
+                        error or "Forecast pending - live refresh not completed",
                     )
                 )
                 continue
@@ -7098,7 +7115,7 @@ def build_cached_weather_forecast_for_points(points_key: tuple[tuple[str, str, f
                     longitude,
                     daily,
                     current,
-                    "daily database cache",
+                    "Google Weather cache" if weather_cache_source_is_primary(row[4] if len(row) > 4 else "") else "daily database cache",
                     f"Cached at {row[3]}",
                 )
             )
@@ -11600,7 +11617,8 @@ if main_page == "Weather Forecast":
             )
             for row in dam_weather_points.dropna(subset=["latitude", "longitude"]).itertuples(index=False)
         )
-        dam_layer_weather = build_cached_weather_forecast_for_points(dam_points_key)
+        cache_marker = get_weather_cache_summary().get("latest_refresh") or ""
+        dam_layer_weather = build_cached_weather_forecast_for_points(dam_points_key, cache_marker)
     else:
         weather_refresh_state = {"status": "no_points", "summary": get_weather_cache_summary()}
     district_weather_points = district_weather_from_dam_forecasts(dam_layer_weather, fallback_district_weather_points)
