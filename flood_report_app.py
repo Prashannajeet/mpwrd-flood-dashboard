@@ -1169,12 +1169,21 @@ def fetch_json_url(url: str) -> tuple[dict | list | None, str | None]:
                 timeout=22,
             )
             if not result.stdout.strip():
-                return None, f"Unable to reach weather API: {exc}"
+                return None, "Weather service is temporarily unavailable. Showing stored operational data where available."
             return json.loads(result.stdout), None
         except Exception:
-            return None, f"Unable to reach weather API: {exc}"
+            return None, "Weather service is temporarily unavailable. Showing stored operational data where available."
     except Exception as exc:
-        return None, f"Unable to read weather API response: {exc}"
+        return None, "Weather service response could not be processed. Showing stored operational data where available."
+
+
+def public_weather_status_message(message: str | None) -> str:
+    if not message:
+        return ""
+    raw = str(message)
+    if "WinError 10013" in raw or "urlopen error" in raw or "Unable to reach weather API" in raw:
+        return "Live weather refresh is temporarily unavailable. Showing stored operational data and map layers."
+    return raw
 
 
 @st.cache_data(ttl=1800, show_spinner=False)
@@ -6604,7 +6613,7 @@ def render_google_flood_operational_brief(points: pd.DataFrame, title: str, poin
         unsafe_allow_html=True,
     )
     if flood_error and flood_status.empty:
-        st.caption(f"Flood API status: {flood_error}")
+        st.caption("Flood status service is temporarily unavailable. Dashboard layers continue using stored operational data.")
     return linked
 
 
@@ -7007,6 +7016,12 @@ def render_weather_town_leaflet_map(
 ) -> None:
     if towns.empty:
         return
+    def map_number(value: object, digits: int = 1) -> float | None:
+        parsed = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
+        if pd.isna(parsed):
+            return None
+        return round(float(parsed), digits)
+
     records = []
     for row in towns.dropna(subset=["latitude", "longitude"]).to_dict("records"):
         risk = str(row.get("weather_risk") or "Low")
@@ -7020,10 +7035,10 @@ def render_weather_town_leaflet_map(
                 "lon": float(row["longitude"]),
                 "risk": risk,
                 "color": weather_risk_color(risk),
-                "forecast_rain": round(float(row.get("forecast_rain_mm") or 0), 1),
-                "max_temp": round(float(row.get("forecast_temp_max_c") or 0), 1),
-                "max_wind": round(float(row.get("forecast_wind_max_kmh") or 0), 1),
-                "max_uv": round(float(row.get("forecast_uv_max") or 0), 1),
+                "forecast_rain": map_number(row.get("forecast_rain_mm")),
+                "max_temp": map_number(row.get("forecast_temp_max_c")),
+                "max_wind": map_number(row.get("forecast_wind_max_kmh")),
+                "max_uv": map_number(row.get("forecast_uv_max")),
                 "selected": str(row.get("town_name") or "") == selected_town,
             }
         )
@@ -7041,10 +7056,10 @@ def render_weather_town_leaflet_map(
                     "lon": float(row["longitude"]),
                     "risk": risk,
                     "color": weather_risk_color(risk),
-                    "forecast_rain": round(float(row.get("forecast_rain_mm") or 0), 1),
-                    "max_temp": round(float(row.get("forecast_temp_max_c") or 0), 1),
-                    "max_wind": round(float(row.get("forecast_wind_max_kmh") or 0), 1),
-                    "max_uv": round(float(row.get("forecast_uv_max") or 0), 1),
+                    "forecast_rain": map_number(row.get("forecast_rain_mm")),
+                    "max_temp": map_number(row.get("forecast_temp_max_c")),
+                    "max_wind": map_number(row.get("forecast_wind_max_kmh")),
+                    "max_uv": map_number(row.get("forecast_uv_max")),
                     "source": "Operational cache",
                     "has_forecast": pd.notna(row.get("forecast_rain_mm")) if "forecast_rain_mm" in row else False,
                     "selected": str(row.get("town_name") or row.get("reservoir_name") or "") == selected_town,
@@ -7194,6 +7209,10 @@ def render_weather_town_leaflet_map(
             const districts = {districts_json};
             const districtLabels = {json.dumps(district_label_records)};
             const weatherTileApiKey = {json.dumps(tile_key)};
+            const fmtWeather = (value, suffix = "") => {{
+                if (value === null || value === undefined || Number.isNaN(Number(value))) return "Pending";
+                return `${{Number(value).toFixed(1)}}${{suffix}}`;
+            }};
             const map = L.map("{map_id}", {{ zoomControl: true, preferCanvas: true, scrollWheelZoom: true }})
                 .setView([{center["lat"]:.5f}, {center["lon"]:.5f}], 7);
             const topo = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{{z}}/{{y}}/{{x}}", {{
@@ -7228,7 +7247,7 @@ def render_weather_town_leaflet_map(
                 }}
             }}).addTo(map);
             overlays["MP admin boundaries"] = adminBoundary;
-            const districtLabelLayer = L.layerGroup().addTo(map);
+            const districtLabelLayer = L.layerGroup();
             districtLabels.forEach((district) => {{
                 if (!district.name) return;
                 L.marker([district.lat, district.lon], {{
@@ -7313,7 +7332,7 @@ def render_weather_town_leaflet_map(
                 .catch(() => {{}});
             const bounds = [];
             const damLayer = L.layerGroup().addTo(map);
-            const damLabelLayer = L.layerGroup().addTo(map);
+            const damLabelLayer = L.layerGroup();
             dams.forEach((dam) => {{
                 bounds.push([dam.lat, dam.lon]);
                 const marker = L.circleMarker([dam.lat, dam.lon], {{
@@ -7329,10 +7348,10 @@ def render_weather_town_leaflet_map(
                     District: ${{dam.district}}<br/>
                     Basin: ${{dam.basin}}<br/>
                     Weather risk: <b style="color:${{dam.color}}">${{dam.has_forecast ? dam.risk : "Forecast pending"}}</b><br/>
-                    7-day rain: ${{dam.has_forecast ? dam.forecast_rain + " mm" : "Load dam forecasts"}}<br/>
-                    Max temp: ${{dam.has_forecast ? dam.max_temp + " &deg;C" : "-"}}<br/>
-                    Max wind: ${{dam.has_forecast ? dam.max_wind + " km/h" : "-"}}<br/>
-                    Max UV: ${{dam.has_forecast ? dam.max_uv : "-"}}<br/>
+                    7-day rain: ${{dam.has_forecast ? fmtWeather(dam.forecast_rain, " mm") : "Pending"}}<br/>
+                    Max temp: ${{dam.has_forecast ? fmtWeather(dam.max_temp, " &deg;C") : "Pending"}}<br/>
+                    Max wind: ${{dam.has_forecast ? fmtWeather(dam.max_wind, " km/h") : "Pending"}}<br/>
+                    Max UV: ${{dam.has_forecast ? fmtWeather(dam.max_uv, "") : "Pending"}}<br/>
                     Data status: ${{dam.has_forecast ? "Operational forecast ready" : "Forecast pending"}}
                 `);
                 L.marker([dam.lat, dam.lon], {{
@@ -7362,10 +7381,10 @@ def render_weather_town_leaflet_map(
                     District: ${{town.district}}<br/>
                     Basin: ${{town.basin}}<br/>
                     Risk: <b style="color:${{town.color}}">${{town.risk}}</b><br/>
-                    7-day rain: ${{town.forecast_rain}} mm<br/>
-                    Max temp: ${{town.max_temp}} &deg;C<br/>
-                    Max wind: ${{town.max_wind}} km/h<br/>
-                    Max UV: ${{town.max_uv}}
+                    7-day rain: ${{fmtWeather(town.forecast_rain, " mm")}}<br/>
+                    Max temp: ${{fmtWeather(town.max_temp, " &deg;C")}}<br/>
+                    Max wind: ${{fmtWeather(town.max_wind, " km/h")}}<br/>
+                    Max UV: ${{fmtWeather(town.max_uv, "")}}
                 `);
             }});
             districtLabels.forEach((district) => bounds.push([district.lat, district.lon]));
@@ -11433,7 +11452,7 @@ if main_page == "Weather Forecast":
                                 )
             if daily_weather.empty:
                 if weather_error:
-                    st.error(weather_error)
+                    st.error(public_weather_status_message(weather_error))
                 else:
                     st.warning("Weather service returned no daily weather rows for the selected town.")
                 fallback_summary_towns = weather_points.copy()
@@ -11475,7 +11494,7 @@ if main_page == "Weather Forecast":
                     st.dataframe(dam_layer_weather[dam_cols], use_container_width=True, hide_index=True, height=260)
             else:
                 if weather_error:
-                    st.warning(weather_error)
+                    st.warning(public_weather_status_message(weather_error))
                 forecast_daily = daily_weather[daily_weather["period"] == "Forecast"].head(7).copy()
                 hindcast_daily = daily_weather[daily_weather["period"] == "Hindcast"].copy()
                 if forecast_daily.empty:
