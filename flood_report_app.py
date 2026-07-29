@@ -1247,6 +1247,16 @@ def weather_cache_is_fresh(fetched_at: str | None) -> bool:
     return age <= pd.Timedelta(hours=WEATHER_REFRESH_HOURS)
 
 
+def google_weather_key_configured() -> bool:
+    return bool(get_app_secret("google_weather_api_key", "GOOGLE_WEATHER_API_KEY", "").strip())
+
+
+def weather_cache_source_is_primary(source_text: str | None) -> bool:
+    if not google_weather_key_configured():
+        return True
+    return "google weather" in str(source_text or "").lower()
+
+
 def init_weather_database() -> None:
     WEATHER_CACHE_DB.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(WEATHER_CACHE_DB) as conn:
@@ -1862,18 +1872,18 @@ def get_cached_open_meteo_weather(
         if not force_refresh:
             row = conn.execute(
                 """
-                SELECT daily_json, hourly_json, current_json, fetched_at
+                SELECT daily_json, hourly_json, current_json, fetched_at, source_url
                 FROM weather_forecast_cache
                 WHERE location_key = ?
                 """,
                 (key,),
             ).fetchone()
-        if row and weather_cache_is_fresh(row[3]):
+        if row and weather_cache_is_fresh(row[3]) and weather_cache_source_is_primary(row[4] if len(row) > 4 else ""):
             daily = dataframe_from_weather_json(row[0])
             hourly = dataframe_from_weather_json(row[1])
             current = dataframe_from_weather_json(row[2])
             daily, hourly, current = normalize_weather_frames(daily, hourly, current)
-            return daily, hourly, current, None, "database cache"
+            return daily, hourly, current, None, "Google Weather cache" if google_weather_key_configured() else "database cache"
 
     daily, hourly, current, error, provider_source = fetch_operational_weather(latitude, longitude)
     if error:
@@ -1922,15 +1932,15 @@ def get_cached_open_meteo_current(
         if not force_refresh:
             row = conn.execute(
                 """
-                SELECT current_json, status, fetched_at
+                SELECT current_json, status, fetched_at, source_url
                 FROM weather_current_cache
                 WHERE location_key = ?
                 """,
                 (key,),
             ).fetchone()
-        if row and weather_cache_is_fresh(row[2]):
+        if row and weather_cache_is_fresh(row[2]) and weather_cache_source_is_primary(row[3] if len(row) > 3 else ""):
             try:
-                return json.loads(row[0]), None, "database cache"
+                return json.loads(row[0]), None, "Google Weather cache" if google_weather_key_configured() else "database cache"
             except json.JSONDecodeError:
                 pass
 
@@ -6521,9 +6531,14 @@ def fetch_operational_current_weather(latitude: float, longitude: float) -> tupl
     if google_key:
         payload, error = fetch_google_weather_current(latitude, longitude, google_key)
         if not error and payload:
-            return google_current_to_open_schema(payload), None, "operational weather service"
+            return google_current_to_open_schema(payload), None, "Google Weather"
+        google_error = error or "Google Weather returned no current-condition values."
+    else:
+        google_error = ""
     current, error = fetch_open_meteo_current(latitude, longitude)
-    return current, error, "operational weather fallback" if not error else "api failed"
+    if not error and current:
+        return current, None, "fallback weather service"
+    return current, google_error or error, "api failed"
 
 
 def fetch_operational_weather(latitude: float, longitude: float) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, str | None, str]:
@@ -6531,9 +6546,14 @@ def fetch_operational_weather(latitude: float, longitude: float) -> tuple[pd.Dat
     if google_key:
         daily, hourly, current, error = fetch_google_weather_frames(latitude, longitude, google_key)
         if not error and (not daily.empty or not current.empty):
-            return daily, hourly, current, None, "operational weather service"
+            return daily, hourly, current, None, "Google Weather"
+        google_error = error or "Google Weather returned no forecast values."
+    else:
+        google_error = ""
     daily, hourly, current, error = fetch_open_meteo_weather(latitude, longitude)
-    return daily, hourly, current, error, "operational weather fallback" if not error else "api failed"
+    if not error and (not daily.empty or not current.empty):
+        return daily, hourly, current, None, "fallback weather service"
+    return daily, hourly, current, google_error or error, "api failed"
 
 
 def google_weather_summary(payload: dict) -> dict:
