@@ -6772,6 +6772,104 @@ def interpolate_capacity_level(curve_df: pd.DataFrame, storage_mcm: float) -> fl
     return float(level_values[-1])
 
 
+def interpolate_capacity_curve_value(curve_df: pd.DataFrame, elevation_m: float, value_col: str) -> float:
+    if curve_df.empty or pd.isna(elevation_m) or value_col not in curve_df.columns:
+        return math.nan
+    frame = curve_df.copy()
+    frame["elevation_m"] = pd.to_numeric(frame.get("elevation_m"), errors="coerce")
+    frame[value_col] = pd.to_numeric(frame.get(value_col), errors="coerce")
+    frame = frame.dropna(subset=["elevation_m", value_col]).sort_values("elevation_m")
+    if frame.empty:
+        return math.nan
+    elevation_values = frame["elevation_m"].to_numpy(dtype=float)
+    curve_values = frame[value_col].to_numpy(dtype=float)
+    clipped_level = min(max(float(elevation_m), float(elevation_values[0])), float(elevation_values[-1]))
+    for idx in range(1, len(elevation_values)):
+        if clipped_level <= elevation_values[idx]:
+            x0, x1 = elevation_values[idx - 1], elevation_values[idx]
+            y0, y1 = curve_values[idx - 1], curve_values[idx]
+            if x1 == x0:
+                return float(y1)
+            ratio = (clipped_level - x0) / (x1 - x0)
+            return float(y0 + ratio * (y1 - y0))
+    return float(curve_values[-1])
+
+
+def build_live_aec_summary(
+    reservoir_frame: pd.DataFrame,
+    map_status_frame: pd.DataFrame,
+    capacity_frame: pd.DataFrame,
+    capacity_curve_frame: pd.DataFrame,
+) -> pd.DataFrame:
+    names = sorted(
+        set(reservoir_frame.get("reservoir_name", pd.Series(dtype=str)).dropna().astype(str))
+        | set(map_status_frame.get("reservoir_name", pd.Series(dtype=str)).dropna().astype(str))
+        | set(capacity_frame.get("reservoir_name", pd.Series(dtype=str)).dropna().astype(str))
+        | set(capacity_curve_frame.get("reservoir_name", pd.Series(dtype=str)).dropna().astype(str))
+    )
+    if not names:
+        return pd.DataFrame()
+    latest = latest_by_asset(reservoir_frame, "reservoir_name") if not reservoir_frame.empty else pd.DataFrame()
+    rows = []
+    for name in names:
+        latest_row = latest[latest.get("reservoir_name", pd.Series(dtype=str)).astype(str) == name].tail(1)
+        map_row = map_status_frame[map_status_frame.get("reservoir_name", pd.Series(dtype=str)).astype(str) == name].tail(1)
+        capacity_row = capacity_frame[capacity_frame.get("reservoir_name", pd.Series(dtype=str)).astype(str) == name].tail(1)
+        curve_df = capacity_curve_frame[capacity_curve_frame.get("reservoir_name", pd.Series(dtype=str)).astype(str) == name].copy()
+
+        def row_value(column: str, default=math.nan):
+            for candidate in (latest_row, map_row, capacity_row):
+                if not candidate.empty and column in candidate.columns:
+                    value = candidate.iloc[0].get(column)
+                    if pd.notna(value):
+                        return value
+            return default
+
+        water_level = pd.to_numeric(pd.Series([row_value("water_level_m", row_value("latest_water_level_m"))]), errors="coerce").iloc[0]
+        reported_storage = pd.to_numeric(
+            pd.Series([row_value("current_live_capacity_mcm", row_value("latest_reported_storage_mcm"))]),
+            errors="coerce",
+        ).iloc[0]
+        frl = pd.to_numeric(pd.Series([row_value("frl_m")]), errors="coerce").iloc[0]
+        lsl = pd.to_numeric(pd.Series([row_value("lsl_m")]), errors="coerce").iloc[0]
+        official_capacity = pd.to_numeric(
+            pd.Series([row_value("live_capacity_frl_mcm", row_value("official_live_capacity_mcm", row_value("calibrated_capacity_mcm")))]),
+            errors="coerce",
+        ).iloc[0]
+        curve_storage = interpolate_capacity_curve_value(curve_df, water_level, "cumulative_storage_mcm")
+        live_area = interpolate_capacity_curve_value(curve_df, water_level, "water_spread_area_sqkm")
+        frl_storage = interpolate_capacity_curve_value(curve_df, frl, "cumulative_storage_mcm")
+        if pd.isna(official_capacity) and pd.notna(frl_storage):
+            official_capacity = frl_storage
+        filling_percent = pd.to_numeric(pd.Series([row_value("filling_percent", row_value("display_filling"))]), errors="coerce").iloc[0]
+        if pd.isna(filling_percent) and pd.notna(reported_storage) and pd.notna(official_capacity) and official_capacity:
+            filling_percent = reported_storage / official_capacity * 100.0
+        storage_delta = reported_storage - curve_storage if pd.notna(reported_storage) and pd.notna(curve_storage) else math.nan
+        storage_delta_pct = storage_delta / official_capacity * 100.0 if pd.notna(storage_delta) and pd.notna(official_capacity) and official_capacity else math.nan
+        rows.append(
+            {
+                "reservoir_name": name,
+                "district": row_value("district", row_value("map_district", "")),
+                "basin": row_value("sub_basin", row_value("major_basin", "")),
+                "observed_at": row_value("observed_at", pd.NaT),
+                "water_level_m": water_level,
+                "lsl_m": lsl,
+                "frl_m": frl,
+                "frl_gap_m": frl - water_level if pd.notna(frl) and pd.notna(water_level) else math.nan,
+                "live_area_sqkm": live_area,
+                "reported_storage_mcm": reported_storage,
+                "curve_storage_mcm": curve_storage,
+                "storage_delta_mcm": storage_delta,
+                "storage_delta_pct_of_capacity": storage_delta_pct,
+                "capacity_mcm": official_capacity,
+                "filling_percent": filling_percent,
+                "alert_level": row_value("alert_level", reservoir_inflow_alert(filling_percent, frl - water_level if pd.notna(frl) and pd.notna(water_level) else math.nan)),
+                "capacity_confidence": row_value("capacity_confidence", ""),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def nearest_gd_forecast_for_reservoir(reservoir_row: pd.Series, gd_forecasts: pd.DataFrame) -> tuple[pd.DataFrame, str, float]:
     if gd_forecasts.empty:
         return pd.DataFrame(), "", math.nan
@@ -7696,6 +7794,276 @@ def render_reservoir_inflow_forecast_page(
                 "text/csv",
                 use_container_width=True,
             )
+
+
+def render_reservoir_aec_live_page(
+    map_status_frame: pd.DataFrame,
+    reservoir_view_frame: pd.DataFrame,
+    capacity_frame: pd.DataFrame,
+    capacity_curve_frame: pd.DataFrame,
+) -> None:
+    st.subheader("Reservoir AEC Live")
+    st.markdown(
+        '<div class="panel-note">Live Area-Elevation-Capacity calculations from calibrated SRS reservoir curves and the latest uploaded reservoir observations.</div>',
+        unsafe_allow_html=True,
+    )
+    if capacity_curve_frame.empty:
+        st.info("No calibrated AEC curve data is available under the current filters.")
+        return
+
+    summary = build_live_aec_summary(reservoir_view_frame, map_status_frame, capacity_frame, capacity_curve_frame)
+    if summary.empty:
+        st.info("No reservoir observations are available for live AEC calculation.")
+        return
+
+    summary["observed_at"] = pd.to_datetime(summary.get("observed_at"), errors="coerce")
+    reservoir_options = sorted(summary["reservoir_name"].dropna().astype(str).unique())
+    default_name = reservoir_options[0] if reservoir_options else ""
+    if not summary.dropna(subset=["filling_percent"]).empty:
+        top_current = summary.dropna(subset=["filling_percent"]).sort_values("filling_percent", ascending=False)["reservoir_name"].iloc[0]
+        if top_current in reservoir_options:
+            default_name = top_current
+    control_cols = st.columns([0.34, 0.22, 0.22, 0.22])
+    with control_cols[0]:
+        selected_reservoir = st.selectbox(
+            "Select reservoir",
+            reservoir_options,
+            index=reservoir_options.index(default_name) if default_name in reservoir_options else 0,
+            key="v01_aec_live_reservoir",
+        )
+    with control_cols[1]:
+        show_rows = st.slider("Curve table rows", 8, 30, 16, 2, key="v01_aec_curve_rows")
+    with control_cols[2]:
+        ranking_metric = st.selectbox(
+            "Ranking metric",
+            ["Filling %", "FRL gap", "Storage difference", "Water spread area"],
+            key="v01_aec_ranking_metric",
+        )
+    with control_cols[3]:
+        compact_mode = st.toggle("Compact view", value=True, key="v01_aec_compact_mode")
+
+    selected_summary = summary[summary["reservoir_name"].astype(str) == selected_reservoir].tail(1)
+    if selected_summary.empty:
+        st.warning("The selected reservoir has no live AEC calculation.")
+        return
+    selected_row = selected_summary.iloc[0]
+    curve_df = capacity_curve_frame[capacity_curve_frame["reservoir_name"].astype(str) == selected_reservoir].copy()
+    for column in ["elevation_m", "water_spread_area_sqkm", "cumulative_storage_mcm"]:
+        curve_df[column] = pd.to_numeric(curve_df.get(column), errors="coerce")
+    curve_df = curve_df.dropna(subset=["elevation_m", "water_spread_area_sqkm", "cumulative_storage_mcm"]).sort_values("elevation_m")
+    if curve_df.empty:
+        st.warning("The selected reservoir does not have calibrated curve points.")
+        return
+
+    lsl = pd.to_numeric(pd.Series([selected_row.get("lsl_m")]), errors="coerce").iloc[0]
+    frl = pd.to_numeric(pd.Series([selected_row.get("frl_m")]), errors="coerce").iloc[0]
+    water_level = pd.to_numeric(pd.Series([selected_row.get("water_level_m")]), errors="coerce").iloc[0]
+    datum = lsl if pd.notna(lsl) else float(curve_df["elevation_m"].min())
+    upper_level = frl if pd.notna(frl) and frl > datum else float(curve_df["elevation_m"].max())
+    curve_df = curve_df[(curve_df["elevation_m"] >= datum - 0.001) & (curve_df["elevation_m"] <= upper_level + 0.001)].copy()
+    if curve_df.empty:
+        st.warning("The selected reservoir curve is outside the available live datum range.")
+        return
+    curve_df["elevation_above_datum_m"] = curve_df["elevation_m"] - datum
+    curve_df["segmental_live_capacity_mcm"] = curve_df["cumulative_storage_mcm"].diff().fillna(0).clip(lower=0)
+    curve_df["level_tag"] = ""
+    if not curve_df.empty:
+        curve_df.loc[curve_df.index[0], "level_tag"] = "MDDL"
+        curve_df.loc[curve_df.index[-1], "level_tag"] = "FRL"
+
+    latest_label = time_label(selected_row.get("observed_at"))
+    card_cols = st.columns(6)
+    card_cols[0].metric("Water Level", fmt_number(selected_row.get("water_level_m"), " m"))
+    card_cols[1].metric("Water Spread", fmt_number(selected_row.get("live_area_sqkm"), " sq.km"))
+    card_cols[2].metric("Curve Storage", fmt_number(selected_row.get("curve_storage_mcm"), " MCM"))
+    card_cols[3].metric("Reported Storage", fmt_number(selected_row.get("reported_storage_mcm"), " MCM"))
+    card_cols[4].metric("Filling", fmt_number(selected_row.get("filling_percent"), "%"))
+    card_cols[5].metric("FRL Gap", fmt_number(selected_row.get("frl_gap_m"), " m"))
+
+    top_cols = st.columns([0.68, 0.32])
+    with top_cols[0]:
+        reference_rows = []
+        for label, value, color in [
+            ("LSL", lsl, "#64748b"),
+            ("FRL", frl, "#ef4444"),
+            ("Current WL", water_level, "#0f766e"),
+        ]:
+            parsed = pd.to_numeric(pd.Series([value]), errors="coerce").iloc[0]
+            if pd.notna(parsed):
+                reference_rows.append(
+                    {
+                        "level": label,
+                        "elevation_m": float(parsed),
+                        "elevation_above_datum_m": float(parsed - datum),
+                        "color": color,
+                    }
+                )
+        reference_df = pd.DataFrame(reference_rows)
+        base_curve = alt.Chart(curve_df).encode(
+            y=alt.Y(
+                "elevation_above_datum_m:Q",
+                title=f"Elevation above datum ({datum:,.2f} m)",
+                scale=alt.Scale(domain=[0, max(0.1, upper_level - datum)], nice=False),
+                axis=alt.Axis(grid=True, tickCount=8),
+            )
+        )
+        area_curve = (
+            base_curve.mark_line(point=alt.OverlayMarkDef(filled=True, size=46, shape="square"), color="#ef6c35", strokeWidth=2.8)
+            .encode(
+                x=alt.X(
+                    "water_spread_area_sqkm:Q",
+                    title="Water spread area (sq.km) - bottom axis",
+                    scale=alt.Scale(reverse=True, zero=True, nice=True),
+                    axis=alt.Axis(orient="bottom", titleColor="#ef6c35", labelColor="#9a3412", grid=True),
+                ),
+                tooltip=[
+                    alt.Tooltip("elevation_m:Q", title="Elevation (m)", format=",.2f"),
+                    alt.Tooltip("water_spread_area_sqkm:Q", title="Area (sq.km)", format=",.2f"),
+                ],
+            )
+        )
+        storage_curve = (
+            base_curve.mark_line(point=alt.OverlayMarkDef(filled=True, size=46), color="#2563eb", strokeWidth=2.8)
+            .encode(
+                x=alt.X(
+                    "cumulative_storage_mcm:Q",
+                    title="Cumulative live capacity (MCM) - top axis",
+                    scale=alt.Scale(zero=True, nice=True),
+                    axis=alt.Axis(orient="top", titleColor="#2563eb", labelColor="#1d4ed8", grid=True),
+                ),
+                tooltip=[
+                    alt.Tooltip("elevation_m:Q", title="Elevation (m)", format=",.2f"),
+                    alt.Tooltip("cumulative_storage_mcm:Q", title="Storage (MCM)", format=",.2f"),
+                ],
+            )
+        )
+        layers = [area_curve, storage_curve]
+        if not reference_df.empty:
+            layers.append(
+                alt.Chart(reference_df)
+                .mark_rule(strokeDash=[6, 4], strokeWidth=1.6)
+                .encode(
+                    y="elevation_above_datum_m:Q",
+                    color=alt.Color("level:N", scale=alt.Scale(domain=["LSL", "FRL", "Current WL"], range=["#64748b", "#ef4444", "#0f766e"]), legend=alt.Legend(title="Live reference")),
+                    tooltip=["level", alt.Tooltip("elevation_m:Q", title="Elevation (m)", format=",.2f")],
+                )
+            )
+        current_point = pd.DataFrame(
+            [
+                {
+                    "curve_storage_mcm": selected_row.get("curve_storage_mcm"),
+                    "water_spread_area_sqkm": selected_row.get("live_area_sqkm"),
+                    "elevation_above_datum_m": water_level - datum if pd.notna(water_level) else math.nan,
+                    "label": "Current live position",
+                }
+            ]
+        )
+        layers.append(
+            alt.Chart(current_point)
+            .mark_point(size=150, filled=True, color="#0f766e", stroke="#ffffff", strokeWidth=2)
+            .encode(
+                x=alt.X("curve_storage_mcm:Q", title=""),
+                y="elevation_above_datum_m:Q",
+                tooltip=[
+                    "label",
+                    alt.Tooltip("curve_storage_mcm:Q", title="Curve storage (MCM)", format=",.2f"),
+                    alt.Tooltip("water_spread_area_sqkm:Q", title="Area (sq.km)", format=",.2f"),
+                ],
+            )
+        )
+        chart = (
+            alt.layer(*layers)
+            .resolve_scale(x="independent")
+            .properties(
+                height=360 if compact_mode else 450,
+                title=alt.TitleParams(
+                    text=f"{selected_reservoir}: Live Elevation - Area - Capacity",
+                    subtitle=f"Latest observation: {latest_label}",
+                    anchor="middle",
+                    fontSize=14,
+                    fontWeight=700,
+                ),
+            )
+        )
+        st.altair_chart(chart, use_container_width=True)
+    with top_cols[1]:
+        st.markdown(
+            f"""
+            <div class="infographic-frame" style="padding:14px;">
+                <div class="infographic-title">{escape(selected_reservoir)}</div>
+                <div class="infographic-subtitle">{escape(str(selected_row.get("district") or ""))} | {escape(str(selected_row.get("basin") or ""))}</div>
+                <div style="margin:8px 0 10px;">{speedometer_svg(selected_row.get("filling_percent"), "Live Filling", width=260, height=140)}</div>
+                <div class="infographic-grid" style="grid-template-columns:1fr 1fr; gap:8px;">
+                    <div class="infographic-card"><span>Alert</span><b>{escape(str(selected_row.get("alert_level") or "-"))}</b><small>live AEC status</small></div>
+                    <div class="infographic-card"><span>Capacity</span><b>{fmt_number(selected_row.get("capacity_mcm"), " MCM")}</b><small>calibrated reference</small></div>
+                    <div class="infographic-card"><span>Curve Difference</span><b>{fmt_number(selected_row.get("storage_delta_mcm"), " MCM")}</b><small>reported minus curve</small></div>
+                    <div class="infographic-card"><span>Difference %</span><b>{fmt_number(selected_row.get("storage_delta_pct_of_capacity"), "%")}</b><small>of capacity</small></div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    detail_tabs = st.tabs(["All Reservoir Summary", "AEC Curve Table", "Live Ranking"])
+    with detail_tabs[0]:
+        display_cols = [
+            "reservoir_name",
+            "district",
+            "basin",
+            "observed_at",
+            "water_level_m",
+            "live_area_sqkm",
+            "reported_storage_mcm",
+            "curve_storage_mcm",
+            "storage_delta_mcm",
+            "filling_percent",
+            "frl_gap_m",
+            "alert_level",
+            "capacity_confidence",
+        ]
+        st.dataframe(
+            summary[[column for column in display_cols if column in summary.columns]].sort_values(["alert_level", "frl_gap_m"], na_position="last"),
+            use_container_width=True,
+            hide_index=True,
+            height=300 if compact_mode else 420,
+        )
+    with detail_tabs[1]:
+        table = curve_df[
+            ["level_tag", "elevation_m", "water_spread_area_sqkm", "segmental_live_capacity_mcm", "cumulative_storage_mcm"]
+        ].rename(
+            columns={
+                "level_tag": "Level Tag",
+                "elevation_m": "Reservoir Water Level (m)",
+                "water_spread_area_sqkm": "Water Spread Area (sq.km)",
+                "segmental_live_capacity_mcm": "Segmental Live Capacity (MCM)",
+                "cumulative_storage_mcm": "Cumulative Live Capacity (MCM)",
+            }
+        )
+        st.dataframe(table.head(show_rows), use_container_width=True, hide_index=True, height=300 if compact_mode else 420)
+    with detail_tabs[2]:
+        metric_map = {
+            "Filling %": ("filling_percent", "Filling (%)", False),
+            "FRL gap": ("frl_gap_m", "FRL gap (m)", True),
+            "Storage difference": ("storage_delta_mcm", "Reported - curve storage (MCM)", False),
+            "Water spread area": ("live_area_sqkm", "Live water spread area (sq.km)", False),
+        }
+        metric_col, metric_title, ascending = metric_map[ranking_metric]
+        rank_df = summary.dropna(subset=[metric_col]).sort_values(metric_col, ascending=ascending).head(20)
+        if rank_df.empty:
+            st.info("No ranking values are available for the selected metric.")
+        else:
+            rank_chart = (
+                alt.Chart(rank_df)
+                .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
+                .encode(
+                    y=alt.Y("reservoir_name:N", sort="-x" if not ascending else "x", title="Reservoir"),
+                    x=alt.X(f"{metric_col}:Q", title=metric_title),
+                    color=alt.Color("alert_level:N", title="Alert"),
+                    tooltip=["reservoir_name", "district", metric_col, "filling_percent", "frl_gap_m"],
+                )
+                .properties(height=330 if compact_mode else 440, title=f"Live AEC Ranking: {metric_title}")
+            )
+            st.altair_chart(rank_chart, use_container_width=True)
 
 
 def render_weather_town_leaflet_map(
@@ -11208,7 +11576,7 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
 if "main_dashboard_page" not in st.session_state:
     st.session_state.main_dashboard_page = "Water Watch"
 
-nav_pages = ["Water Watch", "Dam DSS & Analytics", "Reservoir Inflow Forecast", "GD Site Analytics", "Weather Forecast", "3D Flood Scenarios", "Data & Timeseries", "Report Generation", "Administration"]
+nav_pages = ["Water Watch", "Dam DSS & Analytics", "Reservoir Inflow Forecast", "Reservoir AEC Live", "GD Site Analytics", "Weather Forecast", "3D Flood Scenarios", "Data & Timeseries", "Report Generation", "Administration"]
 st.markdown('<div class="dashboard-topnav-title">Dashboard Navigation</div>', unsafe_allow_html=True)
 nav_cols = st.columns(len(nav_pages))
 for nav_col, page in zip(nav_cols, nav_pages):
@@ -12032,6 +12400,15 @@ if main_page == "Dam DSS & Analytics":
 
 if main_page == "Reservoir Inflow Forecast":
     render_reservoir_inflow_forecast_page(
+        map_status,
+        reservoir_view,
+        capacity_view,
+        capacity_curve_view,
+    )
+
+
+if main_page == "Reservoir AEC Live":
+    render_reservoir_aec_live_page(
         map_status,
         reservoir_view,
         capacity_view,
