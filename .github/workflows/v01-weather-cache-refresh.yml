@@ -1,0 +1,67 @@
+name: V01 Weather Cache Refresh
+
+on:
+  schedule:
+    # GitHub cron is UTC. These slots correspond to 00:00, 06:00, 12:00 and 18:00 IST.
+    - cron: "30 0,6,12,18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: v01-weather-cache-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh-weather-cache:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out stable V01
+        uses: actions/checkout@v4
+        with:
+          ref: v01
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install refresh dependency
+        run: python -m pip install "pandas>=2.1"
+
+      - name: Refresh town and dam weather cache
+        run: python weather_cache_refresh.py --forecast-all --include-dams
+
+      - name: Validate refreshed cache
+        run: |
+          python - <<'PY'
+          import sqlite3
+          from pathlib import Path
+
+          cache = Path("data/weather_cache.sqlite")
+          if not cache.exists() or cache.stat().st_size == 0:
+              raise SystemExit("Weather cache was not created.")
+          with sqlite3.connect(cache) as conn:
+              forecast_count = conn.execute("SELECT COUNT(*) FROM weather_forecast_cache").fetchone()[0]
+              current_count = conn.execute("SELECT COUNT(*) FROM weather_current_cache").fetchone()[0]
+              latest_refresh = conn.execute("SELECT MAX(fetched_at) FROM weather_forecast_cache").fetchone()[0]
+          print(f"forecast_locations={forecast_count} current_locations={current_count} latest={latest_refresh}")
+          if forecast_count < 54 or current_count < 54:
+              raise SystemExit("Weather cache coverage is below the 54-dam minimum.")
+          PY
+
+      - name: Publish refreshed cache to V01
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/weather_cache.sqlite
+          if git diff --cached --quiet; then
+            echo "Weather cache is unchanged."
+            exit 0
+          fi
+          git commit -m "Refresh V01 weather cache [skip ci]"
+          git push origin HEAD:v01
