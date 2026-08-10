@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import json
 import math
 import os
@@ -48,6 +49,7 @@ GD_SITES_SWEDES_LAYER = (
     else LOCAL_GD_SITES_SWEDES_ZIP
 )
 WEATHER_CACHE_DB = APP_DIR / "data" / "weather_cache.sqlite"
+WEATHER_CACHE_SNAPSHOT = APP_DIR / "data" / "weather_cache.sqlite.gz"
 SATELLITE_RAINFALL_DB = APP_DIR / "data" / "satellite_rainfall_timeseries.sqlite"
 VISITOR_ANALYTICS_DB = APP_DIR / "data" / "visitor_analytics.sqlite"
 RIVER_FLOW_FORECAST_DB = APP_DIR / "data" / "river_flow_forecasts.sqlite"
@@ -1259,7 +1261,23 @@ def weather_cache_source_is_primary(source_text: str | None) -> bool:
     return "google weather" in str(source_text or "").lower()
 
 
+def restore_weather_database_snapshot() -> None:
+    if not WEATHER_CACHE_SNAPSHOT.exists():
+        return
+    if WEATHER_CACHE_DB.exists() and WEATHER_CACHE_DB.stat().st_mtime >= WEATHER_CACHE_SNAPSHOT.stat().st_mtime:
+        return
+    WEATHER_CACHE_DB.parent.mkdir(parents=True, exist_ok=True)
+    restore_path = WEATHER_CACHE_DB.with_name(f"{WEATHER_CACHE_DB.name}.{uuid.uuid4().hex}.restore")
+    try:
+        with gzip.open(WEATHER_CACHE_SNAPSHOT, "rb") as source, restore_path.open("wb") as target:
+            shutil.copyfileobj(source, target)
+        os.replace(restore_path, WEATHER_CACHE_DB)
+    finally:
+        restore_path.unlink(missing_ok=True)
+
+
 def init_weather_database() -> None:
+    restore_weather_database_snapshot()
     WEATHER_CACHE_DB.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(WEATHER_CACHE_DB) as conn:
         conn.execute(

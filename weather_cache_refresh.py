@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
+import os
+import shutil
 import sqlite3
 import time
 import urllib.error
@@ -16,6 +19,7 @@ APP_DIR = Path(__file__).resolve().parent
 MP_TOWNS_CSV = APP_DIR / "data" / "mp_towns.csv"
 DAM_LOCATIONS_CSV = APP_DIR / "dam_locations.csv"
 WEATHER_CACHE_DB = APP_DIR / "data" / "weather_cache.sqlite"
+WEATHER_CACHE_SNAPSHOT = APP_DIR / "data" / "weather_cache.sqlite.gz"
 REFRESH_HOURS = 6
 FORECAST_BATCH_SIZE = 10
 FORECAST_BATCH_PAUSE_SECONDS = 1.0
@@ -28,6 +32,32 @@ def now_utc() -> str:
 
 def location_key(latitude: float, longitude: float) -> str:
     return f"{float(latitude):.5f},{float(longitude):.5f}"
+
+
+def restore_cache_snapshot() -> None:
+    if WEATHER_CACHE_DB.exists() or not WEATHER_CACHE_SNAPSHOT.exists():
+        return
+    WEATHER_CACHE_DB.parent.mkdir(parents=True, exist_ok=True)
+    restore_path = WEATHER_CACHE_DB.with_suffix(".sqlite.restore")
+    try:
+        with gzip.open(WEATHER_CACHE_SNAPSHOT, "rb") as source, restore_path.open("wb") as target:
+            shutil.copyfileobj(source, target)
+        os.replace(restore_path, WEATHER_CACHE_DB)
+    finally:
+        restore_path.unlink(missing_ok=True)
+
+
+def write_cache_snapshot() -> None:
+    if not WEATHER_CACHE_DB.exists():
+        raise FileNotFoundError(f"Weather cache database not found: {WEATHER_CACHE_DB}")
+    snapshot_path = WEATHER_CACHE_SNAPSHOT.with_suffix(".gz.tmp")
+    try:
+        with WEATHER_CACHE_DB.open("rb") as source, snapshot_path.open("wb") as raw_target:
+            with gzip.GzipFile(filename="", mode="wb", fileobj=raw_target, compresslevel=9, mtime=0) as target:
+                shutil.copyfileobj(source, target)
+        os.replace(snapshot_path, WEATHER_CACHE_SNAPSHOT)
+    finally:
+        snapshot_path.unlink(missing_ok=True)
 
 
 def open_meteo_current_url(latitude: float, longitude: float) -> str:
@@ -335,6 +365,7 @@ def seconds_until_next_cycle(interval_hours: int = REFRESH_HOURS) -> float:
 
 
 def run_once(include_forecast: bool, include_dams: bool, max_points: int = 0) -> None:
+    restore_cache_snapshot()
     init_database()
     started_at = now_utc()
     points, point_group = load_points(include_dams)
@@ -349,6 +380,7 @@ def run_once(include_forecast: bool, include_dams: bool, max_points: int = 0) ->
             current_count = refresh_current(points)
             forecast_count = 0
         log_refresh(run_id, started_at, point_group, len(points), current_count, forecast_count, "Fetched")
+        write_cache_snapshot()
         print(
             f"{now_utc()} refreshed current weather for {current_count} {point_group} points"
             + (f" and forecast/hindcast for {forecast_count} points." if include_forecast else ".")
