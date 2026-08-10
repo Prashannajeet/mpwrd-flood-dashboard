@@ -2676,7 +2676,11 @@ def load_gd_site_online_forecast_csv() -> pd.DataFrame:
     forecast_utc = pd.to_datetime(valid_times["forecast_time"], errors="coerce", utc=True)
     valid_times["time_distance"] = (forecast_utc - now_utc).abs()
     current_indexes = valid_times.groupby("station_code")["time_distance"].idxmin()
-    now_mask = online.index.isin(current_indexes)
+    now_mask = pd.Series(
+        online.index.isin(current_indexes),
+        index=online.index,
+        dtype=bool,
+    )
     source_generated_at = pd.Timestamp.fromtimestamp(GD_SITE_ONLINE_FORECAST_CSV.stat().st_mtime, tz="Asia/Kolkata")
     out = pd.DataFrame(
         {
