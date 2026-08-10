@@ -43,13 +43,19 @@ jobs:
           from pathlib import Path
 
           cache = Path("data/weather_cache.sqlite")
+          snapshot = Path("data/weather_cache.sqlite.gz")
           if not cache.exists() or cache.stat().st_size == 0:
               raise SystemExit("Weather cache was not created.")
+          if not snapshot.exists() or snapshot.stat().st_size == 0:
+              raise SystemExit("Compressed weather cache snapshot was not created.")
           with sqlite3.connect(cache) as conn:
               forecast_count = conn.execute("SELECT COUNT(*) FROM weather_forecast_cache").fetchone()[0]
               current_count = conn.execute("SELECT COUNT(*) FROM weather_current_cache").fetchone()[0]
               latest_refresh = conn.execute("SELECT MAX(fetched_at) FROM weather_forecast_cache").fetchone()[0]
-          print(f"forecast_locations={forecast_count} current_locations={current_count} latest={latest_refresh}")
+          print(
+              f"forecast_locations={forecast_count} current_locations={current_count} "
+              f"latest={latest_refresh} snapshot_bytes={snapshot.stat().st_size}"
+          )
           if forecast_count < 54 or current_count < 54:
               raise SystemExit("Weather cache coverage is below the 54-dam minimum.")
           PY
@@ -58,7 +64,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/weather_cache.sqlite
+          git add data/weather_cache.sqlite.gz
           if git diff --cached --quiet; then
             echo "Weather cache is unchanged."
             exit 0
