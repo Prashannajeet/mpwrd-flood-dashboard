@@ -8,5 +8,5 @@ if exist ".venv\Scripts\python.exe" (
   set "PYTHON=python"
 )
 
-echo Starting 3-hour dam and town weather cache refresh loop...
+echo Starting fixed 6-hour dam and town weather cache refresh loop at 00:00, 06:00, 12:00 and 18:00 IST...
 "%PYTHON%" weather_cache_refresh.py --loop --forecast-all --include-dams

@@ -15,7 +15,7 @@ APP_DIR = Path(__file__).resolve().parent
 MP_TOWNS_CSV = APP_DIR / "data" / "mp_towns.csv"
 DAM_LOCATIONS_CSV = APP_DIR / "dam_locations.csv"
 WEATHER_CACHE_DB = APP_DIR / "data" / "weather_cache.sqlite"
-REFRESH_SECONDS = 3 * 60 * 60
+REFRESH_HOURS = 6
 
 
 def now_utc() -> str:
@@ -186,12 +186,16 @@ def refresh_current(towns: pd.DataFrame) -> int:
     return refreshed
 
 
-def refresh_forecast(towns: pd.DataFrame) -> int:
-    refreshed = 0
+def refresh_forecast(towns: pd.DataFrame) -> tuple[int, int]:
+    current_refreshed = 0
+    forecast_refreshed = 0
     with sqlite3.connect(WEATHER_CACHE_DB) as conn:
         for row in towns.itertuples(index=False):
             url = open_meteo_forecast_url(float(row.latitude), float(row.longitude))
             payload = fetch_json(url)
+            current = payload.get("current") or {}
+            fetched_at = now_utc()
+            key = location_key(float(row.latitude), float(row.longitude))
             conn.execute(
                 """
                 INSERT OR REPLACE INTO weather_forecast_cache
@@ -199,19 +203,38 @@ def refresh_forecast(towns: pd.DataFrame) -> int:
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    location_key(float(row.latitude), float(row.longitude)),
+                    key,
                     float(row.latitude),
                     float(row.longitude),
                     dataframe_payload(payload.get("daily") or {}),
                     dataframe_payload(payload.get("hourly") or {}),
-                    dataframe_payload(pd.DataFrame([payload.get("current") or {}])),
-                    now_utc(),
+                    dataframe_payload(pd.DataFrame([current])),
+                    fetched_at,
                     url,
                 ),
             )
-            refreshed += 1
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO weather_current_cache
+                (location_key, town_name, district, latitude, longitude, current_json, status, fetched_at, source_url)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    key,
+                    str(row.town_name),
+                    str(row.district),
+                    float(row.latitude),
+                    float(row.longitude),
+                    json.dumps(current, default=str),
+                    "Fetched",
+                    fetched_at,
+                    url,
+                ),
+            )
+            forecast_refreshed += 1
+            current_refreshed += 1
         conn.commit()
-    return refreshed
+    return current_refreshed, forecast_refreshed
 
 
 def load_towns() -> pd.DataFrame:
@@ -264,6 +287,13 @@ def seconds_until_daily_time(daily_at: str) -> float:
     return max(1.0, (target - now).total_seconds())
 
 
+def seconds_until_next_cycle(interval_hours: int = REFRESH_HOURS) -> float:
+    now = pd.Timestamp.now(tz="Asia/Kolkata")
+    next_hour = ((now.hour // interval_hours) + 1) * interval_hours
+    target = now.normalize() + pd.Timedelta(hours=next_hour)
+    return max(1.0, (target - now).total_seconds())
+
+
 def run_once(include_forecast: bool, include_dams: bool, max_points: int = 0) -> None:
     init_database()
     started_at = now_utc()
@@ -273,8 +303,11 @@ def run_once(include_forecast: bool, include_dams: bool, max_points: int = 0) ->
         point_group = f"{point_group}-sample"
     run_id = f"{point_group.replace('+', '_')}_{pd.Timestamp.now(tz='UTC').strftime('%Y%m%dT%H%M%SZ')}"
     try:
-        current_count = refresh_current(points)
-        forecast_count = refresh_forecast(points) if include_forecast else 0
+        if include_forecast:
+            current_count, forecast_count = refresh_forecast(points)
+        else:
+            current_count = refresh_current(points)
+            forecast_count = 0
         log_refresh(run_id, started_at, point_group, len(points), current_count, forecast_count, "Fetched")
         print(
             f"{now_utc()} refreshed current weather for {current_count} {point_group} points"
@@ -287,7 +320,7 @@ def run_once(include_forecast: bool, include_dams: bool, max_points: int = 0) ->
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Refresh MPWRD weather cache database.")
-    parser.add_argument("--loop", action="store_true", help="Keep running and refresh every 3 hours.")
+    parser.add_argument("--loop", action="store_true", help="Keep running at 00:00, 06:00, 12:00 and 18:00 IST.")
     parser.add_argument("--daily-at", default="", help="Run once daily at HH:MM in Asia/Kolkata, for example 00:30.")
     parser.add_argument("--forecast-all", action="store_true", help="Also refresh 7-day forecast and 92-day hindcast for all towns.")
     parser.add_argument("--include-dams", action="store_true", help="Also refresh dam weather points.")
@@ -303,7 +336,9 @@ def main() -> None:
         if not args.loop and not args.daily_at:
             break
         if args.loop and not args.daily_at:
-            time.sleep(REFRESH_SECONDS)
+            sleep_seconds = seconds_until_next_cycle()
+            print(f"{now_utc()} next scheduled weather refresh in {sleep_seconds / 3600:.2f} hours.")
+            time.sleep(sleep_seconds)
 
 
 if __name__ == "__main__":

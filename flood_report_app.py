@@ -56,7 +56,7 @@ GD_SITE_ONLINE_FORECAST_CSV = APP_DIR / "data" / "gd_site_online_forecasts.csv"
 GD_FORECAST_FRESHNESS_HOURS = 12
 GD_LINK_REVIEW_DISTANCE_M = 25_000
 RIVER_FLOW_MODEL_DIR = APP_DIR / "models" / "river_flow_tensorflow"
-WEATHER_REFRESH_HOURS = 3
+WEATHER_REFRESH_HOURS = 6
 WEATHER_AUTO_REFRESH_MAX_POINTS = int(os.getenv("WEATHER_AUTO_REFRESH_MAX_POINTS", "64"))
 RESERVOIR_CAPACITY_ESTIMATES_CSV = APP_DIR / "data" / "reservoir_capacity_estimates.csv"
 RESERVOIR_CAPACITY_CURVES_CSV = APP_DIR / "data" / "reservoir_capacity_curves.csv"
@@ -1880,12 +1880,21 @@ def get_cached_open_meteo_weather(
                 """,
                 (key,),
             ).fetchone()
-        if row and weather_cache_is_fresh(row[3]) and weather_cache_source_is_primary(row[4] if len(row) > 4 else ""):
+        if row and not force_refresh:
             daily = dataframe_from_weather_json(row[0])
             hourly = dataframe_from_weather_json(row[1])
             current = dataframe_from_weather_json(row[2])
             daily, hourly, current = normalize_weather_frames(daily, hourly, current)
-            return daily, hourly, current, None, "Google Weather cache" if google_weather_key_configured() else "database cache"
+            return daily, hourly, current, None, "scheduled weather cache"
+
+    if not force_refresh:
+        return (
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            "Scheduled weather data is pending for this location.",
+            "scheduled weather cache",
+        )
 
     daily, hourly, current, error, provider_source = fetch_operational_weather(latitude, longitude)
     if error:
@@ -1940,11 +1949,14 @@ def get_cached_open_meteo_current(
                 """,
                 (key,),
             ).fetchone()
-        if row and weather_cache_is_fresh(row[2]) and weather_cache_source_is_primary(row[3] if len(row) > 3 else ""):
+        if row and not force_refresh:
             try:
-                return json.loads(row[0]), None, "Google Weather cache" if google_weather_key_configured() else "database cache"
+                return json.loads(row[0]), None, "scheduled weather cache"
             except json.JSONDecodeError:
                 pass
+
+    if not force_refresh:
+        return {}, "Scheduled weather data is pending for this location.", "scheduled weather cache"
 
     current, error, provider_source = fetch_operational_current_weather(latitude, longitude)
     if error:
@@ -7453,8 +7465,6 @@ def build_cached_weather_forecast_for_points(points_key: tuple[tuple[str, str, f
     rows = []
     with sqlite3.connect(WEATHER_CACHE_DB) as conn:
         for point_name, district, latitude, longitude in points_key:
-            source = "database cache"
-            error = ""
             key = weather_location_key(float(latitude), float(longitude))
             row = conn.execute(
                 """
@@ -7464,22 +7474,7 @@ def build_cached_weather_forecast_for_points(points_key: tuple[tuple[str, str, f
                 """,
                 (key,),
             ).fetchone()
-            if (not row) or (not weather_cache_is_fresh(row[3])) or (not weather_cache_source_is_primary(row[4] if len(row) > 4 else "")):
-                daily, hourly, current, error, source = get_cached_open_meteo_weather(float(latitude), float(longitude), force_refresh=True)
-                if not daily.empty:
-                    rows.append(
-                        weather_summary_from_frames(
-                            point_name,
-                            district,
-                            latitude,
-                            longitude,
-                            daily,
-                            current,
-                            source,
-                            error or "Ready",
-                        )
-                    )
-                    continue
+            if not row:
                 rows.append(
                     weather_summary_from_frames(
                         point_name,
@@ -7488,8 +7483,8 @@ def build_cached_weather_forecast_for_points(points_key: tuple[tuple[str, str, f
                         longitude,
                         pd.DataFrame(),
                         pd.DataFrame(),
-                        source,
-                        error or "Forecast pending - live refresh not completed",
+                        "scheduled weather cache",
+                        "Forecast pending - scheduled refresh not completed",
                     )
                 )
                 continue
@@ -7505,7 +7500,7 @@ def build_cached_weather_forecast_for_points(points_key: tuple[tuple[str, str, f
                     longitude,
                     daily,
                     current,
-                    "Google Weather cache" if weather_cache_source_is_primary(row[4] if len(row) > 4 else "") else "daily database cache",
+                    "scheduled weather cache",
                     f"Cached at {row[3]}",
                 )
             )
@@ -8313,7 +8308,6 @@ def render_weather_town_leaflet_map(
             return None
         return round(float(parsed), digits)
 
-    quality = gd_forecast_quality_summary(gd_forecasts)
     records = []
     for row in towns.dropna(subset=["latitude", "longitude"]).to_dict("records"):
         risk = str(row.get("weather_risk") or "Low")
@@ -12671,7 +12665,7 @@ if main_page == "Weather Forecast":
     fallback_district_weather_points = weather_points_from_districts(dam_weather_source, towns_master)
     dam_layer_weather = dam_weather_points.copy()
     if not dam_weather_points.empty:
-        weather_refresh_state = maybe_refresh_weather_cache_on_app_load(dam_weather_points, label="dam_layer")
+        weather_refresh_state = {"status": "cache_only", "summary": get_weather_cache_summary()}
         dam_points_key = tuple(
             (
                 str(row.town_name),
@@ -12707,11 +12701,7 @@ if main_page == "Weather Forecast":
         weather_points = weather_point_sets[selected_weather_set].copy()
         if not dam_weather_points.empty:
             cached_count = int(dam_layer_weather["forecast_rain_mm"].notna().sum()) if "forecast_rain_mm" in dam_layer_weather else 0
-            refresh_status = weather_refresh_state.get("refresh", {}) if isinstance(weather_refresh_state, dict) else {}
-            refresh_note = ""
-            if refresh_status:
-                refresh_note = f" Auto-refresh updated {refresh_status.get('updated', 0)}/{refresh_status.get('attempted', 0)} point(s)."
-            st.caption(f"Dam weather cache: {cached_count}/{len(dam_layer_weather)} ready.{refresh_note}")
+            st.caption(f"Dam weather cache: {cached_count}/{len(dam_layer_weather)} ready. Scheduled at 00:00, 06:00, 12:00 and 18:00 IST.")
         with weather_top[1]:
             district_filter_options = ["All districts"] + sorted(weather_points["district"].dropna().astype(str).unique())
             selected_weather_district = st.selectbox("Weather district", district_filter_options, key="weather_district_filter")
@@ -12729,7 +12719,7 @@ if main_page == "Weather Forecast":
             selected_town = town_options_df[town_options_df["town_name"] == selected_town_name].iloc[0]
             cache_summary = get_weather_cache_summary()
             latest_refresh = cache_summary.get("latest_refresh") or "No stored weather data yet"
-            st.caption(f"Weather database updated: {latest_refresh}. Refresh cycle: {WEATHER_REFRESH_HOURS} hours.")
+            st.caption(f"Weather database updated: {latest_refresh}. Scheduled cycle: 00:00, 06:00, 12:00 and 18:00 IST.")
             force_weather_refresh = False
             if is_admin:
                 force_weather_refresh = st.button("Refresh selected weather point now", use_container_width=True, key="refresh_selected_weather_now")
