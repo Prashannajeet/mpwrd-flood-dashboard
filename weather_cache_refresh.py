@@ -4,6 +4,7 @@ import argparse
 import json
 import sqlite3
 import time
+import urllib.error
 import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -16,6 +17,9 @@ MP_TOWNS_CSV = APP_DIR / "data" / "mp_towns.csv"
 DAM_LOCATIONS_CSV = APP_DIR / "dam_locations.csv"
 WEATHER_CACHE_DB = APP_DIR / "data" / "weather_cache.sqlite"
 REFRESH_HOURS = 6
+FORECAST_BATCH_SIZE = 10
+FORECAST_BATCH_PAUSE_SECONDS = 1.0
+FETCH_RETRY_DELAYS_SECONDS = (10, 30, 60)
 
 
 def now_utc() -> str:
@@ -51,7 +55,18 @@ def open_meteo_current_url(latitude: float, longitude: float) -> str:
     )
 
 
-def open_meteo_forecast_url(latitude: float, longitude: float, forecast_days: int = 7, past_days: int = 92) -> str:
+def coordinate_parameter(value: float | list[float] | tuple[float, ...]) -> str:
+    if isinstance(value, (list, tuple)):
+        return ",".join(f"{float(item):.5f}" for item in value)
+    return f"{float(value):.5f}"
+
+
+def open_meteo_forecast_url(
+    latitude: float | list[float] | tuple[float, ...],
+    longitude: float | list[float] | tuple[float, ...],
+    forecast_days: int = 7,
+    past_days: int = 92,
+) -> str:
     daily_vars = ",".join(
         [
             "temperature_2m_max",
@@ -83,7 +98,7 @@ def open_meteo_forecast_url(latitude: float, longitude: float, forecast_days: in
     )
     return (
         "https://api.open-meteo.com/v1/forecast"
-        f"?latitude={latitude:.5f}&longitude={longitude:.5f}"
+        f"?latitude={coordinate_parameter(latitude)}&longitude={coordinate_parameter(longitude)}"
         f"&daily={daily_vars}&hourly={hourly_vars}&current={current_vars}"
         "&timezone=Asia%2FKolkata"
         f"&forecast_days={forecast_days}&past_days={past_days}"
@@ -91,10 +106,22 @@ def open_meteo_forecast_url(latitude: float, longitude: float, forecast_days: in
     )
 
 
-def fetch_json(url: str) -> dict:
+def fetch_json(url: str) -> dict | list[dict]:
     request = urllib.request.Request(url, headers={"User-Agent": "mpwrd-vbsr-weather-refresh/1.0"})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return json.loads(response.read().decode("utf-8"))
+    for attempt in range(len(FETCH_RETRY_DELAYS_SECONDS) + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=90) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            retryable = exc.code == 429 or 500 <= exc.code < 600
+            if not retryable or attempt >= len(FETCH_RETRY_DELAYS_SECONDS):
+                raise
+            time.sleep(FETCH_RETRY_DELAYS_SECONDS[attempt])
+        except (TimeoutError, urllib.error.URLError):
+            if attempt >= len(FETCH_RETRY_DELAYS_SECONDS):
+                raise
+            time.sleep(FETCH_RETRY_DELAYS_SECONDS[attempt])
+    raise RuntimeError("Weather request retry loop ended unexpectedly.")
 
 
 def init_database() -> None:
@@ -189,51 +216,64 @@ def refresh_current(towns: pd.DataFrame) -> int:
 def refresh_forecast(towns: pd.DataFrame) -> tuple[int, int]:
     current_refreshed = 0
     forecast_refreshed = 0
+    towns = towns.reset_index(drop=True)
     with sqlite3.connect(WEATHER_CACHE_DB) as conn:
-        for row in towns.itertuples(index=False):
-            url = open_meteo_forecast_url(float(row.latitude), float(row.longitude))
-            payload = fetch_json(url)
-            current = payload.get("current") or {}
-            fetched_at = now_utc()
-            key = location_key(float(row.latitude), float(row.longitude))
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO weather_forecast_cache
-                (location_key, latitude, longitude, daily_json, hourly_json, current_json, fetched_at, source_url)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    key,
-                    float(row.latitude),
-                    float(row.longitude),
-                    dataframe_payload(payload.get("daily") or {}),
-                    dataframe_payload(payload.get("hourly") or {}),
-                    dataframe_payload(pd.DataFrame([current])),
-                    fetched_at,
-                    url,
-                ),
+        for start in range(0, len(towns), FORECAST_BATCH_SIZE):
+            batch = towns.iloc[start : start + FORECAST_BATCH_SIZE].reset_index(drop=True)
+            url = open_meteo_forecast_url(
+                batch["latitude"].astype(float).tolist(),
+                batch["longitude"].astype(float).tolist(),
             )
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO weather_current_cache
-                (location_key, town_name, district, latitude, longitude, current_json, status, fetched_at, source_url)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    key,
-                    str(row.town_name),
-                    str(row.district),
-                    float(row.latitude),
-                    float(row.longitude),
-                    json.dumps(current, default=str),
-                    "Fetched",
-                    fetched_at,
-                    url,
-                ),
-            )
-            forecast_refreshed += 1
-            current_refreshed += 1
-        conn.commit()
+            response = fetch_json(url)
+            payloads = response if isinstance(response, list) else [response]
+            if len(payloads) != len(batch):
+                raise RuntimeError(
+                    f"Weather batch returned {len(payloads)} location(s) for {len(batch)} requested point(s)."
+                )
+            for row, payload in zip(batch.itertuples(index=False), payloads):
+                current = payload.get("current") or {}
+                fetched_at = now_utc()
+                key = location_key(float(row.latitude), float(row.longitude))
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO weather_forecast_cache
+                    (location_key, latitude, longitude, daily_json, hourly_json, current_json, fetched_at, source_url)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        key,
+                        float(row.latitude),
+                        float(row.longitude),
+                        dataframe_payload(payload.get("daily") or {}),
+                        dataframe_payload(payload.get("hourly") or {}),
+                        dataframe_payload(pd.DataFrame([current])),
+                        fetched_at,
+                        "scheduled weather batch",
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO weather_current_cache
+                    (location_key, town_name, district, latitude, longitude, current_json, status, fetched_at, source_url)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        key,
+                        str(row.town_name),
+                        str(row.district),
+                        float(row.latitude),
+                        float(row.longitude),
+                        json.dumps(current, default=str),
+                        "Fetched",
+                        fetched_at,
+                        "scheduled weather batch",
+                    ),
+                )
+                forecast_refreshed += 1
+                current_refreshed += 1
+            conn.commit()
+            if start + FORECAST_BATCH_SIZE < len(towns):
+                time.sleep(FORECAST_BATCH_PAUSE_SECONDS)
     return current_refreshed, forecast_refreshed
 
 
