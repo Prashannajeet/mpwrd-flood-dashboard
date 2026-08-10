@@ -53,6 +53,8 @@ VISITOR_ANALYTICS_DB = APP_DIR / "data" / "visitor_analytics.sqlite"
 RIVER_FLOW_FORECAST_DB = APP_DIR / "data" / "river_flow_forecasts.sqlite"
 GD_SITE_FORECAST_DB = APP_DIR / "data" / "gd_site_forecasts.sqlite"
 GD_SITE_ONLINE_FORECAST_CSV = APP_DIR / "data" / "gd_site_online_forecasts.csv"
+GD_FORECAST_FRESHNESS_HOURS = 12
+GD_LINK_REVIEW_DISTANCE_M = 25_000
 RIVER_FLOW_MODEL_DIR = APP_DIR / "models" / "river_flow_tensorflow"
 WEATHER_REFRESH_HOURS = 3
 WEATHER_AUTO_REFRESH_MAX_POINTS = int(os.getenv("WEATHER_AUTO_REFRESH_MAX_POINTS", "64"))
@@ -2330,7 +2332,8 @@ def enrich_gd_forecasts_with_live_series(gd_forecasts: pd.DataFrame) -> pd.DataF
     if gd_forecasts.empty or "linked_comid" not in gd_forecasts.columns:
         return gd_forecasts
     forecast_rows = gd_forecasts[gd_forecasts.get("data_period", pd.Series(dtype=str)).astype(str).eq("Forecasted Data")]
-    if not forecast_rows.empty and gd_forecasts["forecast_time"].nunique(dropna=True) > 2:
+    quality = gd_forecast_quality_summary(gd_forecasts)
+    if quality["fresh"] and not forecast_rows.empty and gd_forecasts["forecast_time"].nunique(dropna=True) > 2:
         return gd_forecasts
     base_rows = gd_forecasts.sort_values("forecast_time").drop_duplicates("station_code", keep="last").copy()
     comids = tuple(base_rows["linked_comid"].dropna().astype(str).tolist())
@@ -2347,23 +2350,33 @@ def enrich_gd_forecasts_with_live_series(gd_forecasts: pd.DataFrame) -> pd.DataF
         if station_series.empty:
             enriched_rows.append(base)
             continue
-        first_time = station_series["forecast_time"].min()
-        for index, point in enumerate(station_series.head(57).to_dict("records")):
+        now_utc = pd.Timestamp.now(tz="UTC")
+        station_series["time_distance"] = (station_series["forecast_time"] - now_utc).abs()
+        current_index = station_series["time_distance"].idxmin()
+        current_time = station_series.loc[current_index, "forecast_time"]
+        station_series = station_series[station_series["forecast_time"] >= current_time].head(57)
+        for index, point in enumerate(station_series.to_dict("records")):
             row = dict(base)
             forecast_time = point.get("forecast_time")
             flow = pd.to_numeric(pd.Series([point.get("meanflow")]), errors="coerce").iloc[0]
+            is_current = pd.notna(forecast_time) and pd.Timestamp(forecast_time) == pd.Timestamp(current_time)
             row["forecast_time"] = forecast_time
-            row["data_period"] = "Now Data" if index == 0 else "Forecasted Data"
-            row["current_flow_cms"] = float(flow) if index == 0 and pd.notna(flow) else None
+            row["data_period"] = "Now Data" if is_current else "Forecasted Data"
+            row["current_flow_cms"] = float(flow) if is_current and pd.notna(flow) else None
             row["river_forecast_flow_cms"] = float(flow) if pd.notna(flow) else None
             row["combined_forecast_flow_cms"] = float(flow) if pd.notna(flow) else None
             row["return_period"] = point.get("returnperiod")
             row["streamorder"] = point.get("streamorder")
             row["linked_comid"] = comid
-            row["forecast_status"] = "Linked live river forecast reach"
+            link_distance = pd.to_numeric(pd.Series([row.get("linkage_distance_m")]), errors="coerce").iloc[0]
+            row["forecast_status"] = (
+                "Live river forecast; linkage requires review"
+                if pd.notna(link_distance) and link_distance > GD_LINK_REVIEW_DISTANCE_M
+                else "Linked live river forecast reach"
+            )
             row["lead_day"] = (
-                int(max(0, (pd.Timestamp(forecast_time) - pd.Timestamp(first_time)).total_seconds()) // 86400)
-                if pd.notna(forecast_time) and pd.notna(first_time)
+                int(max(0, (pd.Timestamp(forecast_time) - pd.Timestamp(current_time)).total_seconds()) // 86400)
+                if pd.notna(forecast_time) and pd.notna(current_time)
                 else index
             )
             enriched_rows.append(row)
@@ -2501,6 +2514,7 @@ def init_gd_site_forecast_db() -> None:
                 basin_forecast_flow_cms REAL,
                 combined_forecast_flow_cms REAL,
                 linked_comid TEXT,
+                linkage_distance_m REAL,
                 streamorder REAL,
                 return_period REAL,
                 forecast_status TEXT
@@ -2509,6 +2523,7 @@ def init_gd_site_forecast_db() -> None:
         )
         for column_name, column_type in [
             ("linked_comid", "TEXT"),
+            ("linkage_distance_m", "REAL"),
             ("streamorder", "REAL"),
             ("return_period", "REAL"),
         ]:
@@ -2557,15 +2572,13 @@ def save_gd_site_forecasts(forecast_df: pd.DataFrame, slot_timestamp: pd.Timesta
         "forecast_time",
         "data_period",
         "current_flow_cms",
-        "linked_comid",
-        "streamorder",
-        "return_period",
         "current_water_level_m",
         "water_level_change_m",
         "river_forecast_flow_cms",
         "basin_forecast_flow_cms",
         "combined_forecast_flow_cms",
         "linked_comid",
+        "linkage_distance_m",
         "streamorder",
         "return_period",
         "forecast_status",
@@ -2655,7 +2668,16 @@ def load_gd_site_online_forecast_csv() -> pd.DataFrame:
     online["lead_day"] = pd.to_numeric(online.get("lead_day"), errors="coerce").fillna(0).astype(int)
     online["returnperiod"] = pd.to_numeric(online.get("returnperiod"), errors="coerce")
     online["streamorder"] = pd.to_numeric(online.get("streamorder"), errors="coerce")
-    now_mask = online["lead_day"].eq(0)
+    online["linkage_distance_m"] = pd.to_numeric(online.get("distance_m"), errors="coerce")
+    valid_times = online.dropna(subset=["station_code", "forecast_time"]).copy()
+    if valid_times.empty:
+        return pd.DataFrame()
+    now_utc = pd.Timestamp.now(tz="UTC")
+    forecast_utc = pd.to_datetime(valid_times["forecast_time"], errors="coerce", utc=True)
+    valid_times["time_distance"] = (forecast_utc - now_utc).abs()
+    current_indexes = valid_times.groupby("station_code")["time_distance"].idxmin()
+    now_mask = online.index.isin(current_indexes)
+    source_generated_at = pd.Timestamp.fromtimestamp(GD_SITE_ONLINE_FORECAST_CSV.stat().st_mtime, tz="Asia/Kolkata")
     out = pd.DataFrame(
         {
             "forecast_id": [
@@ -2664,7 +2686,7 @@ def load_gd_site_online_forecast_csv() -> pd.DataFrame:
             ],
             "slot_date": "",
             "slot_time": "",
-            "generated_at": pd.Timestamp.now(tz="Asia/Kolkata"),
+            "generated_at": source_generated_at,
             "station_code": online["station_code"],
             "station_name": online.get("station_name", pd.Series("", index=online.index)),
             "district": online.get("district", pd.Series("", index=online.index)),
@@ -2685,15 +2707,53 @@ def load_gd_site_online_forecast_csv() -> pd.DataFrame:
             "linked_comid": online.get("comid", pd.Series("", index=online.index)).astype(str),
             "streamorder": online["streamorder"],
             "return_period": online["returnperiod"],
+            "linkage_distance_m": online["linkage_distance_m"],
             "forecast_status": online.get("linkage_status", pd.Series("Linked live river forecast reach", index=online.index)),
         }
     )
     return out.dropna(subset=["station_code", "forecast_time", "combined_forecast_flow_cms"]).reset_index(drop=True)
 
 
-def gd_return_period_alert(return_period: object, flow: object = None) -> tuple[str, str]:
+def gd_forecast_quality_summary(frame: pd.DataFrame, now: pd.Timestamp | None = None) -> dict:
+    if frame.empty or "forecast_time" not in frame.columns:
+        return {"fresh": False, "age_hours": math.nan, "current_time": pd.NaT, "current_sites": 0, "linked_sites": 0}
+    current = frame[frame.get("data_period", pd.Series("", index=frame.index)).astype(str).eq("Now Data")].copy()
+    if current.empty:
+        return {"fresh": False, "age_hours": math.nan, "current_time": pd.NaT, "current_sites": 0, "linked_sites": 0}
+    current["forecast_time"] = pd.to_datetime(current["forecast_time"], errors="coerce", utc=True)
+    current = current.dropna(subset=["forecast_time"])
+    if current.empty:
+        return {"fresh": False, "age_hours": math.nan, "current_time": pd.NaT, "current_sites": 0, "linked_sites": 0}
+    now_utc = pd.Timestamp(now if now is not None else pd.Timestamp.now(tz="UTC"))
+    if now_utc.tzinfo is None:
+        now_utc = now_utc.tz_localize("UTC")
+    else:
+        now_utc = now_utc.tz_convert("UTC")
+    current["age_hours"] = (now_utc - current["forecast_time"]).abs().dt.total_seconds() / 3600.0
+    age_hours = float(current["age_hours"].median())
+    link_distance = pd.to_numeric(current.get("linkage_distance_m", pd.Series(math.nan, index=current.index)), errors="coerce")
+    linked_sites = int((link_distance.isna() | link_distance.le(GD_LINK_REVIEW_DISTANCE_M)).sum())
+    return {
+        "fresh": bool(age_hours <= GD_FORECAST_FRESHNESS_HOURS),
+        "age_hours": age_hours,
+        "current_time": current["forecast_time"].max(),
+        "current_sites": int(current["station_code"].nunique()) if "station_code" in current else int(len(current)),
+        "linked_sites": linked_sites,
+    }
+
+
+def gd_return_period_alert(
+    return_period: object,
+    flow: object = None,
+    *,
+    data_fresh: bool = True,
+    linkage_verified: bool = True,
+) -> tuple[str, str]:
     rp = pd.to_numeric(pd.Series([return_period]), errors="coerce").iloc[0]
-    flow_value = pd.to_numeric(pd.Series([flow]), errors="coerce").iloc[0]
+    if not data_fresh:
+        return "Stale Data", "#64748b"
+    if not linkage_verified:
+        return "Link Review", "#7c3aed"
     if pd.notna(rp):
         if rp >= 25:
             return "Critical", "#ef4444"
@@ -2701,20 +2761,18 @@ def gd_return_period_alert(return_period: object, flow: object = None) -> tuple[
             return "Warning", "#f59e0b"
         if rp >= 2:
             return "Watch", "#eab308"
-        return "Normal", "#2563eb"
-    if pd.notna(flow_value):
-        if flow_value >= 500:
-            return "Critical", "#ef4444"
-        if flow_value >= 250:
-            return "Warning", "#f59e0b"
-        if flow_value >= 100:
-            return "Watch", "#eab308"
-    return "Normal", "#2563eb"
+        return "Below RP2", "#2563eb"
+    return "No Data", "#64748b"
 
 
-def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFrame) -> None:
+def render_gd_site_leaflet_map(
+    gd_sites: pd.DataFrame,
+    gd_forecasts: pd.DataFrame,
+    flood_status: pd.DataFrame | None = None,
+) -> None:
     if gd_sites.empty or not {"latitude", "longitude"}.issubset(gd_sites.columns):
         return
+    quality = gd_forecast_quality_summary(gd_forecasts)
     gd_now = gd_forecasts[gd_forecasts["data_period"] == "Now Data"].copy() if not gd_forecasts.empty else pd.DataFrame()
     if not gd_now.empty:
         latest_sort_cols = [column for column in ["forecast_time", "generated_at"] if column in gd_now.columns]
@@ -2779,13 +2837,22 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
                 flow = cached_points[-1].get("flow", math.nan)
         status = str(now.get("forecast_status") or "Layer pending")
         return_period_value = pd.to_numeric(pd.Series([now.get("return_period")]), errors="coerce").iloc[0]
-        level, color = gd_return_period_alert(return_period_value, flow)
+        link_distance_m = pd.to_numeric(pd.Series([now.get("linkage_distance_m")]), errors="coerce").iloc[0]
+        linkage_verified = pd.isna(link_distance_m) or link_distance_m <= GD_LINK_REVIEW_DISTANCE_M
+        level, color = gd_return_period_alert(
+            return_period_value,
+            flow,
+            data_fresh=quality["fresh"],
+            linkage_verified=linkage_verified,
+        )
         google_severity = str(row.get("google_flood_severity") or now.get("google_flood_severity") or "No nearby signal")
         google_rank = pd.to_numeric(pd.Series([row.get("google_flood_rank", now.get("google_flood_rank"))]), errors="coerce").fillna(0).iloc[0]
         if google_rank >= 3:
             level, color = "Critical", google_flood_severity_color(google_severity)
         elif google_rank >= 2 and level not in {"Critical"}:
             level, color = "Warning", google_flood_severity_color(google_severity)
+        elif google_rank >= 1 and level not in {"Critical", "Warning"}:
+            level, color = "Watch", google_flood_severity_color(google_severity)
         wl_delta = pd.to_numeric(pd.Series([now.get("water_level_change_m")]), errors="coerce").iloc[0]
         if pd.notna(wl_delta) and wl_delta > 0.03:
             trend = "Rising"
@@ -2814,6 +2881,8 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
                 "linked_comid": str(now.get("linked_comid") or "-"),
                 "streamorder": None if pd.isna(pd.to_numeric(pd.Series([now.get("streamorder")]), errors="coerce").iloc[0]) else round(float(pd.to_numeric(pd.Series([now.get("streamorder")]), errors="coerce").iloc[0]), 0),
                 "return_period": None if pd.isna(return_period_value) else round(float(return_period_value), 0),
+                "linkage_distance_km": None if pd.isna(link_distance_m) else round(float(link_distance_m) / 1000.0, 1),
+                "data_age_hours": None if pd.isna(quality["age_hours"]) else round(float(quality["age_hours"]), 1),
                 "forecast_status": status,
                 "alert_level": level,
                 "trend": trend,
@@ -2828,6 +2897,21 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
         return
     map_id = f"gd-site-leaflet-{abs(hash(json.dumps(records[:10], sort_keys=True))) % 1000000}"
     records_json = json.dumps(records)
+    active_flood_records = []
+    if flood_status is not None and not flood_status.empty:
+        active = flood_status[pd.to_numeric(flood_status.get("flood_rank"), errors="coerce").fillna(0).gt(0)].copy()
+        for row in active.dropna(subset=["latitude", "longitude"]).to_dict("records"):
+            active_flood_records.append(
+                {
+                    "gauge_id": str(row.get("google_gauge_id") or "Flood status gauge"),
+                    "severity": str(row.get("flood_severity") or "Above normal"),
+                    "lat": float(row.get("latitude")),
+                    "lon": float(row.get("longitude")),
+                    "issued_time": time_label(row.get("issued_time")),
+                    "color": google_flood_severity_color(str(row.get("flood_severity") or "")),
+                }
+            )
+    active_flood_json = json.dumps(active_flood_records)
     service_url = json.dumps(GEOGLOWS_MEDIUM_URL)
     center_lat = sum(item["lat"] for item in records) / len(records)
     center_lon = sum(item["lon"] for item in records) / len(records)
@@ -2947,6 +3031,9 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
           .gd-blink-warning {{
             animation: gdWarningBlink 1.25s infinite;
           }}
+          .gd-blink-watch {{
+            animation: gdWatchBlink 1.45s infinite;
+          }}
           @keyframes gdCriticalBlink {{
             0%,100% {{ filter: drop-shadow(0 0 0 rgba(239,68,68,0)); }}
             50% {{ filter: drop-shadow(0 0 12px rgba(239,68,68,0.95)); }}
@@ -2954,6 +3041,10 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
           @keyframes gdWarningBlink {{
             0%,100% {{ filter: drop-shadow(0 0 0 rgba(245,158,11,0)); }}
             50% {{ filter: drop-shadow(0 0 10px rgba(245,158,11,0.90)); }}
+          }}
+          @keyframes gdWatchBlink {{
+            0%,100% {{ filter: drop-shadow(0 0 0 rgba(234,179,8,0)); }}
+            50% {{ filter: drop-shadow(0 0 9px rgba(234,179,8,0.90)); }}
           }}
         </style>
         <div class="gd-map-title">GD Sites and River Forecast Layer</div>
@@ -2964,6 +3055,7 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
         <script>
         (() => {{
             const sites = {records_json};
+            const activeFloodSignals = {active_flood_json};
             const serviceUrl = {service_url};
             const map = L.map("{map_id}", {{ zoomControl: true, scrollWheelZoom: true, preferCanvas: true }}).setView([{center_lat:.5f}, {center_lon:.5f}], 7);
             const topo = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{{z}}/{{y}}/{{x}}", {{ maxZoom: 16, attribution: "Tiles &copy; Esri" }}).addTo(map);
@@ -2976,24 +3068,20 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
                 useCors: false
             }}).addTo(map);
             const gdLayer = L.layerGroup().addTo(map);
+            const activeFloodLayer = L.layerGroup().addTo(map);
             const fmt = (value) => value === null || value === undefined || Number.isNaN(Number(value)) ? "-" : Number(value).toFixed(2);
             const infoPanel = document.getElementById("{map_id}-info");
-            const alertColor = (level) => level === "Critical" ? "#ef4444" : level === "Warning" ? "#f59e0b" : level === "Watch" ? "#eab308" : "#2563eb";
+            const alertColor = (level) => level === "Critical" ? "#ef4444" : level === "Warning" ? "#f59e0b" : level === "Watch" ? "#eab308" : level === "Link Review" ? "#7c3aed" : level === "Below RP2" ? "#2563eb" : "#64748b";
             const returnPeriodAlert = (rp, flow) => {{
-                const returnPeriod = Number(rp);
-                const flowValue = Number(flow);
+                const hasReturnPeriod = rp !== null && rp !== undefined && rp !== "";
+                const returnPeriod = hasReturnPeriod ? Number(rp) : Number.NaN;
                 if (Number.isFinite(returnPeriod)) {{
                     if (returnPeriod >= 25) return "Critical";
                     if (returnPeriod >= 10) return "Warning";
                     if (returnPeriod >= 2) return "Watch";
-                    return "Normal";
+                    return "Below RP2";
                 }}
-                if (Number.isFinite(flowValue)) {{
-                    if (flowValue >= 500) return "Critical";
-                    if (flowValue >= 250) return "Warning";
-                    if (flowValue >= 100) return "Watch";
-                }}
-                return "Normal";
+                return "No Data";
             }};
             const formatForecastTime = (value) => {{
                 const date = new Date(Number(value));
@@ -3023,6 +3111,7 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
                     .sort((a, b) => Number(a.timevalue) - Number(b.timevalue))
                     .map((attrs) => ({{
                         time: formatForecastTime(attrs.timevalue),
+                        timestamp: Number(attrs.timevalue),
                         flow: Number(attrs.meanflow),
                         return_period: attrs.returnperiod ?? null,
                         streamorder: attrs.streamorder ?? null
@@ -3039,7 +3128,7 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
                 const x = (i) => pad + (i / Math.max(1, series.length - 1)) * (width - pad * 2);
                 const y = (v) => height - pad - ((v - min) / Math.max(1, max - min)) * (height - pad * 2);
                 const points = series.map((d, i) => `${{x(i).toFixed(1)}},${{y(Number(d.flow)).toFixed(1)}}`).join(" ");
-                const circles = series.map((d, i) => `<circle cx="${{x(i).toFixed(1)}}" cy="${{y(Number(d.flow)).toFixed(1)}}" r="2.6" fill="${{color}}"><title>${{d.time}}: ${{fmt(d.flow)}} cumecs | RP ${{d.return_period ?? "Normal"}}</title></circle>`).join("");
+                const circles = series.map((d, i) => `<circle cx="${{x(i).toFixed(1)}}" cy="${{y(Number(d.flow)).toFixed(1)}}" r="2.6" fill="${{color}}"><title>${{d.time}}: ${{fmt(d.flow)}} cumecs | RP ${{d.return_period ?? "No data"}}</title></circle>`).join("");
                 return `
                   <div class="gd-mini-chart">
                     <div style="font-weight:900;color:#0f172a;margin-bottom:2px;font-size:11px;">Forecast flow graph</div>
@@ -3062,13 +3151,15 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
                   <div class="gd-info-sub">${{site.station_code}} | ${{site.river}} | ${{site.district}}</div>
                   <div class="gd-alert-badge" style="background:${{color}}">${{site.alert_level}} Alert</div>
                   <div class="gd-info-grid">
-                    <div class="gd-info-chip"><span>Current Flow</span><strong>${{fmt(site.current_flow)}} cumecs</strong></div>
+                    <div class="gd-info-chip"><span>Current Forecast Flow</span><strong>${{fmt(site.current_flow)}} cumecs</strong></div>
                     <div class="gd-info-chip"><span>Trend</span><strong>${{site.trend}}</strong></div>
                     <div class="gd-info-chip"><span>Water Level</span><strong>${{fmt(site.water_level)}} m</strong></div>
                     <div class="gd-info-chip"><span>Observed Age</span><strong>${{site.observed_age_days ?? "-"}} days</strong></div>
                     <div class="gd-info-chip"><span>Forecast Time</span><strong>${{site.forecast_time || "-"}}</strong></div>
                     <div class="gd-info-chip"><span>Stream Order</span><strong>${{site.streamorder ?? "-"}}</strong></div>
-                    <div class="gd-info-chip"><span>Return Period</span><strong>${{site.return_period ?? "Normal"}}</strong></div>
+                    <div class="gd-info-chip"><span>Return Period</span><strong>${{site.return_period ?? "No data"}}</strong></div>
+                    <div class="gd-info-chip"><span>Forecast Age</span><strong>${{site.data_age_hours ?? "-"}} hours</strong></div>
+                    <div class="gd-info-chip"><span>Reach Distance</span><strong>${{site.linkage_distance_km ?? "-"}} km</strong></div>
                     <div class="gd-info-chip"><span>Flood Status</span><strong>${{site.google_flood_severity || "-"}}</strong></div>
                     <div class="gd-info-chip"><span>Flood Gauge</span><strong>${{site.google_flood_gauge_id || "-"}}</strong></div>
                     <div class="gd-info-chip"><span>Gauge Distance</span><strong>${{site.google_flood_distance_km ?? "-"}} km</strong></div>
@@ -3083,16 +3174,21 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
                     fetchLiveReachSeries(site.linked_comid)
                         .then((series) => {{
                             if (series.length >= 2) {{
-                                const first = series[0];
-                                const last = series[series.length - 1];
-                                site.series = series;
+                                const currentIndex = series.reduce(
+                                    (best, item, index) => Math.abs(item.timestamp - Date.now()) < Math.abs(series[best].timestamp - Date.now()) ? index : best,
+                                    0
+                                );
+                                const currentSeries = series.slice(currentIndex);
+                                const first = currentSeries[0];
+                                const last = currentSeries[currentSeries.length - 1];
+                                site.series = currentSeries;
                                 site.current_flow = first.flow;
                                 site.return_period = first.return_period ?? site.return_period;
                                 site.streamorder = first.streamorder ?? site.streamorder;
                                 site.forecast_time = first.time;
                                 site.trend = last.flow > first.flow ? "Rising" : last.flow < first.flow ? "Falling" : "Stable";
                                 if (!site.google_flood_severity || !["FLOODING", "HIGH", "SEVERE", "EXTREME"].some((token) => String(site.google_flood_severity).toUpperCase().includes(token))) {{
-                                    site.alert_level = returnPeriodAlert(site.return_period, site.current_flow);
+                                    site.alert_level = site.alert_level === "Link Review" ? "Link Review" : returnPeriodAlert(site.return_period, site.current_flow);
                                 }}
                                 site.color = alertColor(site.alert_level);
                                 openInfo(site, true);
@@ -3121,6 +3217,20 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
                     if (site.alert_level === "Warning") el.classList.add("gd-blink-warning");
                 }}, 80);
             }});
+            activeFloodSignals.forEach((signal) => {{
+                const marker = L.circleMarker([signal.lat, signal.lon], {{
+                    radius: 8,
+                    color: "#ffffff",
+                    weight: 2.5,
+                    fillColor: signal.color,
+                    fillOpacity: 0.98
+                }}).addTo(activeFloodLayer);
+                marker.bindTooltip(`${{signal.severity}} | ${{signal.gauge_id}} | ${{signal.issued_time || "-"}}`, {{ sticky: true }});
+                setTimeout(() => {{
+                    const el = marker.getElement && marker.getElement();
+                    if (el) el.classList.add("gd-blink-watch");
+                }}, 80);
+            }});
             const bounds = L.latLngBounds(sites.map((site) => [site.lat, site.lon]));
             if (bounds.isValid()) map.fitBounds(bounds.pad(0.12), {{ maxZoom: 7 }});
             L.control.layers({{
@@ -3129,7 +3239,8 @@ def render_gd_site_leaflet_map(gd_sites: pd.DataFrame, gd_forecasts: pd.DataFram
                 "Light gray": light
             }}, {{
                 "River forecast layer": riverLayer,
-                "GD Sites": gdLayer
+                "GD Sites": gdLayer,
+                "Active flood-status signals": activeFloodLayer
             }}, {{ collapsed: true }}).addTo(map);
         }})();
         </script>
@@ -3147,7 +3258,7 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
     google_flood_status, google_flood_error, google_flood_source = load_google_flood_status_layer()
     render_google_flood_api_status(google_flood_status, google_flood_error, google_flood_source)
     gd_sites = load_gd_sites_swedes(str(GD_SITES_SWEDES_LAYER))
-    gd_sites = attach_nearest_google_flood_status(gd_sites, google_flood_status, max_distance_km=90.0)
+    gd_sites = attach_nearest_google_flood_status(gd_sites, google_flood_status, max_distance_km=30.0)
     gd_latest_observed = load_latest_gd_observed(str(NARMADA_OBSERVED_CSV))
     online_now_time = fetch_online_river_forecast_time()
     cached_gd = load_latest_gd_site_forecast_slot()
@@ -3168,10 +3279,19 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
     gd_forecasts = enrich_gd_forecasts_with_live_series(gd_forecasts)
     if len(gd_forecasts) > original_gd_row_count:
         gd_source_mode = "Live station-specific operational forecast series"
+    gd_quality = gd_forecast_quality_summary(gd_forecasts)
     if not gd_forecasts.empty:
         gd_forecasts = gd_forecasts.copy()
         gd_forecasts["forecast_alert_level"] = gd_forecasts.apply(
-            lambda row: gd_return_period_alert(row.get("return_period"), row.get("combined_forecast_flow_cms"))[0],
+            lambda row: gd_return_period_alert(
+                row.get("return_period"),
+                row.get("combined_forecast_flow_cms"),
+                data_fresh=gd_quality["fresh"],
+                linkage_verified=(
+                    pd.isna(pd.to_numeric(pd.Series([row.get("linkage_distance_m")]), errors="coerce").iloc[0])
+                    or pd.to_numeric(pd.Series([row.get("linkage_distance_m")]), errors="coerce").iloc[0] <= GD_LINK_REVIEW_DISTANCE_M
+                ),
+            )[0],
             axis=1,
         )
         flood_link_cols = [
@@ -3186,9 +3306,15 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
         if all(column in gd_sites.columns for column in flood_link_cols):
             gd_forecasts = gd_forecasts.merge(gd_sites[flood_link_cols].drop_duplicates("station_code"), on="station_code", how="left")
             gd_forecasts["forecast_alert_level"] = gd_forecasts.apply(
-                lambda row: "Critical"
-                if pd.to_numeric(pd.Series([row.get("google_flood_rank")]), errors="coerce").fillna(0).iloc[0] >= 3
-                else row.get("forecast_alert_level"),
+                lambda row: (
+                    "Critical"
+                    if pd.to_numeric(pd.Series([row.get("google_flood_rank")]), errors="coerce").fillna(0).iloc[0] >= 3
+                    else "Warning"
+                    if pd.to_numeric(pd.Series([row.get("google_flood_rank")]), errors="coerce").fillna(0).iloc[0] >= 2
+                    else "Watch"
+                    if pd.to_numeric(pd.Series([row.get("google_flood_rank")]), errors="coerce").fillna(0).iloc[0] >= 1
+                    else row.get("forecast_alert_level")
+                ),
                 axis=1,
             )
     gd_kpis = st.columns(5)
@@ -3196,13 +3322,24 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
     gd_kpis[1].metric("Located Sites", int(gd_sites["has_location"].sum()) if not gd_sites.empty and "has_location" in gd_sites else 0)
     gd_kpis[2].metric("Observed Sites", int(gd_latest_observed["station_code"].nunique()) if not gd_latest_observed.empty else 0)
     gd_kpis[3].metric("Forecast Rows", int(len(gd_forecasts)))
-    gd_kpis[4].metric("Current Signal", time_label(online_now_time) if online_now_time is not None else "Generated")
+    gd_kpis[4].metric("Current Signal", time_label(gd_quality["current_time"]) if pd.notna(gd_quality["current_time"]) else "Unavailable")
     if gd_sites.empty:
         st.warning("GD Sites layer is not available from the configured app data folder.")
         return
     if gd_forecasts.empty:
         st.warning("GD Sites are available, but no observed/forecast rows could be prepared.")
         return
+    if not gd_quality["fresh"]:
+        st.error(
+            "The river forecast feed is stale or does not cover the current time. "
+            "GD alerts are withheld until a verified refresh succeeds; stale values are not classified as Normal."
+        )
+    elif gd_quality["linked_sites"] < gd_quality["current_sites"]:
+        st.warning(
+            f"Current forecast is available for {gd_quality['current_sites']} GD sites, but only "
+            f"{gd_quality['linked_sites']} site-to-river links are within the verification distance. "
+            "Distant links are marked Link Review and excluded from operational alert interpretation."
+        )
     flood_kpis = google_flood_kpi_summary(google_flood_status, gd_sites)
     st.markdown(
         f"""
@@ -3211,7 +3348,7 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
             <div class="infographic-subtitle">Official flood-status signals are spatially linked with GD sites and used with discharge forecast alerts for DSS screening.</div>
             <div class="infographic-grid">
                 <div class="infographic-card"><span>Flood Gauges</span><b>{flood_kpis['gauges']}</b><small>Returned for MP operating window</small></div>
-                <div class="infographic-card"><span>Active Signals</span><b>{flood_kpis['active']}</b><small>Severity above normal / no flooding</small></div>
+                <div class="infographic-card"><span>Active Signals</span><b>{flood_kpis['active']}</b><small>Signals above the baseline class</small></div>
                 <div class="infographic-card"><span>Max Severity</span><b>{escape(flood_kpis['max_severity'])}</b><small>Highest current flood status</small></div>
                 <div class="infographic-card"><span>Linked GD Sites</span><b>{flood_kpis['linked']}</b><small>Nearest status gauge within review radius</small></div>
             </div>
@@ -3219,6 +3356,32 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
         """,
         unsafe_allow_html=True,
     )
+    active_flood_signals = google_flood_status[
+        pd.to_numeric(google_flood_status.get("flood_rank"), errors="coerce").fillna(0).gt(0)
+    ].copy() if not google_flood_status.empty else pd.DataFrame()
+    if not active_flood_signals.empty:
+        st.warning(
+            f"{len(active_flood_signals)} active flood-status signal(s) are present in the Madhya Pradesh operating area. "
+            "These are displayed independently because a nearby GD forecast reach can report no return-period exceedance at the same time."
+        )
+        active_columns = [
+            "flood_severity",
+            "google_gauge_id",
+            "issued_time",
+            "latitude",
+            "longitude",
+            "quality_verified",
+        ]
+        active_signal_view = active_flood_signals.sort_values(
+            [column for column in ["flood_rank", "issued_time"] if column in active_flood_signals.columns],
+            ascending=False,
+        )
+        st.dataframe(
+            active_signal_view[[column for column in active_columns if column in active_signal_view.columns]],
+            use_container_width=True,
+            hide_index=True,
+            height=min(220, 38 + len(active_flood_signals) * 36),
+        )
     slot_date, slot_time, _slot_ts = gd_forecast_slot()
     cache_note = f"GD data mode: {gd_source_mode}. Reporting slot: {slot_date} {slot_time}."
     if not cached_gd.empty:
@@ -3228,7 +3391,7 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
         cache_note += " Run the GD refresh job to populate station-specific discharge values."
     st.markdown(f'<div class="panel-note">{escape(cache_note)}</div>', unsafe_allow_html=True)
 
-    render_gd_site_leaflet_map(gd_sites, gd_forecasts)
+    render_gd_site_leaflet_map(gd_sites, gd_forecasts, google_flood_status)
 
     filter_cols = st.columns([0.22, 0.22, 0.32, 0.24])
     gd_filtered = gd_forecasts.copy()
@@ -3261,30 +3424,31 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
     if selected_periods:
         gd_filtered = gd_filtered[gd_filtered["data_period"].isin(selected_periods)]
 
-    if "google_flood_severity" in gd_filtered.columns:
+    if "forecast_alert_level" in gd_filtered.columns:
         flood_chart_source = (
             gd_filtered.drop_duplicates("station_code")
-            .assign(google_flood_severity=lambda data: data["google_flood_severity"].fillna("No nearby signal"))
-            .groupby("google_flood_severity", as_index=False)
-            .agg(gd_sites=("station_code", "nunique"), linked_gauges=("google_flood_gauge_id", lambda values: int(values.astype(str).str.len().gt(0).sum())))
+            .assign(forecast_alert_level=lambda data: data["forecast_alert_level"].fillna("No Data"))
+            .groupby("forecast_alert_level", as_index=False)
+            .agg(gd_sites=("station_code", "nunique"))
         )
         if not flood_chart_source.empty:
             flood_composition = (
                 alt.Chart(flood_chart_source)
                 .mark_bar(cornerRadiusTopRight=5, cornerRadiusBottomRight=5)
                 .encode(
-                    y=alt.Y("google_flood_severity:N", title="Flood API status", sort="-x"),
+                    y=alt.Y("forecast_alert_level:N", title="Integrated GD status", sort="-x"),
                     x=alt.X("gd_sites:Q", title="GD sites"),
                     color=alt.Color(
-                        "google_flood_severity:N",
-                        title="Severity",
+                        "forecast_alert_level:N",
+                        title="Status",
                         scale=alt.Scale(
-                            range=[google_flood_severity_color(value) for value in flood_chart_source["google_flood_severity"].astype(str)]
+                            domain=["Critical", "Warning", "Watch", "Below RP2", "Link Review", "Stale Data", "No Data"],
+                            range=["#ef4444", "#f59e0b", "#eab308", "#2563eb", "#7c3aed", "#64748b", "#94a3b8"],
                         ),
                     ),
-                    tooltip=["google_flood_severity", "gd_sites", "linked_gauges"],
+                    tooltip=["forecast_alert_level", "gd_sites"],
                 )
-                .properties(height=160, title="GD Sites by Integrated Flood Status")
+                .properties(height=160, title="GD Sites by Integrated Forecast Status")
             )
             st.altair_chart(flood_composition, use_container_width=True)
 
@@ -3598,7 +3762,10 @@ def fmt_number(value: float | int | None, suffix: str = "") -> str:
 def time_label(value) -> str:
     if pd.isna(value):
         return "-"
-    return pd.Timestamp(value).strftime("%d %b %Y %I:%M %p")
+    timestamp = pd.Timestamp(value)
+    if timestamp.tzinfo is not None:
+        timestamp = timestamp.tz_convert("Asia/Kolkata")
+    return timestamp.strftime("%d %b %Y %I:%M %p")
 
 
 def return_period_label(value: float | int | None) -> str:
@@ -3611,7 +3778,7 @@ def return_period_label(value: float | int | None) -> str:
         return "Exceeds 10 yr"
     if rp >= 2:
         return "Exceeds 2 yr"
-    return "Normal"
+    return "Below 2-year threshold"
 
 
 def risk_color(risk: str) -> str:
@@ -6586,7 +6753,7 @@ def google_flood_api_url(method_path: str, api_key: str) -> str:
 
 def mp_flood_api_area_payload() -> dict:
     return {
-        "pageSize": 500,
+        "pageSize": 20000,
         "loop": {
             "vertices": [
                 {"latitude": 21.0, "longitude": 74.0},
@@ -6687,7 +6854,7 @@ def google_flood_severity_rank(severity: str) -> int:
             return 3
     if any(token in text for token in ["WARNING", "MODERATE"]):
         return 2
-    if any(token in text for token in ["WATCH", "LOW"]):
+    if any(token in text for token in ["WATCH", "LOW", "ABOVE_NORMAL"]):
         return 1
     return 0
 
@@ -6702,23 +6869,83 @@ def google_flood_severity_color(severity: str) -> str:
     }.get(google_flood_severity_rank(severity), "#64748b")
 
 
+@st.cache_resource(show_spinner=False)
+def mp_state_boundary_geometry():
+    if not MP_DISTRICTS_GEOJSON.exists():
+        return None
+    try:
+        from shapely.geometry import shape
+        from shapely.ops import unary_union
+
+        payload = json.loads(MP_DISTRICTS_GEOJSON.read_text(encoding="utf-8"))
+        geometries = [
+            shape(feature["geometry"])
+            for feature in payload.get("features", [])
+            if feature.get("geometry")
+        ]
+        geometries = [geometry if geometry.is_valid else geometry.buffer(0) for geometry in geometries]
+        return unary_union(geometries) if geometries else None
+    except Exception:
+        return None
+
+
+def filter_flood_status_to_mp(frame: pd.DataFrame) -> pd.DataFrame:
+    if frame.empty or not {"latitude", "longitude"}.issubset(frame.columns):
+        return frame
+    boundary = mp_state_boundary_geometry()
+    if boundary is None:
+        return frame
+    try:
+        from shapely.geometry import Point
+
+        inside = frame.apply(
+            lambda row: boundary.covers(Point(float(row["longitude"]), float(row["latitude"])))
+            if pd.notna(row.get("longitude")) and pd.notna(row.get("latitude"))
+            else False,
+            axis=1,
+        )
+        return frame[inside].reset_index(drop=True)
+    except Exception:
+        return frame
+
+
 @st.cache_data(ttl=WEATHER_REFRESH_HOURS * 3600, show_spinner=False)
 def fetch_google_flood_status_for_mp(_api_key: str) -> tuple[pd.DataFrame, str | None, str]:
     if not _api_key:
         return pd.DataFrame(), "Flood forecasting key is not configured.", "not configured"
-    payload, error = fetch_json_post_url(
-        google_flood_api_url("floodStatus:searchLatestFloodStatusByArea", _api_key),
-        mp_flood_api_area_payload(),
-    )
-    if error:
-        return pd.DataFrame(), error, "api failed"
-    if isinstance(payload, dict) and isinstance(payload.get("error"), dict):
-        api_error = payload["error"]
-        return pd.DataFrame(), api_error.get("message") or json.dumps(api_error), "api error"
-    rows = normalize_google_flood_status(payload)
+    endpoint = google_flood_api_url("floodStatus:searchLatestFloodStatusByArea", _api_key)
+    base_payload = mp_flood_api_area_payload()
+    all_statuses: list[dict] = []
+    page_token = ""
+    pages = 0
+    for _ in range(10):
+        request_payload = dict(base_payload)
+        if page_token:
+            request_payload["pageToken"] = page_token
+        payload, error = fetch_json_post_url(endpoint, request_payload)
+        if error:
+            if not all_statuses:
+                return pd.DataFrame(), error, "api failed"
+            break
+        if isinstance(payload, dict) and isinstance(payload.get("error"), dict):
+            api_error = payload["error"]
+            if not all_statuses:
+                return pd.DataFrame(), api_error.get("message") or json.dumps(api_error), "api error"
+            break
+        if not isinstance(payload, dict):
+            break
+        pages += 1
+        all_statuses.extend(item for item in (payload.get("floodStatuses") or []) if isinstance(item, dict))
+        page_token = str(payload.get("nextPageToken") or "")
+        if not page_token:
+            break
+    combined_payload = {"floodStatuses": all_statuses}
+    rows = normalize_google_flood_status(combined_payload)
     if rows.empty:
-        rows = extract_google_flood_records(payload)
-    return rows, None if not rows.empty else "Flood forecasting service returned no MP flood-status rows.", "api refreshed"
+        rows = extract_google_flood_records(combined_payload)
+    rows = filter_flood_status_to_mp(rows)
+    source = f"api refreshed and clipped to MP ({pages} page{'s' if pages != 1 else ''})"
+    return rows, None if not rows.empty else "Flood forecasting service returned no MP flood-status rows.", source
 
 
 def load_google_flood_status_layer() -> tuple[pd.DataFrame, str | None, str]:
@@ -8082,6 +8309,7 @@ def render_weather_town_leaflet_map(
             return None
         return round(float(parsed), digits)
 
+    quality = gd_forecast_quality_summary(gd_forecasts)
     records = []
     for row in towns.dropna(subset=["latitude", "longitude"]).to_dict("records"):
         risk = str(row.get("weather_risk") or "Low")

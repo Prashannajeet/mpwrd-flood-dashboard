@@ -9,6 +9,7 @@ from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
+from shapely.geometry import Point
 
 
 APP_DIR = Path(__file__).resolve().parent
@@ -22,6 +23,8 @@ SERVICE_LAYER = "https://livefeeds3.arcgis.com/arcgis/rest/services/GEOGLOWS/Glo
 FORECAST_HOURS = 7 * 24
 FORECAST_STEP_HOURS = 3
 COMID_CHUNK_SIZE = 20
+MAX_LINK_DISTANCE_M = 25_000
+LINK_SEARCH_RADII_M = (1_000, 5_000, MAX_LINK_DISTANCE_M)
 
 
 def curl_json(params: dict[str, str]) -> dict:
@@ -80,7 +83,12 @@ def forecast_time_values() -> list[int]:
     extent = (payload or {}).get("timeInfo", {}).get("timeExtent") or []
     if not extent:
         return []
-    start_ms, end_ms = int(extent[0]), int(extent[1])
+    extent_start_ms, end_ms = int(extent[0]), int(extent[1])
+    now_ms = int(pd.Timestamp.now(tz="UTC").timestamp() * 1000)
+    start_ms = min(
+        range(extent_start_ms, end_ms + 1, FORECAST_STEP_HOURS * 60 * 60 * 1000),
+        key=lambda value: abs(value - now_ms),
+    )
     max_end_ms = min(end_ms, start_ms + FORECAST_HOURS * 60 * 60 * 1000)
     step_ms = FORECAST_STEP_HOURS * 60 * 60 * 1000
     return list(range(start_ms, max_end_ms + 1, step_ms))
@@ -88,6 +96,48 @@ def forecast_time_values() -> list[int]:
 
 def chunks(values: list[str], size: int) -> list[list[str]]:
     return [values[index : index + size] for index in range(0, len(values), size)]
+
+
+def nearest_live_reach(lon: float, lat: float, time_value: int) -> tuple[dict, float]:
+    point = gpd.GeoSeries([Point(lon, lat)], crs=4326).to_crs(3857).iloc[0]
+    for radius_m in LINK_SEARCH_RADII_M:
+        payload = curl_json(
+            {
+                "f": "geojson",
+                "where": "1=1",
+                "geometry": f"{lon:.8f},{lat:.8f}",
+                "geometryType": "esriGeometryPoint",
+                "inSR": "4326",
+                "spatialRel": "esriSpatialRelIntersects",
+                "distance": str(radius_m),
+                "units": "esriSRUnit_Meter",
+                "time": str(time_value),
+                "outFields": "comid,streamorder,timevalue,meanflow,returnperiod,upstreamarea",
+                "returnGeometry": "true",
+                "outSR": "4326",
+                "resultRecordCount": "500",
+            }
+        )
+        features = payload.get("features") or []
+        if not features:
+            continue
+        candidates = gpd.GeoDataFrame.from_features(features, crs=4326)
+        if candidates.empty or "geometry" not in candidates:
+            continue
+        candidates = candidates.dropna(subset=["geometry"]).to_crs(3857)
+        if candidates.empty:
+            continue
+        candidates["distance_m"] = candidates.geometry.distance(point)
+        candidates["streamorder"] = pd.to_numeric(candidates.get("streamorder"), errors="coerce")
+        candidates["upstreamarea"] = pd.to_numeric(candidates.get("upstreamarea"), errors="coerce")
+        nearest = candidates.sort_values(
+            ["distance_m", "streamorder", "upstreamarea"],
+            ascending=[True, False, False],
+        ).iloc[0]
+        distance_m = float(nearest.get("distance_m"))
+        if distance_m <= MAX_LINK_DISTANCE_M:
+            return nearest.drop(labels=["geometry"], errors="ignore").to_dict(), distance_m
+    return {}, float("nan")
 
 
 def fetch_forecast_series(comids: list[str]) -> pd.DataFrame:
@@ -145,42 +195,37 @@ def fetch_forecast_series(comids: list[str]) -> pd.DataFrame:
 def main() -> None:
     gdf = gpd.read_file(SITES).to_crs(4326)
     rows: list[dict] = []
-    if LOCAL_REACHES.exists():
-        reaches = gpd.read_file(LOCAL_REACHES).to_crs(4326)
-        sites = gdf.dropna(subset=["geometry"]).copy()
-        sites["station_code"] = sites.get("Station Co", "").astype(str).str.strip()
-        sites = sites[sites["station_code"].str.len() > 0]
-        sites_m = sites.to_crs(3857)
-        reaches_m = reaches.dropna(subset=["geometry"]).to_crs(3857)
-        linked = gpd.sjoin_nearest(
-            sites_m,
-            reaches_m[["comid", "streamorder", "timevalue", "meanflow", "returnperiod", "upstreamarea", "geometry"]],
-            how="left",
-            max_distance=150000,
-            distance_col="distance_m",
-        )
-        linked = (
-            linked.sort_values(["station_code", "distance_m", "streamorder", "upstreamarea"], ascending=[True, True, False, False])
-            .drop_duplicates("station_code")
-        )
-        linked = linked.copy()
-        linked["linked_comid"] = linked["comid"].apply(lambda value: "" if pd.isna(value) else str(int(value)))
-        forecast_series = fetch_forecast_series(sorted([value for value in linked["linked_comid"].unique().tolist() if value]))
-        for _, row in linked.to_crs(4326).iterrows():
+    time_values = forecast_time_values()
+    if not time_values:
+        raise RuntimeError("The river forecast service did not provide a current forecast window; the existing file was preserved.")
+    current_time_value = time_values[0]
+    sites = gdf.dropna(subset=["geometry"]).copy()
+    sites["station_code"] = sites.get("Station Co", "").astype(str).str.strip()
+    sites = sites[sites["station_code"].str.len() > 0]
+    linked_records = []
+    for _, site in sites.iterrows():
+        lon = float(site.geometry.x)
+        lat = float(site.geometry.y)
+        reach, distance_m = nearest_live_reach(lon, lat, current_time_value)
+        record = site.to_dict()
+        record.update(reach)
+        record["distance_m"] = distance_m
+        record["linked_comid"] = "" if not reach or pd.isna(reach.get("comid")) else str(int(reach.get("comid")))
+        linked_records.append(record)
+    linked = gpd.GeoDataFrame(linked_records, geometry="geometry", crs=4326)
+    forecast_series = fetch_forecast_series(sorted([value for value in linked["linked_comid"].unique().tolist() if value]))
+    for _, row in linked.iterrows():
             comid = str(row.get("linked_comid") or "")
             station_rows = forecast_series[forecast_series["comid"] == comid] if not forecast_series.empty and comid else pd.DataFrame()
             if station_rows.empty:
-                fallback_time = row.get("timevalue") if "timevalue" in row else ""
-                if pd.isna(fallback_time):
-                    fallback_time = reaches.get("timevalue").iloc[0] if "timevalue" in reaches and len(reaches) else ""
                 station_rows = pd.DataFrame(
                     [
                         {
                             "comid": comid,
                             "streamorder": row.get("streamorder"),
-                            "forecast_time": pd.to_datetime(fallback_time, unit="ms", utc=True) if fallback_time != "" else "",
-                            "meanflow": row.get("meanflow"),
-                            "returnperiod": row.get("returnperiod"),
+                            "forecast_time": pd.to_datetime(current_time_value, unit="ms", utc=True),
+                            "meanflow": None,
+                            "returnperiod": None,
                         }
                     ]
                 )
@@ -206,88 +251,21 @@ def main() -> None:
                         "lead_day": lead_day,
                         "meanflow_cms": flow if not pd.isna(flow) else "",
                         "returnperiod": forecast.get("returnperiod") if not pd.isna(forecast.get("returnperiod")) else "",
-                        "linkage_status": "Linked live river forecast reach" if not pd.isna(flow) else "Not linked",
+                        "linkage_status": "Linked live river forecast reach" if comid and not pd.isna(flow) else "No verified river forecast link",
                         "distance_m": row.get("distance_m") if not pd.isna(row.get("distance_m")) else "",
                     }
                 )
-        OUT.parent.mkdir(parents=True, exist_ok=True)
-        with OUT.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()) if rows else [])
-            writer.writeheader()
-            writer.writerows(rows)
-        linked_count = sum(1 for row in rows if str(row.get("linkage_status", "")).startswith("Linked"))
-        print(f"Saved {len(rows)} GD site online forecast rows ({linked_count} linked) to {OUT}")
-        return
-
-    for _, feature in gdf.dropna(subset=["geometry"]).iterrows():
-        lon = float(feature.geometry.x)
-        lat = float(feature.geometry.y)
-        station_code = str(feature.get("Station Co") or "").strip()
-        if not station_code:
-            continue
-        near = curl_json(
-            {
-                "f": "json",
-                "where": "1=1",
-                "geometry": f"{lon:.8f},{lat:.8f}",
-                "geometryType": "esriGeometryPoint",
-                "inSR": "4326",
-                "spatialRel": "esriSpatialRelIntersects",
-                "distance": "150000",
-                "units": "esriSRUnit_Meter",
-                "outFields": "comid,streamorder,rivercountry,timevalue,meanflow,returnperiod,upstreamarea",
-                "returnGeometry": "false",
-                "orderByFields": "streamorder DESC,upstreamarea DESC",
-                "resultRecordCount": "1",
-            }
-        )
-        features = near.get("features") or []
-        if not features:
-            rows.append(
-                {
-                    "station_code": station_code,
-                    "station_name": str(feature.get("Station Na") or ""),
-                    "district": str(feature.get("District") or ""),
-                    "river": str(feature.get("River") or ""),
-                    "tributary": str(feature.get("Tributary") or ""),
-                    "latitude": lat,
-                    "longitude": lon,
-                    "comid": "",
-                    "streamorder": "",
-                    "forecast_time": "",
-                    "lead_day": 0,
-                    "meanflow_cms": "",
-                    "returnperiod": "",
-                    "linkage_status": "Not linked",
-                }
-            )
-            continue
-        attrs = features[0].get("attributes", {})
-        rows.append(
-            {
-                "station_code": station_code,
-                "station_name": str(feature.get("Station Na") or ""),
-                "district": str(feature.get("District") or ""),
-                "river": str(feature.get("River") or ""),
-                "tributary": str(feature.get("Tributary") or ""),
-                "latitude": lat,
-                "longitude": lon,
-                "comid": attrs.get("comid"),
-                "streamorder": attrs.get("streamorder"),
-                "forecast_time": attrs.get("timevalue"),
-                "lead_day": 0,
-                "meanflow_cms": attrs.get("meanflow"),
-                "returnperiod": attrs.get("returnperiod"),
-                "linkage_status": "Linked drainage reach",
-            }
-        )
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    with OUT.open("w", newline="", encoding="utf-8") as handle:
+    if not rows:
+        raise RuntimeError("No valid GD forecast rows were produced; the existing file was preserved.")
+    temp_out = OUT.with_suffix(".csv.tmp")
+    with temp_out.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()) if rows else [])
         writer.writeheader()
         writer.writerows(rows)
-    linked = sum(1 for row in rows if row.get("linkage_status") == "Linked drainage reach")
-    print(f"Saved {len(rows)} GD site online forecast rows ({linked} linked) to {OUT}")
+    temp_out.replace(OUT)
+    linked_count = len({row["station_code"] for row in rows if str(row.get("linkage_status", "")).startswith("Linked")})
+    print(f"Saved {len(rows)} GD site online forecast rows ({linked_count} verified station links) to {OUT}")
 
 
 if __name__ == "__main__":

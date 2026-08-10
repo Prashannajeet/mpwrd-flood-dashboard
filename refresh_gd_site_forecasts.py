@@ -94,6 +94,7 @@ def init_db() -> None:
                 basin_forecast_flow_cms REAL,
                 combined_forecast_flow_cms REAL,
                 linked_comid TEXT,
+                linkage_distance_m REAL,
                 streamorder REAL,
                 return_period REAL,
                 forecast_status TEXT
@@ -102,6 +103,7 @@ def init_db() -> None:
         )
         for column_name, column_type in [
             ("linked_comid", "TEXT"),
+            ("linkage_distance_m", "REAL"),
             ("streamorder", "REAL"),
             ("return_period", "REAL"),
         ]:
@@ -147,14 +149,18 @@ def main() -> None:
         online["forecast_time"] = pd.to_datetime(online.get("forecast_time"), errors="coerce")
         online["meanflow_cms"] = pd.to_numeric(online.get("meanflow_cms"), errors="coerce")
         online["lead_day"] = pd.to_numeric(online.get("lead_day"), errors="coerce").fillna(0).astype(int)
+        online["linkage_distance_m"] = pd.to_numeric(online.get("distance_m"), errors="coerce")
         online = online.merge(latest, on="station_code", how="left")
+        online["time_distance"] = (pd.to_datetime(online["forecast_time"], errors="coerce", utc=True) - pd.Timestamp.now(tz="UTC")).abs()
+        current_indexes = set(online.dropna(subset=["forecast_time"]).groupby("station_code")["time_distance"].idxmin().tolist())
+        online["is_current"] = online.index.isin(current_indexes)
         for record in online.to_dict("records"):
             observed_at = record.get("observed_at")
             observed_age = None
             if pd.notna(observed_at):
                 observed_age = (forecast_time.tz_convert("UTC") - pd.Timestamp(observed_at).tz_convert("UTC")).days
             ft = record.get("forecast_time")
-            data_period = "Now Data" if int(record.get("lead_day") or 0) == 0 else "Forecasted Data"
+            data_period = "Now Data" if bool(record.get("is_current")) else "Forecasted Data"
             flow = pd.to_numeric(pd.Series([record.get("meanflow_cms")]), errors="coerce").iloc[0]
             fid = hashlib.sha256(f"{slot_date}|{slot_time}|{record.get('station_code')}|{ft}|{data_period}".encode()).hexdigest()[:32]
             rows.append(
@@ -172,6 +178,7 @@ def main() -> None:
                     None,
                     float(flow) if pd.notna(flow) else None,
                     str(record.get("comid") or ""),
+                    record.get("linkage_distance_m"),
                     record.get("streamorder"),
                     record.get("returnperiod"),
                     record.get("linkage_status") or "Linked drainage reach",
@@ -197,7 +204,7 @@ def main() -> None:
                     None,
                     record.get("water_level_m"), record.get("water_level_change_m"),
                     None, None, None,
-                    None, None, None,
+                    None, None, None, None,
                     "Not linked",
                 )
             )
@@ -225,6 +232,7 @@ def main() -> None:
         "basin_forecast_flow_cms",
         "combined_forecast_flow_cms",
         "linked_comid",
+        "linkage_distance_m",
         "streamorder",
         "return_period",
         "forecast_status",

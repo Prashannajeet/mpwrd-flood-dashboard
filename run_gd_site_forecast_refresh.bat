@@ -18,7 +18,12 @@ echo [%date% %time%] Starting GD site forecast refresh.>> "%LOG_FILE%"
 if errorlevel 1 (
   echo [%date% %time%] GD online linkage refresh failed.>> "%LOG_FILE%"
 ) else (
-  echo [%date% %time%] GD online linkage refresh completed.>> "%LOG_FILE%"
+  %PY_CMD% "%~dp0scripts\check_gd_forecast_quality.py" >> "%LOG_FILE%" 2>&1
+  if errorlevel 1 (
+    echo [%date% %time%] GD quality gate failed; cached data must not be treated as operational.>> "%LOG_FILE%"
+  ) else (
+    echo [%date% %time%] GD online linkage refresh passed quality checks.>> "%LOG_FILE%"
+  )
 )
 
 %PY_CMD% "%~dp0refresh_gd_site_forecasts.py" --retention-days 7 >> "%LOG_FILE%" 2>&1
