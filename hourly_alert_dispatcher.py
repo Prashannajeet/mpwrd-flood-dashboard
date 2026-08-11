@@ -11,8 +11,10 @@ import sqlite3
 import time
 import tomllib
 import urllib.error
+import urllib.parse
 import urllib.request
 from email.message import EmailMessage
+from email.utils import parseaddr
 from html import escape
 from pathlib import Path
 
@@ -44,17 +46,35 @@ def secret(name: str, env_name: str, default: str = "") -> str:
     return os.getenv(env_name) or SECRETS.get(name, default)
 
 
+def normalized_smtp_host(value: object) -> str:
+    host = str(value or "").strip().strip('"\'')
+    if "://" in host:
+        host = urllib.parse.urlsplit(host).hostname or ""
+    else:
+        host = host.split()[0] if host.split() else ""
+        host = host.split("/", 1)[0].split(":", 1)[0]
+    return host.rstrip(".")
+
+
+def normalized_sender(value: object, fallback: object = "") -> str:
+    sender = parseaddr(str(value or "").strip())[1]
+    if not sender:
+        sender = parseaddr(str(fallback or "").strip())[1]
+    return sender
+
+
 def smtp_config() -> dict:
+    username = secret("smtp_username", "SMTP_USERNAME").strip()
     return {
         "provider": secret("email_provider", "EMAIL_PROVIDER", "auto").strip().lower(),
         "resend_api_key": secret("resend_api_key", "RESEND_API_KEY"),
         "brevo_api_key": secret("brevo_api_key", "BREVO_API_KEY"),
         "sendgrid_api_key": secret("sendgrid_api_key", "SENDGRID_API_KEY"),
-        "host": secret("smtp_host", "SMTP_HOST"),
+        "host": normalized_smtp_host(secret("smtp_host", "SMTP_HOST")),
         "port": int(secret("smtp_port", "SMTP_PORT", "587") or "587"),
-        "username": secret("smtp_username", "SMTP_USERNAME"),
-        "password": secret("smtp_password", "SMTP_PASSWORD"),
-        "sender": secret("smtp_from", "SMTP_FROM", secret("smtp_username", "SMTP_USERNAME")),
+        "username": username,
+        "password": secret("smtp_password", "SMTP_PASSWORD").strip(),
+        "sender": normalized_sender(secret("smtp_from", "SMTP_FROM", username), username),
         "use_tls": secret("smtp_use_tls", "SMTP_USE_TLS", "true").lower() not in {"0", "false", "no", "off"},
         "use_ssl": secret("smtp_use_ssl", "SMTP_USE_SSL", "false").lower() in {"1", "true", "yes", "on"},
     }
@@ -93,7 +113,8 @@ def post_json(url: str, payload: dict, headers: dict) -> tuple[bool, str]:
 
 def parse_recipients(text: str) -> list[str]:
     emails = re.findall(r"[\w.\-+%]+@[\w.\-]+\.[A-Za-z]{2,}", text or "")
-    return sorted(set(emails))
+    reserved_domains = {"example.com", "example.org", "example.net"}
+    return sorted({email for email in emails if email.rsplit("@", 1)[-1].lower() not in reserved_domains})
 
 
 def configured_recipients() -> list[str]:
@@ -677,7 +698,11 @@ def send_email_private(subject: str, text: str, html: str, recipients: list[str]
                 message["To"] = recipient
                 message.set_content(text)
                 message.add_alternative(html, subtype="html")
-                smtp.send_message(message)
+                smtp.send_message(
+                    message,
+                    from_addr=active_config["sender"],
+                    to_addrs=[recipient],
+                )
 
     try:
         send_with_config(config)

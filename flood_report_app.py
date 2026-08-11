@@ -19,6 +19,7 @@ import urllib.parse
 import urllib.request
 from difflib import SequenceMatcher
 from email.message import EmailMessage
+from email.utils import parseaddr
 from html import escape
 from pathlib import Path
 from datetime import date, time
@@ -9652,7 +9653,8 @@ def extract_email_recipients(recipients_text: str) -> list[str]:
     emails = []
     for line in recipients_text.splitlines():
         emails.extend(re.findall(r"[\w.\-+%]+@[\w.\-]+\.[A-Za-z]{2,}", line))
-    return sorted(set(emails))
+    reserved_domains = {"example.com", "example.org", "example.net"}
+    return sorted({email for email in emails if email.rsplit("@", 1)[-1].lower() not in reserved_domains})
 
 
 def configured_alert_recipients_text() -> str:
@@ -9674,6 +9676,15 @@ def send_alert_email(subject: str, body: str, recipients: list[str], html_body: 
     if not recipients:
         return False, "No email recipients were found. Add one email address per recipient line."
     config = alert_email_config()
+    raw_host = str(config.get("host") or "").strip().strip('"\'')
+    if "://" in raw_host:
+        config["host"] = urllib.parse.urlsplit(raw_host).hostname or ""
+    else:
+        host_token = raw_host.split()[0] if raw_host.split() else ""
+        config["host"] = host_token.split("/", 1)[0].split(":", 1)[0].rstrip(".")
+    config["username"] = str(config.get("username") or "").strip()
+    config["password"] = str(config.get("password") or "").strip()
+    config["sender"] = parseaddr(str(config.get("sender") or "").strip())[1] or config["username"]
     if not alert_email_is_configured(config):
         missing = ", ".join(alert_email_missing_settings(config))
         return False, f"Email delivery is not configured. Missing: {missing}."
@@ -9749,7 +9760,11 @@ def send_alert_email(subject: str, body: str, recipients: list[str], html_body: 
                 message.set_content(body)
                 if html_body:
                     message.add_alternative(html_body, subtype="html")
-                smtp.send_message(message)
+                smtp.send_message(
+                    message,
+                    from_addr=active_config["sender"],
+                    to_addrs=[recipient],
+                )
 
     try:
         send_with_config(config)
