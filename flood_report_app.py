@@ -11849,8 +11849,8 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
         st.markdown(
             (
                 '<div class="panel-note">'
-                'The backend hourly dispatcher sends professional dam alert email reports to each official separately, '
-                'so recipient email addresses are not disclosed to other officials. Duplicate alerts are suppressed per dam, alert level, observation time and hour.'
+                'The hourly scheduler sends one consolidated dam and GD-site alert bulletin to each official separately, '
+                'so recipient addresses remain private. Critical assets are listed first, followed by warning and watch conditions.'
                 '</div>'
             ),
             unsafe_allow_html=True,
@@ -11858,13 +11858,13 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
         auto_cols = st.columns(3)
         auto_cols[0].metric("Automated Email Recipients", len(automated_recipients))
         auto_cols[1].metric("Email Delivery", "Configured" if alert_email_is_configured() else "Incomplete")
-        auto_cols[2].metric("Interval", "Every 1 hour")
+        auto_cols[2].metric("Bulletin Cycle", "Every 1 hour")
         st.code(
             "& 'D:\\01 Project\\Development\\flood_dashboard\\.venv\\Scripts\\python.exe' "
             "'D:\\01 Project\\Development\\Flood Reports\\hourly_alert_dispatcher.py' --loop",
             language="powershell",
         )
-        st.caption("Use Windows Task Scheduler or run the command above as a background process. Add official addresses to Streamlit secret alert_email_recipients.")
+        st.caption("Online delivery runs through the hourly repository scheduler. The command above is retained as a local fallback dispatcher.")
 
     with admin_tabs[3]:
         st.markdown(
