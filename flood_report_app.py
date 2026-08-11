@@ -2879,7 +2879,9 @@ def render_gd_site_leaflet_map(
             data_fresh=quality["fresh"],
             linkage_verified=linkage_verified,
         )
-        google_severity = str(row.get("google_flood_severity") or now.get("google_flood_severity") or "No nearby signal")
+        google_severity = flood_status_public_label(
+            row.get("google_flood_severity") or now.get("google_flood_severity") or "No nearby signal"
+        )
         google_rank = pd.to_numeric(pd.Series([row.get("google_flood_rank", now.get("google_flood_rank"))]), errors="coerce").fillna(0).iloc[0]
         if google_rank >= 3:
             level, color = "Critical", google_flood_severity_color(google_severity)
@@ -3383,7 +3385,7 @@ def render_gd_site_analytics(map_status: pd.DataFrame, reservoir_view: pd.DataFr
             <div class="infographic-grid">
                 <div class="infographic-card"><span>Flood Gauges</span><b>{flood_kpis['gauges']}</b><small>Returned for MP operating window</small></div>
                 <div class="infographic-card"><span>Active Signals</span><b>{flood_kpis['active']}</b><small>Signals above the baseline class</small></div>
-                <div class="infographic-card"><span>Max Severity</span><b>{escape(flood_kpis['max_severity'])}</b><small>Highest current flood status</small></div>
+                <div class="infographic-card"><span>Feed Situation</span><b>{escape(flood_status_public_label(flood_kpis['max_severity']))}</b><small>Forecast-feed status; verify against field conditions</small></div>
                 <div class="infographic-card"><span>Linked GD Sites</span><b>{flood_kpis['linked']}</b><small>Nearest status gauge within review radius</small></div>
             </div>
         </div>
@@ -7203,9 +7205,25 @@ def attach_nearest_google_flood_status(points: pd.DataFrame, flood_status: pd.Da
 
 def google_flood_kpi_summary(flood_status: pd.DataFrame, linked_points: pd.DataFrame | None = None) -> dict:
     if flood_status.empty:
-        return {"gauges": 0, "active": 0, "max_severity": "No Data", "verified": 0, "linked": 0}
+        return {
+            "gauges": 0,
+            "active": 0,
+            "max_severity": "No Data",
+            "verified": 0,
+            "linked": 0,
+            "latest_issued": pd.NaT,
+            "feed_age_hours": math.nan,
+            "feed_stale": True,
+        }
     active = flood_status[pd.to_numeric(flood_status.get("flood_rank"), errors="coerce").fillna(0) > 0]
     max_row = flood_status.sort_values("flood_rank", ascending=False).head(1)
+    issued = pd.to_datetime(flood_status.get("issued_time"), errors="coerce", utc=True)
+    latest_issued = issued.dropna().max() if issued is not None and not issued.dropna().empty else pd.NaT
+    feed_age_hours = (
+        max(0.0, (pd.Timestamp.now(tz="UTC") - latest_issued).total_seconds() / 3600.0)
+        if pd.notna(latest_issued)
+        else math.nan
+    )
     linked = 0
     if linked_points is not None and not linked_points.empty and "google_flood_gauge_id" in linked_points:
         linked = int(linked_points["google_flood_gauge_id"].astype(str).str.len().gt(0).sum())
@@ -7215,6 +7233,74 @@ def google_flood_kpi_summary(flood_status: pd.DataFrame, linked_points: pd.DataF
         "max_severity": str(max_row.iloc[0].get("flood_severity")) if not max_row.empty else "No Data",
         "verified": int(flood_status.get("quality_verified", pd.Series(dtype=bool)).fillna(False).sum()),
         "linked": linked,
+        "latest_issued": latest_issued,
+        "feed_age_hours": feed_age_hours,
+        "feed_stale": pd.isna(feed_age_hours) or feed_age_hours > 12.0,
+    }
+
+
+def flood_status_public_label(severity: object) -> str:
+    text = str(severity or "").strip().upper()
+    if text == "NO_FLOODING":
+        return "No active forecast alert"
+    if text in {"", "UNKNOWN", "SEVERITY_UNSPECIFIED"}:
+        return "Status unverified"
+    return text.replace("_", " ").title()
+
+
+def operational_flood_signal_summary(
+    flood_status: pd.DataFrame,
+    points: pd.DataFrame,
+    river_frame: pd.DataFrame | None = None,
+) -> dict:
+    summary = google_flood_kpi_summary(flood_status)
+    dam_alerts = 0
+    latest_local_observation = pd.NaT
+    if not points.empty:
+        if "alert_level" in points:
+            dam_alerts = int(points["alert_level"].astype(str).isin(["Critical", "Warning"]).sum())
+        if "observed_at" in points:
+            point_times = pd.to_datetime(points["observed_at"], errors="coerce")
+            latest_local_observation = point_times.dropna().max() if not point_times.dropna().empty else pd.NaT
+
+    river_alerts = 0
+    river_watch = 0
+    if river_frame is not None and not river_frame.empty:
+        rivers = river_frame.copy()
+        if "danger_gap_m" not in rivers and {"danger_or_max_water_level_m", "water_level_m"}.issubset(rivers.columns):
+            rivers["danger_gap_m"] = (
+                pd.to_numeric(rivers["danger_or_max_water_level_m"], errors="coerce")
+                - pd.to_numeric(rivers["water_level_m"], errors="coerce")
+            )
+        if "observed_at" in rivers:
+            rivers["observed_at"] = pd.to_datetime(rivers["observed_at"], errors="coerce")
+            river_times = rivers["observed_at"].dropna()
+            if not river_times.empty:
+                latest_local_observation = max(latest_local_observation, river_times.max()) if pd.notna(latest_local_observation) else river_times.max()
+        if "gauge_station" in rivers:
+            rivers = latest_by_asset(rivers, "gauge_station")
+        gaps = pd.to_numeric(rivers.get("danger_gap_m"), errors="coerce")
+        if gaps is not None:
+            river_alerts = int(gaps.le(0).fillna(False).sum())
+            river_watch = int(gaps.gt(0).mul(gaps.le(1.5)).fillna(False).sum())
+
+    local_alerts = dam_alerts + river_alerts
+    if summary["active"] > 0:
+        situation = "Flood signal detected"
+    elif local_alerts > 0:
+        situation = "Hydrologic alerts present"
+    elif summary["feed_stale"]:
+        situation = "Status unverified"
+    else:
+        situation = "No active feed alert"
+    return {
+        **summary,
+        "dam_alerts": dam_alerts,
+        "river_alerts": river_alerts,
+        "river_watch": river_watch,
+        "local_alerts": local_alerts,
+        "situation": situation,
+        "latest_local_observation": latest_local_observation,
     }
 
 
@@ -7242,20 +7328,37 @@ def render_google_flood_api_status(flood_status: pd.DataFrame | None = None, flo
         st.caption(f"Rows received: {len(flood_rows):,}. Use GD-site locations to review nearby official flood-status signals when the API returns gauge coverage.")
 
 
-def render_google_flood_operational_brief(points: pd.DataFrame, title: str, point_label: str = "Locations") -> pd.DataFrame:
+def render_google_flood_operational_brief(
+    points: pd.DataFrame,
+    title: str,
+    point_label: str = "Locations",
+    river_frame: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     flood_status, flood_error, source = load_google_flood_status_layer()
     linked = attach_nearest_google_flood_status(points, flood_status, max_distance_km=90.0)
-    summary = google_flood_kpi_summary(flood_status, linked)
+    summary = operational_flood_signal_summary(flood_status, points, river_frame)
+    summary["linked"] = google_flood_kpi_summary(flood_status, linked)["linked"]
+    feed_time = (
+        pd.Timestamp(summary["latest_issued"]).tz_convert("Asia/Kolkata").strftime("%d %b %Y %I:%M %p")
+        if pd.notna(summary["latest_issued"])
+        else "Unavailable"
+    )
+    local_time = (
+        pd.Timestamp(summary["latest_local_observation"]).strftime("%d %b %Y %I:%M %p")
+        if pd.notna(summary["latest_local_observation"])
+        else "Unavailable"
+    )
+    situation_color = "#dc2626" if summary["active"] > 0 else "#d97706" if summary["local_alerts"] > 0 else "#475569"
     st.markdown(
         f"""
         <div class="infographic-frame">
             <div class="infographic-title">{escape(title)}</div>
-            <div class="infographic-subtitle">Flood-status intelligence is linked by nearest gauge and used as an additional DSS screening signal for map, chart and table interpretation.</div>
+            <div class="infographic-subtitle">Composite screening from forecast gauges and the latest reservoir and river observations. Automated feed results are indicators and do not replace field verification.</div>
             <div class="infographic-grid">
-                <div class="infographic-card"><span>Flood Gauges</span><b>{summary['gauges']}</b><small>Current official status records</small></div>
-                <div class="infographic-card"><span>Active Signals</span><b>{summary['active']}</b><small>Above normal/no-flood status</small></div>
-                <div class="infographic-card"><span>Linked {escape(point_label)}</span><b>{summary['linked']}</b><small>Within operational review radius</small></div>
-                <div class="infographic-card"><span>Max Severity</span><b>{escape(summary['max_severity'])}</b><small>{escape(source or ('Check access' if flood_error else 'Ready'))}</small></div>
+                <div class="infographic-card"><span>Forecast Gauges</span><b>{summary['gauges']}</b><small>Feed updated: {escape(feed_time)}</small></div>
+                <div class="infographic-card"><span>External Alerts</span><b>{summary['active']}</b><small>Current above-normal forecast signals</small></div>
+                <div class="infographic-card"><span>Dam / River Alerts</span><b>{summary['local_alerts']}</b><small>{summary['dam_alerts']} FRL alerts; {summary['river_alerts']} threshold exceedances</small></div>
+                <div class="infographic-card"><span>Operational Situation</span><b style="color:{situation_color}">{escape(summary['situation'])}</b><small>Observations updated: {escape(local_time)}</small></div>
             </div>
         </div>
         """,
@@ -7263,6 +7366,13 @@ def render_google_flood_operational_brief(points: pd.DataFrame, title: str, poin
     )
     if flood_error and flood_status.empty:
         st.caption("Flood status service is temporarily unavailable. Dashboard layers continue using stored operational data.")
+    elif summary["active"] == 0 and summary["local_alerts"] > 0:
+        st.warning(
+            "Data conflict: the external forecast feed has no active alert, while the latest reservoir/river records contain "
+            f"{summary['local_alerts']} operational alert(s). Treat field reports as authoritative until the discrepancy is verified."
+        )
+    elif summary["active"] == 0:
+        st.caption("No active external forecast alert is not a field declaration that flooding is absent. Verify local conditions before operational use.")
     return linked
 
 
@@ -13359,7 +13469,12 @@ if main_page == "3D Flood Scenarios":
 
 if main_page == "Water Watch":
     st.subheader("WaterWatch Live - Enabled with AI")
-    render_google_flood_operational_brief(map_status, "Real-Time Flood Status Intelligence", "Dams")
+    render_google_flood_operational_brief(
+        map_status,
+        "Real-Time Flood Status Intelligence",
+        "Dams",
+        river_frame=river_view,
+    )
     if reservoir_view.empty and map_status.empty:
         st.info("No data is available for infographic generation under the current filters.")
     else:
