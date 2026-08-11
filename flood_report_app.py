@@ -9655,6 +9655,21 @@ def extract_email_recipients(recipients_text: str) -> list[str]:
     return sorted(set(emails))
 
 
+def configured_alert_recipients_text() -> str:
+    configured = get_app_secret("alert_email_recipients", "ALERT_EMAIL_RECIPIENTS", "").strip()
+    if not configured:
+        configured = get_app_secret("alert_recipients", "ALERT_RECIPIENTS", "").strip()
+    if configured:
+        return configured
+    return (
+        "NITA GeoAI Sender nitageoai@gmail.com\n"
+        "NITA GeoAI Alerts info@nitageoai.com\n"
+        "Data Center Head baghel.bijendrakumar@gmail.com\n"
+        "Control Room +91XXXXXXXXXX\n"
+        "Dam Safety Officer +91XXXXXXXXXX"
+    )
+
+
 def send_alert_email(subject: str, body: str, recipients: list[str], html_body: str | None = None) -> tuple[bool, str]:
     if not recipients:
         return False, "No email recipients were found. Add one email address per recipient line."
@@ -11719,7 +11734,7 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
         with gateway_cols[1]:
             recipients_text = st.text_area(
                 "Alert recipients",
-                value=st.session_state.get("admin_alert_recipients", "NITA GeoAI Sender nitageoai@gmail.com\nNITA GeoAI Alerts info@nitageoai.com\nData Center Head baghel.bijendrakumar@gmail.com\nControl Room +91XXXXXXXXXX\nDam Safety Officer +91XXXXXXXXXX"),
+                value=st.session_state.get("admin_alert_recipients", configured_alert_recipients_text()),
                 key="admin_alert_recipients",
                 height=86,
                 help="One recipient per line. Use role/name with email and/or phone number.",
@@ -12256,7 +12271,7 @@ if main_page == "Dam DSS & Analytics":
             with channel_cols[1]:
                 recipients_text = st.text_area(
                     "Alert recipients",
-                    value=st.session_state.get("alert_recipients", "NITA GeoAI Sender nitageoai@gmail.com\nNITA GeoAI Alerts info@nitageoai.com\nData Center Head baghel.bijendrakumar@gmail.com\nControl Room +91XXXXXXXXXX\nDam Safety Officer +91XXXXXXXXXX"),
+                    value=st.session_state.get("alert_recipients", configured_alert_recipients_text()),
                     key="alert_recipients",
                     height=86,
                     help="One recipient per line. Use role/name with phone number and/or email address. SMS/WhatsApp require an approved gateway; Email requires email API or SMTP secrets.",

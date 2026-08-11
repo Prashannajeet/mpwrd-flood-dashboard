@@ -8,6 +8,7 @@ import re
 import smtplib
 import sqlite3
 import time
+import tomllib
 import urllib.error
 import urllib.request
 from email.message import EmailMessage
@@ -23,21 +24,18 @@ ALERT_DB = APP_DIR / "data" / "alert_dispatch.sqlite"
 DEFAULT_INTERVAL_SECONDS = 60 * 60
 
 
-def load_simple_toml(path: Path) -> dict[str, str]:
-    values: dict[str, str] = {}
+def load_toml_secrets(path: Path) -> dict[str, str]:
     if not path.exists():
-        return values
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        value = value.strip().strip('"').strip("'")
-        values[key.strip()] = value
-    return values
+        return {}
+    try:
+        with path.open("rb") as secrets_file:
+            values = tomllib.load(secrets_file)
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
+    return {str(key): value if isinstance(value, str) else str(value) for key, value in values.items()}
 
 
-SECRETS = load_simple_toml(APP_DIR / ".streamlit" / "secrets.toml")
+SECRETS = load_toml_secrets(APP_DIR / ".streamlit" / "secrets.toml")
 
 
 def secret(name: str, env_name: str, default: str = "") -> str:
