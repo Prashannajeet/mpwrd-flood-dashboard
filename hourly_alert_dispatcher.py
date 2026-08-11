@@ -693,13 +693,13 @@ def send_email_private(subject: str, text: str, html: str, recipients: list[str]
         return False, f"Email failed: {exc}"
 
 
-def dispatch_once(force: bool = False, dry_run: bool = False) -> None:
+def dispatch_once(force: bool = False, dry_run: bool = False) -> bool:
     recipients = configured_recipients()
     dam_alerts = load_alert_rows()
     gd_alerts = load_gd_alert_rows()
     if dam_alerts.empty and gd_alerts.empty:
         print("No active dam or GD-site alerts.")
-        return
+        return True
     if not dam_alerts.empty:
         dam_alerts = dam_alerts.assign(
             alert_rank=dam_alerts["configured_alert"].map({"Critical": 4, "Warning": 3, "Watch": 2}).fillna(1)
@@ -718,7 +718,7 @@ def dispatch_once(force: bool = False, dry_run: bool = False) -> None:
     dispatch_key = f"consolidated|{hour_key}|{signature}"
     if not force and already_sent(dispatch_key):
         print("Consolidated alert bulletin already sent for this hourly data state.")
-        return
+        return True
 
     levels = list(dam_alerts.get("configured_alert", pd.Series(dtype=str)).astype(str)) + list(
         gd_alerts.get("alert_level", pd.Series(dtype=str)).astype(str)
@@ -750,6 +750,7 @@ def dispatch_once(force: bool = False, dry_run: bool = False) -> None:
         f"Alert dispatch complete. Bulletins {'prepared' if dry_run else 'sent'}: {1 if ok else 0}; "
         f"active dam alerts: {len(dam_alerts)}; active GD-site alerts: {len(gd_alerts)}."
     )
+    return bool(ok)
 
 
 def main() -> None:
@@ -759,9 +760,9 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="List alerts without sending email or writing dispatch history.")
     args = parser.parse_args()
     while True:
-        dispatch_once(force=args.force, dry_run=args.dry_run)
+        delivery_ok = dispatch_once(force=args.force, dry_run=args.dry_run)
         if not args.loop:
-            break
+            raise SystemExit(0 if delivery_ok else 1)
         time.sleep(DEFAULT_INTERVAL_SECONDS)
 
 
