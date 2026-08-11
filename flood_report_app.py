@@ -9597,6 +9597,8 @@ def alert_email_config() -> dict:
 def alert_email_api_provider(config: dict | None = None) -> str:
     config = config or alert_email_config()
     provider = str(config.get("provider") or "auto").strip().lower()
+    if provider in {"smtp", "smtp_only"}:
+        return ""
     if provider in {"resend", "brevo", "sendgrid"}:
         return provider
     if config.get("resend_api_key"):

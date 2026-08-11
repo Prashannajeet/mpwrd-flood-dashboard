@@ -82,6 +82,8 @@ def smtp_config() -> dict:
 
 def email_api_provider(config: dict) -> str:
     provider = str(config.get("provider") or "auto").strip().lower()
+    if provider in {"smtp", "smtp_only"}:
+        return ""
     if provider in {"resend", "brevo", "sendgrid"}:
         return provider
     if config.get("resend_api_key"):
