@@ -7348,7 +7348,6 @@ def render_google_flood_operational_brief(
         if pd.notna(summary["latest_local_observation"])
         else "Unavailable"
     )
-    situation_color = "#dc2626" if summary["active"] > 0 else "#d97706" if summary["local_alerts"] > 0 else "#475569"
     st.markdown(
         f"""
         <div class="infographic-frame">
@@ -7357,8 +7356,8 @@ def render_google_flood_operational_brief(
             <div class="infographic-grid">
                 <div class="infographic-card"><span>Forecast Gauges</span><b>{summary['gauges']}</b><small>Feed updated: {escape(feed_time)}</small></div>
                 <div class="infographic-card"><span>External Alerts</span><b>{summary['active']}</b><small>Current above-normal forecast signals</small></div>
-                <div class="infographic-card"><span>Dam / River Alerts</span><b>{summary['local_alerts']}</b><small>{summary['dam_alerts']} FRL alerts; {summary['river_alerts']} threshold exceedances</small></div>
-                <div class="infographic-card"><span>Operational Situation</span><b style="color:{situation_color}">{escape(summary['situation'])}</b><small>Observations updated: {escape(local_time)}</small></div>
+                <div class="infographic-card"><span>Reservoir FRL Alerts</span><b>{summary['dam_alerts']}</b><small>Critical + warning reservoir conditions</small></div>
+                <div class="infographic-card"><span>River Threshold Exceedances</span><b>{summary['river_alerts']}</b><small>Observations updated: {escape(local_time)}</small></div>
             </div>
         </div>
         """,
