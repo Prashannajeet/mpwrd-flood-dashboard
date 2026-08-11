@@ -7367,8 +7367,9 @@ def render_google_flood_operational_brief(
         st.caption("Flood status service is temporarily unavailable. Dashboard layers continue using stored operational data.")
     elif summary["active"] == 0 and summary["local_alerts"] > 0:
         st.warning(
-            "Data conflict: the external forecast feed has no active alert, while the latest reservoir/river records contain "
-            f"{summary['local_alerts']} operational alert(s). Treat field reports as authoritative until the discrepancy is verified."
+            f"Cross-source status: {summary['active']} external flood alerts, {summary['dam_alerts']} reservoir FRL alerts, "
+            f"and {summary['river_alerts']} river threshold exceedances as of {local_time}. "
+            "Reservoir operating alerts do not by themselves confirm inundation; use verified field reports for incident confirmation."
         )
     elif summary["active"] == 0:
         st.caption("No active external forecast alert is not a field declaration that flooding is absent. Verify local conditions before operational use.")
