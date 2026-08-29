@@ -133,4 +133,7 @@ The repo includes parsed sample outputs for:
 - `parsed_16-06-26_12PM`
 - `parsed_18-06-26_8AM`
 
-PDF uploads work in the app, but uploads on free Streamlit hosting are runtime/ephemeral unless persistent storage is added.
+Validated administration PDF uploads can be persisted atomically to the online `v01` branch. Configure
+`github_data_token`, `github_data_repository`, and `github_data_branch` in Streamlit secrets. Use a
+fine-grained token restricted to this repository with **Contents: Read and write** permission. Without
+these settings, hosted uploads remain runtime/ephemeral.

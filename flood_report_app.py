@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import gzip
 import json
 import math
@@ -9355,6 +9356,119 @@ def get_app_secret(name: str, env_name: str, default: str = "") -> str:
         return default
 
 
+def github_json_request(method: str, url: str, token: str, payload: dict | None = None) -> dict:
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    request = urllib.request.Request(
+        url,
+        data=data,
+        method=method,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "User-Agent": "Nita-AI-WaterWatch",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=45) as response:
+            body = response.read().decode("utf-8", errors="replace")
+            return json.loads(body) if body else {}
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:600]
+        raise RuntimeError(f"GitHub persistence failed with HTTP {exc.code}: {detail}") from exc
+
+
+def publish_parsed_report_to_github(pdf_path: Path, parsed_dir: Path) -> tuple[bool, str]:
+    token = get_app_secret("github_data_token", "GITHUB_DATA_TOKEN") or get_app_secret(
+        "github_token", "GITHUB_TOKEN"
+    )
+    if not token:
+        return False, "Online persistence is not configured. Add github_data_token to Streamlit secrets."
+
+    repository = get_app_secret(
+        "github_data_repository",
+        "GITHUB_DATA_REPOSITORY",
+        "Prashannajeet/mpwrd-flood-dashboard",
+    ).strip()
+    branch = get_app_secret("github_data_branch", "GITHUB_DATA_BRANCH", "v01").strip() or "v01"
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
+        return False, "GitHub data repository must use the owner/repository format."
+
+    api_root = f"https://api.github.com/repos/{repository}"
+    report_files = [(f"uploaded_reports/{pdf_path.name}", pdf_path)]
+    report_files.extend(
+        (f"{parsed_dir.name}/{path.relative_to(parsed_dir).as_posix()}", path)
+        for path in sorted(parsed_dir.rglob("*"))
+        if path.is_file()
+    )
+
+    tree_entries = []
+    try:
+        for repository_path, local_path in report_files:
+            blob = github_json_request(
+                "POST",
+                f"{api_root}/git/blobs",
+                token,
+                {
+                    "content": base64.b64encode(local_path.read_bytes()).decode("ascii"),
+                    "encoding": "base64",
+                },
+            )
+            tree_entries.append(
+                {"path": repository_path, "mode": "100644", "type": "blob", "sha": blob["sha"]}
+            )
+
+        encoded_branch = urllib.parse.quote(branch, safe="")
+        for attempt in range(2):
+            ref = github_json_request("GET", f"{api_root}/git/ref/heads/{encoded_branch}", token)
+            parent_sha = ref["object"]["sha"]
+            parent_commit = github_json_request("GET", f"{api_root}/git/commits/{parent_sha}", token)
+            tree = github_json_request(
+                "POST",
+                f"{api_root}/git/trees",
+                token,
+                {"base_tree": parent_commit["tree"]["sha"], "tree": tree_entries},
+            )
+            if tree["sha"] == parent_commit["tree"]["sha"]:
+                return True, f"Report already exists on the online {branch} branch."
+            commit = github_json_request(
+                "POST",
+                f"{api_root}/git/commits",
+                token,
+                {
+                    "message": f"Publish validated report {pdf_path.name}",
+                    "tree": tree["sha"],
+                    "parents": [parent_sha],
+                },
+            )
+            try:
+                github_json_request(
+                    "PATCH",
+                    f"{api_root}/git/refs/heads/{encoded_branch}",
+                    token,
+                    {"sha": commit["sha"], "force": False},
+                )
+                return True, f"Published validated report to the online {branch} branch."
+            except RuntimeError:
+                if attempt:
+                    raise
+        return False, "GitHub persistence could not advance the online branch."
+    except Exception as exc:
+        return False, str(exc)
+
+
+def publish_validated_upload_once(pdf_path: Path, parsed_dir: Path) -> tuple[bool, str]:
+    upload_hash = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
+    state_key = f"published_report_{upload_hash}"
+    if st.session_state.get(state_key):
+        return True, "Validated report is already published for this session."
+    published, message = publish_parsed_report_to_github(pdf_path, parsed_dir)
+    if published:
+        st.session_state[state_key] = True
+    return published, message
+
+
 def visitor_headers() -> dict:
     try:
         return {str(key).lower(): str(value) for key, value in st.context.headers.items()}
@@ -9856,6 +9970,11 @@ with st.sidebar:
                     f"{counts['reservoir_observation_rows']} reservoir, "
                     f"{counts['gate_observation_rows']} gate rows."
                 )
+                published, publish_message = publish_validated_upload_once(saved_pdf, output_dir)
+                if published:
+                    st.success(publish_message)
+                else:
+                    st.warning(publish_message)
     else:
         st.info("Dashboard is in read-only mode. Sign in as admin to upload PDFs and refresh captured data.")
 
@@ -11547,7 +11666,13 @@ def render_admin_operations(is_admin: bool, map_status: pd.DataFrame, parsed_rep
                         f"{counts['reservoir_observation_rows']} reservoir rows, "
                         f"and {counts['gate_observation_rows']} gate rows."
                     )
-                    audit_status = "Completed"
+                    published, publish_message = publish_validated_upload_once(saved_pdf, output_dir)
+                    if published:
+                        st.success(publish_message)
+                        audit_status = "Completed and published"
+                    else:
+                        st.warning(publish_message)
+                        audit_status = "Parsed locally; online publish pending"
                 st.session_state.setdefault("admin_audit_log", []).insert(
                     0,
                     {
