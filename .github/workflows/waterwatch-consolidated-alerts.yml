@@ -2,7 +2,9 @@ name: WaterWatch Consolidated Alerts
 
 on:
   schedule:
-    - cron: "5 * * * *"
+    # GitHub cron is UTC: 03:30, 07:30, 11:30 and 15:30 UTC are
+    # 09:00 AM, 01:00 PM, 05:00 PM and 09:00 PM IST.
+    - cron: "30 3,7,11,15 * * *"
   workflow_dispatch:
 
 permissions:
