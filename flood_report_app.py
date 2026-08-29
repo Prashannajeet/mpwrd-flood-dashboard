@@ -9863,6 +9863,9 @@ with st.sidebar:
     if not dirs:
         st.stop()
     latest_status = parsed_report_status(dirs[-1])
+    report_set_token = hashlib.sha1(
+        "|".join(path.name for path in dirs).encode("utf-8")
+    ).hexdigest()[:12]
     st.caption(
         f"Latest valid report: {latest_status.get('report_date')} "
         f"{latest_status.get('report_time')} | {latest_status.get('reservoir_rows')} reservoir rows"
@@ -9876,12 +9879,16 @@ with st.sidebar:
         [path.name for path in dirs],
         default=[path.name for path in dirs],
         help="Select one or more parsed reports to build the time-series dashboard.",
+        key=f"captured_reports_{report_set_token}",
     )
     if not selected_names:
         st.warning("Select at least one captured report.")
         st.stop()
 
 selected_paths = [APP_DIR / name for name in selected_names]
+selected_report_token = hashlib.sha1(
+    "|".join(sorted(selected_names)).encode("utf-8")
+).hexdigest()[:12]
 meta_df, river_master, reservoir_master, rivers, reservoirs, gates = load_time_series(selected_paths)
 capacity_estimates = read_csv(RESERVOIR_CAPACITY_ESTIMATES_CSV)
 capacity_curves = read_csv(RESERVOIR_CAPACITY_CURVES_CSV)
@@ -9912,6 +9919,7 @@ with st.sidebar:
         min_value=observed_dates[0] if observed_dates else None,
         max_value=observed_dates[-1] if observed_dates else None,
         help="Filters reservoir and river observations by observation date.",
+        key=f"observation_dates_{selected_report_token}",
     )
     if isinstance(selected_date_range, tuple):
         start_date, end_date = selected_date_range
@@ -9921,7 +9929,12 @@ with st.sidebar:
         start_date = end_date = None
 
     time_options = sorted({value.strftime("%I:%M %p") for value in observed_timestamps})
-    selected_time_labels = st.multiselect("Times", time_options, default=time_options)
+    selected_time_labels = st.multiselect(
+        "Times",
+        time_options,
+        default=time_options,
+        key=f"observation_times_{selected_report_token}",
+    )
     selected_observed = {
         value
         for value in observed_values

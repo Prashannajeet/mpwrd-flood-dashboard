@@ -143,16 +143,29 @@ def fmt_number(value: object, suffix: str = "") -> str:
 
 
 def parsed_directories() -> list[Path]:
-    return sorted(
-        [
-            path
-            for path in APP_DIR.iterdir()
-            if path.is_dir()
-            and (path / "report_meta.json").exists()
-            and (path / "reservoir_status_observations.csv").exists()
-        ],
-        key=lambda path: path.name,
-    )
+    valid_slots: dict[tuple[str, str], tuple[Path, int]] = {}
+    for path in APP_DIR.iterdir():
+        meta_path = path / "report_meta.json"
+        reservoir_path = path / "reservoir_status_observations.csv"
+        river_path = path / "river_water_level_observations.csv"
+        if not path.is_dir() or not path.name.startswith("parsed_"):
+            continue
+        if not meta_path.exists() or not reservoir_path.exists() or not river_path.exists():
+            continue
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            reservoir_rows = len(read_csv(reservoir_path))
+            river_rows = len(read_csv(river_path))
+        except Exception:
+            continue
+        if reservoir_rows <= 0 or river_rows <= 0:
+            continue
+        slot = (str(meta.get("report_date") or ""), str(meta.get("report_time") or ""))
+        quality = reservoir_rows + river_rows
+        existing = valid_slots.get(slot)
+        if existing is None or quality >= existing[1]:
+            valid_slots[slot] = (path, quality)
+    return [item[0] for _, item in sorted(valid_slots.items())]
 
 
 def read_csv(path: Path) -> pd.DataFrame:
@@ -169,37 +182,39 @@ def load_latest_reservoirs() -> pd.DataFrame:
             continue
         meta = json.loads((folder / "report_meta.json").read_text(encoding="utf-8"))
         report_at = pd.to_datetime(f"{meta.get('report_date')} {meta.get('report_time')}", errors="coerce")
-        frame["observed_at"] = report_at
+        if pd.isna(report_at):
+            continue
+        frame["report_at"] = report_at
+        if "observed_at" in frame.columns:
+            frame["observed_at"] = pd.to_datetime(frame["observed_at"], errors="coerce").fillna(report_at)
+        else:
+            frame["observed_at"] = report_at
         frames.append(frame)
     if not frames:
         return pd.DataFrame()
     reservoirs = pd.concat(frames, ignore_index=True)
     reservoirs["observed_at"] = pd.to_datetime(reservoirs["observed_at"], errors="coerce")
+    reservoirs["report_at"] = pd.to_datetime(reservoirs["report_at"], errors="coerce")
     reservoirs["water_level_m"] = pd.to_numeric(reservoirs.get("water_level_m"), errors="coerce")
-    reservoirs = reservoirs.sort_values(["reservoir_name", "observed_at"])
+    reservoirs = reservoirs.dropna(subset=["reservoir_name", "report_at", "observed_at"])
+    reservoirs = reservoirs.sort_values(["reservoir_name", "observed_at", "report_at"])
+    reservoirs = reservoirs.drop_duplicates(["reservoir_name", "observed_at"], keep="last")
     reservoirs["wl_delta_m"] = reservoirs.groupby("reservoir_name")["water_level_m"].diff()
-    return reservoirs.groupby("reservoir_name", as_index=False).tail(1).reset_index(drop=True)
+    latest_report_at = reservoirs["report_at"].max()
+    latest_report = reservoirs[reservoirs["report_at"] == latest_report_at].copy()
+    return latest_report.groupby("reservoir_name", as_index=False).tail(1).reset_index(drop=True)
 
 
 def load_alert_rows() -> pd.DataFrame:
     latest = load_latest_reservoirs()
-    dams = read_csv(DAM_LOCATIONS_CSV)
-    if latest.empty or dams.empty:
+    if latest.empty:
         return pd.DataFrame()
-    if "reservoir_name" not in dams.columns and "dam_name" in dams.columns:
-        dams["reservoir_name"] = dams["dam_name"]
-    merged = dams.merge(
-        latest,
-        on="reservoir_name",
-        how="left",
-        suffixes=("_map", ""),
-    )
-    merged["display_filling"] = pd.to_numeric(merged.get("filling_percent"), errors="coerce").fillna(
-        pd.to_numeric(merged.get("map_filled_percent"), errors="coerce")
-    )
+    merged = latest.copy()
+    merged["display_filling"] = pd.to_numeric(merged.get("filling_percent"), errors="coerce")
     merged["frl_gap_m"] = pd.to_numeric(merged.get("frl_gap_m"), errors="coerce")
     merged["water_level_m"] = pd.to_numeric(merged.get("water_level_m"), errors="coerce")
     merged["frl_m"] = pd.to_numeric(merged.get("frl_m"), errors="coerce")
+    merged["frl_gap_m"] = merged["frl_gap_m"].fillna(merged["frl_m"] - merged["water_level_m"])
     merged["wl_delta_m"] = pd.to_numeric(merged.get("wl_delta_m"), errors="coerce")
 
     critical_gap = float(secret("dam_critical_gap", "DAM_CRITICAL_GAP", "0.5") or "0.5")
@@ -455,11 +470,22 @@ def html_message(row: pd.Series, text: str) -> str:
 </div></div></body></html>"""
 
 
+def latest_dam_data_timestamp(dam_alerts: pd.DataFrame) -> pd.Timestamp:
+    if dam_alerts.empty:
+        return pd.NaT
+    column = "report_at" if "report_at" in dam_alerts.columns else "observed_at"
+    values = pd.to_datetime(dam_alerts[column], errors="coerce")
+    return values.max() if not values.empty else pd.NaT
+
+
 def consolidated_plain_message(dam_alerts: pd.DataFrame, gd_alerts: pd.DataFrame) -> str:
     generated_at = pd.Timestamp.now(tz="Asia/Kolkata").strftime("%d %b %Y, %I:%M %p IST")
+    dam_data_at = latest_dam_data_timestamp(dam_alerts)
+    dam_data_label = dam_data_at.strftime("%d %b %Y, %I:%M %p IST") if pd.notna(dam_data_at) else "Unavailable"
     lines = [
         "Nita AI WaterWatch Consolidated Operational Alert Bulletin",
         f"Generated: {generated_at}",
+        f"Dam observation data: {dam_data_label}",
         "",
         f"Active dam alerts: {len(dam_alerts)}",
         f"Active GD-site alerts: {len(gd_alerts)}",
@@ -479,6 +505,7 @@ def consolidated_plain_message(dam_alerts: pd.DataFrame, gd_alerts: pd.DataFrame
                         f"WL: {fmt_number(row.get('water_level_m'), ' m')}",
                         f"FRL gap: {fmt_number(row.get('frl_gap_m'), ' m')}",
                         f"Filling: {fmt_number(row.get('display_filling'), '%')}",
+                        f"Observed: {pd.to_datetime(row.get('observed_at'), errors='coerce').strftime('%d %b %Y, %I:%M %p') if pd.notna(pd.to_datetime(row.get('observed_at'), errors='coerce')) else '-'}",
                     ]
                 )
             )
@@ -518,6 +545,8 @@ def consolidated_html_message(dam_alerts: pd.DataFrame, gd_alerts: pd.DataFrame)
     )
     counts = {level: combined_levels.count(level) for level in ["Critical", "Warning", "Watch"]}
     generated_at = pd.Timestamp.now(tz="Asia/Kolkata").strftime("%d %b %Y, %I:%M %p IST")
+    dam_data_at = latest_dam_data_timestamp(dam_alerts)
+    dam_data_label = dam_data_at.strftime("%d %b %Y, %I:%M %p IST") if pd.notna(dam_data_at) else "Unavailable"
 
     def badge(level: object) -> str:
         label = str(level or "Alert")
@@ -572,7 +601,7 @@ def consolidated_html_message(dam_alerts: pd.DataFrame, gd_alerts: pd.DataFrame)
 <div style="background:#073b63;color:#fff;border-radius:12px 12px 0 0;padding:20px 24px">
 <div style="font-size:11px;letter-spacing:1.5px;color:#8ed8ff;font-weight:800">NITA AI & GEOANALYTICS | WATERWATCH LIVE</div>
 <h1 style="margin:7px 0 3px;font-size:24px">Consolidated Dam and GD-Site Alert Bulletin</h1>
-<div style="color:#d7e9f7;font-size:12px">Generated {escape(generated_at)} | Private individual delivery</div></div>
+<div style="color:#d7e9f7;font-size:12px">Generated {escape(generated_at)} | Dam data {escape(dam_data_label)} | Private individual delivery</div></div>
 <div style="background:#fff;border:1px solid #dbe6f4;border-top:0;border-radius:0 0 12px 12px;padding:20px 24px">
 <table role="presentation" style="width:100%;border-collapse:collapse;margin-bottom:16px"><tr>{summary_cards}</tr></table>
 <h2 style="font-size:16px;margin:16px 0 8px;color:#073b63">Reservoir and Dam Alerts</h2>
@@ -724,6 +753,18 @@ def dispatch_once(force: bool = False, dry_run: bool = False) -> bool:
     recipients = configured_recipients()
     dam_alerts = load_alert_rows()
     gd_alerts = load_gd_alert_rows()
+    dam_data_at = latest_dam_data_timestamp(dam_alerts)
+    if pd.notna(dam_data_at):
+        max_age_hours = float(secret("alert_max_report_age_hours", "ALERT_MAX_REPORT_AGE_HOURS", "72") or "72")
+        localized_data_at = dam_data_at.tz_localize("Asia/Kolkata") if dam_data_at.tzinfo is None else dam_data_at.tz_convert("Asia/Kolkata")
+        data_age_hours = (pd.Timestamp.now(tz="Asia/Kolkata") - localized_data_at).total_seconds() / 3600
+        if data_age_hours > max_age_hours:
+            print(
+                f"Dam observations are stale ({data_age_hours:.1f} hours old; maximum {max_age_hours:.1f}). "
+                "Stale dam alerts were excluded from this bulletin."
+            )
+            dam_alerts = dam_alerts.iloc[0:0].copy()
+            dam_data_at = pd.NaT
     if dam_alerts.empty and gd_alerts.empty:
         print("No active dam or GD-site alerts.")
         return True
@@ -753,8 +794,9 @@ def dispatch_once(force: bool = False, dry_run: bool = False) -> bool:
     critical_count = levels.count("Critical")
     warning_count = levels.count("Warning")
     watch_count = levels.count("Watch")
+    data_subject = dam_data_at.strftime("%d %b %Y %I:%M %p") if pd.notna(dam_data_at) else "Current forecast"
     subject = (
-        f"Nita AI WaterWatch Consolidated Alert: {critical_count} Critical | "
+        f"Nita AI WaterWatch Alert [{data_subject}]: {critical_count} Critical | "
         f"{warning_count} Warning | {watch_count} Watch"
     )
     text = consolidated_plain_message(dam_alerts, gd_alerts)
